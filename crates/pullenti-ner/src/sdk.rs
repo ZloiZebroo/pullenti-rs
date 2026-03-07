@@ -1,0 +1,123 @@
+use std::sync::Arc;
+use pullenti_morph::{MorphologyService, MorphLang};
+use crate::analyzer::Analyzer;
+use crate::processor_service::ProcessorService;
+use crate::phone::PhoneAnalyzer;
+use crate::uri::UriAnalyzer;
+use crate::date::DateAnalyzer;
+use crate::money::MoneyAnalyzer;
+use crate::measure::MeasureAnalyzer;
+use crate::geo::GeoAnalyzer;
+use crate::person::PersonAnalyzer;
+use crate::org::OrgAnalyzer;
+use crate::named::NamedEntityAnalyzer;
+use crate::address::AddressAnalyzer;
+use crate::transport::TransportAnalyzer;
+use crate::decree::DecreeAnalyzer;
+use crate::bank::BankAnalyzer;
+use crate::weapon::WeaponAnalyzer;
+use crate::chemical::ChemicalAnalyzer;
+use crate::vacance::VacanceAnalyzer;
+use crate::denomination::DenominationAnalyzer;
+use crate::mail::MailAnalyzer;
+use crate::keyword::KeywordAnalyzer;
+use crate::definition::DefinitionAnalyzer;
+use crate::resume::ResumeAnalyzer;
+use crate::instrument::InstrumentAnalyzer;
+use crate::titlepage::TitlePageAnalyzer;
+use crate::booklink::BookLinkAnalyzer;
+use crate::goods::GoodsAnalyzer;
+use crate::link::LinkAnalyzer;
+
+/// Top-level SDK initializer — mirrors C# `Sdk.InitializeAll()` / `Sdk.Initialize()`.
+///
+/// ## Usage patterns
+///
+/// ### Pattern 1 — Direct (no global state)
+/// ```rust,ignore
+/// MorphologyService::initialize(Some(MorphLang::RU));
+/// let proc = Processor::with_analyzers(vec![Arc::new(PhoneAnalyzer::new())]);
+/// ```
+///
+/// ### Pattern 2 — All analyzers (C#-style global registry)
+/// ```rust,ignore
+/// Sdk::initialize_all(Some(MorphLang::RU));
+/// let proc = ProcessorService::create_processor();
+/// ```
+///
+/// ### Pattern 3 — Selective global registration
+/// ```rust,ignore
+/// Sdk::initialize_with(Some(MorphLang::RU), vec![Arc::new(PhoneAnalyzer::new())]);
+/// let proc = ProcessorService::create_processor();
+/// ```
+pub struct Sdk;
+
+impl Sdk {
+    /// Initialize morphology for the given language(s) and register **all** built-in analyzers
+    /// in the global `ProcessorService` registry.
+    ///
+    /// Add each new analyzer here as it is implemented.
+    pub fn initialize_all(langs: Option<MorphLang>) {
+        MorphologyService::initialize(langs);
+        let all: Vec<Arc<dyn Analyzer>> = vec![
+            Arc::new(PhoneAnalyzer::new()),
+            Arc::new(UriAnalyzer::new()),
+            Arc::new(DateAnalyzer::new()),
+            Arc::new(MoneyAnalyzer::new()),
+            Arc::new(MeasureAnalyzer::new()),
+            Arc::new(GeoAnalyzer::new()),
+            Arc::new(PersonAnalyzer::new()),
+            Arc::new(OrgAnalyzer::new()),
+            Arc::new(NamedEntityAnalyzer::new()),
+            Arc::new(AddressAnalyzer::new()),
+            Arc::new(TransportAnalyzer::new()),
+            Arc::new(DecreeAnalyzer::new()),
+            Arc::new(BankAnalyzer::new()),
+            Arc::new(WeaponAnalyzer::new()),
+            Arc::new(ChemicalAnalyzer::new()),
+            Arc::new(VacanceAnalyzer::new()),
+            Arc::new(DenominationAnalyzer::new()),
+            Arc::new(MailAnalyzer::new()),
+            Arc::new(KeywordAnalyzer::new()),
+            Arc::new(DefinitionAnalyzer::new()),
+            Arc::new(ResumeAnalyzer::new()),
+            Arc::new(InstrumentAnalyzer::new()),
+            Arc::new(TitlePageAnalyzer::new()),
+            Arc::new(BookLinkAnalyzer::new()),
+            Arc::new(GoodsAnalyzer::new()),
+            Arc::new(LinkAnalyzer::new()),
+        ];
+        for a in all {
+            ProcessorService::register_analyzer(a);
+        }
+    }
+
+    /// Initialize morphology and register only the **caller-supplied** analyzer instances
+    /// in the global `ProcessorService` registry.
+    ///
+    /// Analyzers are automatically sorted into the canonical NER pipeline order
+    /// (GEO before PERSON, MONEY before MEASURE, etc.) regardless of the input order.
+    /// This ensures multi-word entity detection works correctly — e.g. GeoAnalyzer must
+    /// run before PersonAnalyzer so that "Abu Dhabi" is detected as GEO not as PERSON.
+    pub fn initialize_with(langs: Option<MorphLang>, analyzers: Vec<Arc<dyn Analyzer>>) {
+        MorphologyService::initialize(langs);
+        // Canonical NER pipeline order (mirrors initialize_all above).
+        static ORDER: &[&str] = &[
+            "PHONE", "URI", "DATE", "MONEY", "MEASURE",
+            "GEO", "ADDRESS", "ORGANIZATION", "PERSON",
+            "NAMEDENTITY", "TRANSPORT", "DECREE", "BANKDATA",
+            "WEAPON", "CHEMICALFORMULA",
+            "VACANCY", "DENOMINATION", "MAIL", "KEYWORD",
+            "DEFINITION", "RESUME", "INSTRUMENT",
+            "TITLEPAGE", "BOOKLINK", "GOOD", "LINK",
+        ];
+        let mut sorted = analyzers;
+        sorted.sort_by_key(|a| ORDER.iter().position(|&n| n == a.name()).unwrap_or(usize::MAX));
+        for a in sorted {
+            ProcessorService::register_analyzer(a);
+        }
+    }
+
+    /// Return the SDK version string.
+    pub const VERSION: &'static str = ProcessorService::VERSION;
+}

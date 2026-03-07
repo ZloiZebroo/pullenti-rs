@@ -1,0 +1,17 @@
+# Standalone package — not part of the pullenti-rs workspace
+[workspace]
+
+[package]
+name = "pullentipy"
+version = "0.0.1"
+edition = "2021"
+description = "Python bindings for the Pullenti NLP SDK"
+
+[lib]
+name = "pullentipy"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.28.2", features = ["extension-module"] }
+pullenti-ner   = { path = "../../crates/pullenti-ner" }
+pullenti-morph = { path = "../../crates/pullenti-morph" }

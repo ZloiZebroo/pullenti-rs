@@ -1,0 +1,8 @@
+[workspace]
+members = [
+    "crates/pullenti-morph",
+    "crates/pullenti-ner",
+    "crates/pullenti-semantic",
+    "crates/pullenti",
+]
+resolver = "2"

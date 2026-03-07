@@ -1,0 +1,12 @@
+[package]
+name = "pullenti-morph"
+version = "4.33.0"
+edition = "2021"
+description = "Morphological analysis subsystem from Pullenti SDK"
+
+[dependencies]
+bitflags = "2"
+flate2 = "1"
+
+[dev-dependencies]
+pretty_assertions = "1"

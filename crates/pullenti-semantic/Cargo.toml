@@ -1,0 +1,12 @@
+[package]
+name = "pullenti-semantic"
+version = "4.33.0"
+edition = "2021"
+description = "Semantic analysis subsystem from Pullenti SDK"
+
+[dependencies]
+pullenti-morph = { path = "../pullenti-morph" }
+pullenti-ner = { path = "../pullenti-ner" }
+
+[dev-dependencies]
+pretty_assertions = "1"

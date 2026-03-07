@@ -1,0 +1,13 @@
+[package]
+name = "pullenti"
+version = "4.33.0"
+edition = "2021"
+description = "Pullenti SDK - NLP library for morphological analysis, NER, and semantic analysis"
+
+[dependencies]
+pullenti-morph = { path = "../pullenti-morph" }
+pullenti-ner = { path = "../pullenti-ner" }
+pullenti-semantic = { path = "../pullenti-semantic" }
+
+[dev-dependencies]
+pretty_assertions = "1"

@@ -1,0 +1,12 @@
+[package]
+name = "pullenti-ner"
+version = "4.33.0"
+edition = "2021"
+description = "Named Entity Recognition subsystem from Pullenti SDK"
+
+[dependencies]
+pullenti-morph = { path = "../pullenti-morph" }
+bitflags = "2"
+
+[dev-dependencies]
+pretty_assertions = "1"

@@ -1,0 +1,15 @@
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "pullentipy"
+version = "0.0.1"
+description = "Python bindings for the Pullenti NLP SDK (morphology, NER, semantic analysis)"
+requires-python = ">=3.8"
+
+[tool.maturin]
+features = ["pyo3/extension-module"]
+module-name = "pullentipy._pullentipy"
+python-source = "python"
+include = ["python/pullentipy/_pullentipy.pyi"]

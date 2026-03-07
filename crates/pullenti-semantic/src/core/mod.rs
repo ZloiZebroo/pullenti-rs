@@ -1,0 +1,8 @@
+/// Semantic Core module — SemanticLink, SemanticHelper, ISemanticOnto.
+/// Mirrors `Pullenti/Semantic/Core/`.
+
+pub mod semantic_link;
+pub mod semantic_helper;
+
+pub use semantic_link::{SemanticLink, SemanticRole};
+pub use semantic_helper::find_derivates as find_derivates_for_token;
