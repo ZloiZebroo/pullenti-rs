@@ -60,7 +60,7 @@ impl Analyzer for ResumeAnalyzer {
                         rr::set_typ(&mut referent, ResumeItemType::Person);
                         referent.add_slot(ATTR_REF, SlotValue::Referent(r), false);
                         let r_rc = Rc::new(RefCell::new(referent));
-                        kit.add_entity(r_rc.clone());
+                        let r_rc = kit.add_entity(r_rc);
                         let tok = Rc::new(RefCell::new(Token::new_referent(t.clone(), t.clone(), r_rc)));
                         kit.embed_token(tok.clone());
                         cur = tok.borrow().next.clone();
@@ -84,7 +84,10 @@ impl Analyzer for ResumeAnalyzer {
                     };
                     if let Some(r) = r_rc {
                         cur_typ = new_typ;
-                        kit.add_entity(r);
+                        let canonical = kit.add_entity(r);
+                        if let TokenKind::Referent(rd) = &mut rt.borrow_mut().kind {
+                            rd.referent = canonical;
+                        }
                     }
                     kit.embed_token(rt);
                     cur = end_next;
@@ -99,7 +102,7 @@ impl Analyzer for ResumeAnalyzer {
                         rr::set_typ(&mut referent, ResumeItemType::Contact);
                         referent.add_slot(ATTR_REF, SlotValue::Referent(r), false);
                         let r_rc = Rc::new(RefCell::new(referent));
-                        kit.add_entity(r_rc.clone());
+                        let r_rc = kit.add_entity(r_rc);
                         let tok = Rc::new(RefCell::new(Token::new_referent(t.clone(), t.clone(), r_rc)));
                         kit.embed_token(tok.clone());
                         cur = tok.borrow().next.clone();

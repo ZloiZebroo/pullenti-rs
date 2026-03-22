@@ -17,14 +17,41 @@ Quick start::
         print(r.entity_type, r.text)
         for s in r.slots:
             print(" ", s.name, "=", s.value)
+
+Person name normalization::
+
+    from pullentipy import Sdk, analyze_person_name
+    Sdk.initialize_all()
+    d = analyze_person_name("Иванов И.И.")
+    print(d.lastname, d.firstname, d.coef, d.result_type)
+
+Morphological analysis::
+
+    from pullentipy import Sdk, morph_analyze
+    Sdk.initialize_all()
+    for tok in morph_analyze("красные дома стоят"):
+        print(tok.text, tok.lemma, [(f.pos, f.case) for f in tok.forms])
 """
 
 from pullentipy._pullentipy import (
+    PersonNormalData,
+    py_analyze_person_name as analyze_person_name,
+    # Morphology
+    MorphForm,
+    MorphToken,
+    morph_analyze,
     MorphLang,
     Occurrence,
     Slot,
     Referent,
     AnalysisResult,
+    # Semantic types
+    SemObject,
+    SemLink,
+    SemFragment,
+    SemFraglink,
+    SemBlock,
+    SemDocument,
     Processor,
     Sdk,
     PhoneAnalyzer,
@@ -52,14 +79,26 @@ from pullentipy._pullentipy import (
     TitlePageAnalyzer,
     GoodsAnalyzer,
     BookLinkAnalyzer,
+    LinkAnalyzer,
 )
 
 __all__ = [
+    "PersonNormalData",
+    "analyze_person_name",
+    "MorphForm",
+    "MorphToken",
+    "morph_analyze",
     "MorphLang",
     "Occurrence",
     "Slot",
     "Referent",
     "AnalysisResult",
+    "SemObject",
+    "SemLink",
+    "SemFragment",
+    "SemFraglink",
+    "SemBlock",
+    "SemDocument",
     "Processor",
     "Sdk",
     "PhoneAnalyzer",
@@ -87,4 +126,5 @@ __all__ = [
     "TitlePageAnalyzer",
     "GoodsAnalyzer",
     "BookLinkAnalyzer",
+    "LinkAnalyzer",
 ]

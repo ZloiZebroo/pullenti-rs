@@ -220,6 +220,13 @@ fn collapse_anafors(gr: &mut SemGraph) {
         let alink_target = alink.borrow().target.clone();
         let alink_alt   = alink.borrow().alt_link.clone();
 
+        // If the anafor target is in a different fragment, don't collapse.
+        // Cross-fragment collapsing produces dangling cross-graph links.
+        if !gr.objects.iter().any(|o| Rc::ptr_eq(o, &alink_target)) {
+            i += 1;
+            continue;
+        }
+
         let links_to: Vec<SemLinkRef> = obj_rc.borrow().links_to.clone();
         for li in &links_to {
             let (lt, ls, lq, lor, lp) = {

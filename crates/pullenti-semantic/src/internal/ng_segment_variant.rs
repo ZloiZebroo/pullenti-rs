@@ -220,8 +220,11 @@ impl NGSegmentVariant {
 pub fn create_variants(seg: &mut NGSegment, sent_items: &[SentItem], max_count: usize) -> Vec<NGSegmentVariant> {
     let mut variants: Vec<NGSegmentVariant> = Vec::new();
 
-    // Reset ind counters
+    // Sort links descending by coef so the odometer explores high-coef variants first.
+    // This is critical for large segments where the 1000-iteration cap would otherwise
+    // cut off before reaching the best combinations.
     for item in &mut seg.items {
+        item.links.sort_by(|a, b| b.coef.partial_cmp(&a.coef).unwrap_or(std::cmp::Ordering::Equal));
         item.ind = 0;
     }
 

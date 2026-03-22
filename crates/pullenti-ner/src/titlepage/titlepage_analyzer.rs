@@ -710,7 +710,7 @@ impl Analyzer for TitlePageAnalyzer {
         if res.slots.is_empty() { return; }
 
         let r_rc = Rc::new(RefCell::new(res));
-        kit.add_entity(r_rc.clone());
+        let r_rc = kit.add_entity(r_rc);
 
         // Embed as a referent token covering the best name span (if found)
         if let (Some(nb), Some(ne)) = (best_begin, best_end) {

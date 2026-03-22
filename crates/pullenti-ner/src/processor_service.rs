@@ -37,7 +37,7 @@ impl ProcessorService {
 
     /// Create a standard processor with all non-specific analyzers
     pub fn create_processor() -> Processor {
-        let p = Processor::new();
+        let mut p = Processor::empty();
         let analyzers = global_analyzers().lock().unwrap();
         for a in analyzers.iter() {
             if !a.is_specific() {
@@ -49,7 +49,7 @@ impl ProcessorService {
 
     /// Create a processor with specific named analyzers added
     pub fn create_specific_processor(names: &[&str]) -> Processor {
-        let p = Self::create_processor();
+        let mut p = Self::create_processor();
         let analyzers = global_analyzers().lock().unwrap();
         for name in names {
             if let Some(a) = analyzers.iter().find(|a| a.name() == *name) {
@@ -61,6 +61,11 @@ impl ProcessorService {
 
     /// Create an empty processor (no analyzers)
     pub fn create_empty_processor() -> Processor {
-        Processor::new()
+        Processor::empty()
+    }
+
+    /// Clear the global analyzer registry (useful for test isolation)
+    pub fn clear() {
+        global_analyzers().lock().unwrap().clear();
     }
 }

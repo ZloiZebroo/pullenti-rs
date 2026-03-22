@@ -102,6 +102,8 @@ pub struct VerbMorphInfo {
     pub is_reflexive: bool,
     /// true if is dee-participle (деепричастие)
     pub is_deeparticiple: bool,
+    /// verb lemma (normal_full or normal_case from VerbMorph), for control model lookup
+    pub lemma: Option<String>,
 }
 
 fn extract_verb_morph(vpt: &VerbPhraseToken) -> VerbMorphInfo {
@@ -135,7 +137,16 @@ fn extract_verb_morph(vpt: &VerbPhraseToken) -> VerbMorphInfo {
             wf.misc.as_ref().map_or(false, |m| m.attrs.iter().any(|a| a == "дееприч."))
         })
     });
-    VerbMorphInfo { word_form, voice, is_infinitive, is_passive_str, is_reflexive, is_deeparticiple }
+    // Verb lemma: prefer normal_full (infinitive), fall back to normal_case
+    let lemma = lv.and_then(|lv| lv.verb_morph())
+        .map(|wf| wf.normal_full.clone().or_else(|| wf.normal_case.clone()))
+        .flatten()
+        .or_else(|| {
+            fv.and_then(|fv| fv.verb_morph())
+                .map(|wf| wf.normal_full.clone().or_else(|| wf.normal_case.clone()))
+                .flatten()
+        });
+    VerbMorphInfo { word_form, voice, is_infinitive, is_passive_str, is_reflexive, is_deeparticiple, lemma }
 }
 
 // ── SentItem source ───────────────────────────────────────────────────────
@@ -165,9 +176,30 @@ impl SentItem {
     pub fn from_noun_npt(mut npt: NounPhraseToken) -> Self {
         let prep = npt.preposition.as_ref().map(|p| p.normal.clone()).unwrap_or_default();
         let nm = extract_noun_morph(&mut npt);
+
+        // Relative pronouns (КОТОРЫЙ, ЧЕЙ, etc.) act as sub-sentence markers,
+        // not standalone noun phrases.  Tag them as SubSent so that:
+        //   - calc_list returns early for them (no comma-List link to preceding noun)
+        //   - they get Participle links instead (КОТОРЫЙ comma-links to its antecedent)
+        // This prevents КОТОРЫЙ's spurious List link from outscoring the Agent link of
+        // the antecedent (e.g. МУЖЧИНА → Agent of РАБОТАЕТ in "Мужчина, который работает").
+        let typ = if let Some(ref noun) = npt.noun {
+            let is_personal = noun.morph.items().iter()
+                .any(|wf| wf.base.class.is_personal_pronoun());
+            let is_relative = !is_personal && noun.morph.items().iter().any(|wf| {
+                let nf = wf.normal_full.as_deref()
+                    .or(wf.normal_case.as_deref())
+                    .unwrap_or("");
+                nf.starts_with("КОТОР") || nf == "ЧЕЙ" || nf == "ЧЬЕГО"
+            });
+            if is_relative { SentItemType::SubSent } else { SentItemType::Noun }
+        } else {
+            SentItemType::Noun
+        };
+
         SentItem {
             source: SentItemSource::Noun(npt),
-            typ: SentItemType::Noun,
+            typ,
             prep,
             noun_morph: Some(nm),
             verb_morph: None,

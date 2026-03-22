@@ -55,7 +55,7 @@ fn emit_link(
     if let Some(dt) = date_to   { lr::set_dateto(&mut link, dt); }
 
     let r_rc = Rc::new(RefCell::new(link));
-    kit.add_entity(r_rc.clone());
+    let r_rc = kit.add_entity(r_rc);
     let wrap = Rc::new(RefCell::new(Token::new_referent(tok.clone(), tok, r_rc)));
     kit.embed_token(wrap);
 }
@@ -202,7 +202,7 @@ impl Analyzer for LinkAnalyzer {
                             if let Some(df2) = df { lr::set_datefrom(&mut link, df2); }
                             if let Some(dt2) = dt { lr::set_dateto(&mut link, dt2); }
                             let r_rc = Rc::new(RefCell::new(link));
-                            kit.add_entity(r_rc.clone());
+                            let r_rc = kit.add_entity(r_rc);
                             let wrap = Rc::new(RefCell::new(Token::new_referent(span.clone(), span, r_rc)));
                             kit.embed_token(wrap);
                         }

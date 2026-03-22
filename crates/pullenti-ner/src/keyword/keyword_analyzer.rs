@@ -461,7 +461,7 @@ impl Analyzer for KeywordAnalyzer {
 
         // Register all deduplicated entities
         for item in &store.items {
-            kit.add_entity(item.clone());
+            let _ = kit.add_entity(item.clone());
         }
     }
 }

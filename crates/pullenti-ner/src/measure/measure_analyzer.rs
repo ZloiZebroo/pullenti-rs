@@ -36,7 +36,7 @@ impl Analyzer for MeasureAnalyzer {
                 None => { cur = t.borrow().next.clone(); }
                 Some((referent, end)) => {
                     let r_rc = Rc::new(RefCell::new(referent));
-                    kit.add_entity(r_rc.clone());
+                    let r_rc = kit.add_entity(r_rc);
                     let tok = Rc::new(RefCell::new(
                         Token::new_referent(t.clone(), end, r_rc)
                     ));

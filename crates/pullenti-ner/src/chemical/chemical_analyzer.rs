@@ -48,7 +48,7 @@ impl Analyzer for ChemicalAnalyzer {
                 }
                 Some(referent) => {
                     let r_rc = Rc::new(RefCell::new(referent));
-                    kit.add_entity(r_rc.clone());
+                    let r_rc = kit.add_entity(r_rc);
                     let tok = Rc::new(RefCell::new(
                         Token::new_referent(t.clone(), last_end.clone(), r_rc)
                     ));
@@ -65,7 +65,7 @@ impl Analyzer for ChemicalAnalyzer {
                 if !li.is_empty() {
                     if let Some(referent) = create_referent(&li, &sofa) {
                         let r_rc = Rc::new(RefCell::new(referent));
-                        kit.add_entity(r_rc.clone());
+                        let r_rc = kit.add_entity(r_rc);
                         let tok = Rc::new(RefCell::new(
                             Token::new_referent(begin.clone(), end.clone(), r_rc)
                         ));

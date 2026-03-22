@@ -59,7 +59,7 @@ impl Analyzer for DateAnalyzer {
             // Register and embed each result
             for (referent, begin, end) in rts {
                 let r_rc = Rc::new(RefCell::new(referent));
-                kit.add_entity(r_rc.clone());
+                let r_rc = kit.add_entity(r_rc);
                 let tok = Rc::new(RefCell::new(
                     Token::new_referent(begin, end, r_rc)
                 ));
@@ -402,26 +402,54 @@ fn apply_rule_year_only(
     })
 }
 
-// ── Second pass: year ranges ──────────────────────────────────────────────────
+// ── Second pass: date ranges ──────────────────────────────────────────────────
 
 fn apply_date_ranges(kit: &mut AnalysisKit, sofa: &SourceOfAnalysis) {
     let mut cur = kit.first_token.clone();
     while let Some(t) = cur.clone() {
         let is_date1 = t.borrow().get_referent()
             .map_or(false, |r| r.borrow().type_name == DATE_TYPENAME);
+
+        // Case A: raw_year_number + hyphen + raw_year_number (e.g. "2020-2024")
+        if !is_date1 && t.borrow().is_number_token() {
+            if let Some((range, end_tok)) = try_raw_year_range(&t, sofa) {
+                let range_rc = Rc::new(RefCell::new(range));
+                let range_rc = kit.add_entity(range_rc);
+                let rt = Rc::new(RefCell::new(Token::new_referent(t.clone(), end_tok, range_rc)));
+                kit.embed_token(rt.clone());
+                cur = rt.borrow().next.clone();
+                continue;
+            }
+        }
+
+        // Case B: raw_day_number + ПО/ДО + DATE(has month) (e.g. "с 15 по 20 марта")
+        if !is_date1 && t.borrow().is_number_token() {
+            if let Some((range, end_tok)) = try_day_to_date_range(&t, sofa) {
+                let range_rc = Rc::new(RefCell::new(range));
+                let range_rc = kit.add_entity(range_rc);
+                let rt = Rc::new(RefCell::new(Token::new_referent(t.clone(), end_tok, range_rc)));
+                kit.embed_token(rt.clone());
+                cur = rt.borrow().next.clone();
+                continue;
+            }
+        }
+
         if !is_date1 {
             cur = t.borrow().next.clone();
             continue;
         }
 
+        // Case C: DATE + connector + DATE
         let next1 = match t.borrow().next.clone() {
             Some(n) => n,
             None => { cur = None; continue; }
         };
 
-        let is_connector = next1.borrow().is_hiphen(sofa)
-            || next1.borrow().is_value("ПО", Some("ДО"))
-            || (next1.borrow().is_value("И", None) && !next1.borrow().is_newline_before(sofa));
+        let is_hiphen_conn = next1.borrow().is_hiphen(sofa);
+        let is_po_conn     = next1.borrow().is_value("ПО", Some("ДО"));
+        let is_and_conn    = next1.borrow().is_value("И", None)
+                             && !next1.borrow().is_newline_before(sofa);
+        let is_connector   = is_hiphen_conn || is_po_conn || is_and_conn;
 
         if !is_connector {
             cur = t.borrow().next.clone();
@@ -440,12 +468,23 @@ fn apply_date_ranges(kit: &mut AnalysisKit, sofa: &SourceOfAnalysis) {
             continue;
         }
 
-        let year1 = t.borrow().get_referent()
-            .map(|r| dr::get_year(&r.borrow())).unwrap_or(0);
-        let year2 = next2.borrow().get_referent()
-            .map(|r| dr::get_year(&r.borrow())).unwrap_or(0);
+        let year1  = t.borrow().get_referent().map(|r| dr::get_year(&r.borrow())).unwrap_or(0);
+        let year2  = next2.borrow().get_referent().map(|r| dr::get_year(&r.borrow())).unwrap_or(0);
+        let month2 = next2.borrow().get_referent().map(|r| dr::get_month(&r.borrow())).unwrap_or(0);
 
-        if year1 == 0 || year2 == 0 || year1 >= year2 {
+        // Allow range if:
+        // • year range: year1 < year2 (both set)
+        // • same-year range: year1 == year2 && year1 > 0 (different months/days)
+        // • intra-year range (no year): month or day set in date2, not via "И"
+        let can_range = if year1 > 0 && year2 > 0 {
+            year1 <= year2
+        } else if year1 == 0 && year2 == 0 {
+            !is_and_conn && month2 > 0
+        } else {
+            false
+        };
+
+        if !can_range {
             cur = t.borrow().next.clone();
             continue;
         }
@@ -458,11 +497,71 @@ fn apply_date_ranges(kit: &mut AnalysisKit, sofa: &SourceOfAnalysis) {
         drr::set_date_to(&mut range, ref2);
 
         let range_rc = Rc::new(RefCell::new(range));
-        kit.add_entity(range_rc.clone());
+        let range_rc = kit.add_entity(range_rc);
         let rt = Rc::new(RefCell::new(
             Token::new_referent(t.clone(), next2.clone(), range_rc)
         ));
         kit.embed_token(rt.clone());
         cur = rt.borrow().next.clone();
     }
+}
+
+/// Case A: raw year number + hyphen (no space) + raw year number → DATERANGE
+fn try_raw_year_range(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Referent, TokenRef)> {
+    let n1 = t.borrow().number_value()?.parse::<i32>().ok()?;
+    if n1 < 1000 || n1 > 2100 { return None; }
+
+    let next1 = t.borrow().next.clone()?;
+    if !next1.borrow().is_hiphen(sofa) { return None; }
+
+    let next2 = next1.borrow().next.clone()?;
+    if !next2.borrow().is_number_token() { return None; }
+
+    let n2 = next2.borrow().number_value()?.parse::<i32>().ok()?;
+    if n2 < 1000 || n2 > 2100 || n2 <= n1 { return None; }
+
+    let mut r1 = dr::new_date_referent();
+    dr::set_year(&mut r1, n1);
+    let mut r2 = dr::new_date_referent();
+    dr::set_year(&mut r2, n2);
+    let r1_rc = Rc::new(RefCell::new(r1));
+    let r2_rc = Rc::new(RefCell::new(r2));
+
+    let mut range = drr::new_date_range_referent();
+    drr::set_date_from(&mut range, r1_rc);
+    drr::set_date_to(&mut range, r2_rc);
+    Some((range, next2.clone()))
+}
+
+/// Case B: raw day number + ПО/ДО + DATE(has month) → DATERANGE
+fn try_day_to_date_range(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Referent, TokenRef)> {
+    let day_val = t.borrow().number_value()?.parse::<i32>().ok()?;
+    if day_val < 1 || day_val > 31 { return None; }
+
+    let next1 = t.borrow().next.clone()?;
+    if !next1.borrow().is_value("ПО", Some("ДО")) && !next1.borrow().is_value("ДО", None) {
+        return None;
+    }
+
+    let next2 = next1.borrow().next.clone()?;
+    let ref2 = next2.borrow().get_referent().filter(|r| r.borrow().type_name == DATE_TYPENAME)?;
+
+    let month2 = dr::get_month(&ref2.borrow());
+    if month2 == 0 { return None; }
+    let year2 = dr::get_year(&ref2.borrow());
+    let day2  = dr::get_day(&ref2.borrow());
+
+    // Sanity: if both are days, from-day must be less than to-day (same month)
+    if day2 > 0 && day_val >= day2 { return None; }
+
+    let mut r1 = dr::new_date_referent();
+    dr::set_day(&mut r1, day_val);
+    dr::set_month(&mut r1, month2);
+    if year2 != 0 { dr::set_year(&mut r1, year2); }
+    let r1_rc = Rc::new(RefCell::new(r1));
+
+    let mut range = drr::new_date_range_referent();
+    drr::set_date_from(&mut range, r1_rc);
+    drr::set_date_to(&mut range, ref2);
+    Some((range, next2.clone()))
 }

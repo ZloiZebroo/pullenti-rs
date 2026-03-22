@@ -4,9 +4,14 @@ version = "4.33.0"
 edition = "2021"
 description = "Named Entity Recognition subsystem from Pullenti SDK"
 
+[features]
+default = []
+parallel = ["rayon"]
+
 [dependencies]
 pullenti-morph = { path = "../pullenti-morph" }
 bitflags = "2"
+rayon = { version = "1", optional = true }
 
 [dev-dependencies]
 pretty_assertions = "1"

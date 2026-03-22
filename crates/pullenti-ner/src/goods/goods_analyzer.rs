@@ -150,7 +150,7 @@ impl Analyzer for GoodsAnalyzer {
             for a in &attrs {
                 if let Some(attr) = a.create_attr() {
                     let r_rc = Rc::new(RefCell::new(attr));
-                    kit.add_entity(r_rc.clone());
+                    let r_rc = kit.add_entity(r_rc);
                     attr_refs.push((r_rc, a.begin_token.clone(), a.end_token.clone()));
                 }
             }
@@ -188,7 +188,7 @@ impl Analyzer for GoodsAnalyzer {
             }
 
             let good_rc = Rc::new(RefCell::new(good));
-            kit.add_entity(good_rc.clone());
+            let good_rc = kit.add_entity(good_rc);
 
             let first_emb = embedded.first().unwrap().clone();
             let last_emb  = embedded.last().unwrap().clone();

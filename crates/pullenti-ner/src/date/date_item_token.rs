@@ -23,6 +23,131 @@ pub enum DateItemType {
     Tenyears,
 }
 
+// ── Russian ordinal day-number words (genitive & nominative) ─────────────────
+//
+// "девятнадцатого января" → day=19, month=9.
+// We list all declined forms (genitive singular, masculine — the most common in
+// date phrases like "N-го месяца") plus nominative for completeness.
+//
+// Each entry: (surface_uppercase, day_value)
+static ORDINAL_DAYS_RU: &[(&str, i32)] = &[
+    // 1
+    ("ПЕРВОГО", 1), ("ПЕРВЫЙ", 1), ("ПЕРВОЕ", 1), ("ПЕРВАЯ", 1),
+    // 2
+    ("ВТОРОГО", 2), ("ВТОРОЙ", 2), ("ВТОРОЕ", 2), ("ВТОРАЯ", 2),
+    // 3
+    ("ТРЕТЬЕГО", 3), ("ТРЕТИЙ", 3), ("ТРЕТЬЕ", 3), ("ТРЕТЬЯ", 3),
+    // 4
+    ("ЧЕТВЁРТОГО", 4), ("ЧЕТВЕРТОГО", 4), ("ЧЕТВЁРТЫЙ", 4), ("ЧЕТВЕРТЫЙ", 4),
+    // 5
+    ("ПЯТОГО", 5), ("ПЯТЫЙ", 5), ("ПЯТОЕ", 5), ("ПЯТАЯ", 5),
+    // 6
+    ("ШЕСТОГО", 6), ("ШЕСТОЙ", 6), ("ШЕСТОЕ", 6), ("ШЕСТАЯ", 6),
+    // 7
+    ("СЕДЬМОГО", 7), ("СЕДЬМОЙ", 7), ("СЕДЬМОЕ", 7), ("СЕДЬМАЯ", 7),
+    // 8
+    ("ВОСЬМОГО", 8), ("ВОСЬМОЙ", 8), ("ВОСЬМОЕ", 8), ("ВОСЬМАЯ", 8),
+    // 9
+    ("ДЕВЯТОГО", 9), ("ДЕВЯТЫЙ", 9), ("ДЕВЯТОЕ", 9), ("ДЕВЯТАЯ", 9),
+    // 10
+    ("ДЕСЯТОГО", 10), ("ДЕСЯТЫЙ", 10), ("ДЕСЯТОЕ", 10), ("ДЕСЯТАЯ", 10),
+    // 11
+    ("ОДИННАДЦАТОГО", 11), ("ОДИННАДЦАТЫЙ", 11), ("ОДИННАДЦАТОЕ", 11),
+    // 12
+    ("ДВЕНАДЦАТОГО", 12), ("ДВЕНАДЦАТЫЙ", 12), ("ДВЕНАДЦАТОЕ", 12),
+    // 13
+    ("ТРИНАДЦАТОГО", 13), ("ТРИНАДЦАТЫЙ", 13), ("ТРИНАДЦАТОЕ", 13),
+    // 14
+    ("ЧЕТЫРНАДЦАТОГО", 14), ("ЧЕТЫРНАДЦАТЫЙ", 14), ("ЧЕТЫРНАДЦАТОЕ", 14),
+    // 15
+    ("ПЯТНАДЦАТОГО", 15), ("ПЯТНАДЦАТЫЙ", 15), ("ПЯТНАДЦАТОЕ", 15),
+    // 16
+    ("ШЕСТНАДЦАТОГО", 16), ("ШЕСТНАДЦАТЫЙ", 16), ("ШЕСТНАДЦАТОЕ", 16),
+    // 17
+    ("СЕМНАДЦАТОГО", 17), ("СЕМНАДЦАТЫЙ", 17), ("СЕМНАДЦАТОЕ", 17),
+    // 18
+    ("ВОСЕМНАДЦАТОГО", 18), ("ВОСЕМНАДЦАТЫЙ", 18), ("ВОСЕМНАДЦАТОЕ", 18),
+    // 19
+    ("ДЕВЯТНАДЦАТОГО", 19), ("ДЕВЯТНАДЦАТЫЙ", 19), ("ДЕВЯТНАДЦАТОЕ", 19),
+    // 20
+    ("ДВАДЦАТОГО", 20), ("ДВАДЦАТЫЙ", 20), ("ДВАДЦАТОЕ", 20), ("ДВАДЦАТАЯ", 20),
+    // 21
+    ("ДВАДЦАТЬ", 21), // handled as compound "ДВАДЦАТЬ ПЕРВОГО" via two-token lookup
+    // 22-29 (compounds handled by two-token lookup)
+    // 30
+    ("ТРИДЦАТОГО", 30), ("ТРИДЦАТЫЙ", 30), ("ТРИДЦАТОЕ", 30), ("ТРИДЦАТАЯ", 30),
+    // 31 (compound "ТРИДЦАТЬ ПЕРВОГО" handled by two-token lookup)
+];
+
+// Two-token ordinal: "ДВАДЦАТЬ ПЕРВОГО", "ТРИДЦАТЬ ПЕРВОГО", etc.
+// (prefix, suffix, value)
+static ORDINAL_DAYS_RU_COMPOUND: &[(&str, &str, i32)] = &[
+    ("ДВАДЦАТЬ", "ПЕРВОГО", 21), ("ДВАДЦАТЬ", "ПЕРВЫЙ", 21), ("ДВАДЦАТЬ", "ПЕРВОЕ", 21),
+    ("ДВАДЦАТЬ", "ВТОРОГО", 22), ("ДВАДЦАТЬ", "ВТОРОЙ", 22), ("ДВАДЦАТЬ", "ВТОРОЕ", 22),
+    ("ДВАДЦАТЬ", "ТРЕТЬЕГО", 23), ("ДВАДЦАТЬ", "ТРЕТИЙ", 23), ("ДВАДЦАТЬ", "ТРЕТЬЕ", 23),
+    ("ДВАДЦАТЬ", "ЧЕТВЁРТОГО", 24), ("ДВАДЦАТЬ", "ЧЕТВЕРТОГО", 24), ("ДВАДЦАТЬ", "ЧЕТВЁРТЫЙ", 24), ("ДВАДЦАТЬ", "ЧЕТВЕРТЫЙ", 24),
+    ("ДВАДЦАТЬ", "ПЯТОГО", 25), ("ДВАДЦАТЬ", "ПЯТЫЙ", 25), ("ДВАДЦАТЬ", "ПЯТОЕ", 25),
+    ("ДВАДЦАТЬ", "ШЕСТОГО", 26), ("ДВАДЦАТЬ", "ШЕСТОЙ", 26), ("ДВАДЦАТЬ", "ШЕСТОЕ", 26),
+    ("ДВАДЦАТЬ", "СЕДЬМОГО", 27), ("ДВАДЦАТЬ", "СЕДЬМОЙ", 27), ("ДВАДЦАТЬ", "СЕДЬМОЕ", 27),
+    ("ДВАДЦАТЬ", "ВОСЬМОГО", 28), ("ДВАДЦАТЬ", "ВОСЬМОЙ", 28), ("ДВАДЦАТЬ", "ВОСЬМОЕ", 28),
+    ("ДВАДЦАТЬ", "ДЕВЯТОГО", 29), ("ДВАДЦАТЬ", "ДЕВЯТЫЙ", 29), ("ДВАДЦАТЬ", "ДЕВЯТОЕ", 29),
+    ("ТРИДЦАТЬ", "ПЕРВОГО", 31), ("ТРИДЦАТЬ", "ПЕРВЫЙ", 31), ("ТРИДЦАТЬ", "ПЕРВОЕ", 31),
+];
+
+/// Try to match a Russian ordinal day word at token `t`.
+/// Returns `(day_value, end_token)` on success.
+fn try_match_ordinal_day_ru(t: &TokenRef) -> Option<(i32, TokenRef)> {
+    let term = {
+        let tb = t.borrow();
+        match &tb.kind {
+            TokenKind::Text(td) => td.term.to_uppercase(),
+            _ => return None,
+        }
+    };
+    // Single-token ordinals (1-20, 30)
+    // Skip "ДВАДЦАТЬ" alone — always compound
+    if term != "ДВАДЦАТЬ" && term != "ТРИДЦАТЬ" {
+        for &(word, day) in ORDINAL_DAYS_RU {
+            if word == term {
+                return Some((day, t.clone()));
+            }
+        }
+    }
+    // Check morph normal forms too (handles inflected forms not in our table)
+    {
+        let tb = t.borrow();
+        if let TokenKind::Text(_) = &tb.kind {
+            for wf in tb.morph.items() {
+                for nc in [wf.normal_case.as_deref(), wf.normal_full.as_deref()].iter().flatten() {
+                    let nc_up = nc.to_uppercase();
+                    for &(word, day) in ORDINAL_DAYS_RU {
+                        if word == nc_up {
+                            return Some((day, t.clone()));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    // Two-token compound ordinals: "ДВАДЦАТЬ ПЕРВОГО" etc.
+    if term == "ДВАДЦАТЬ" || term == "ТРИДЦАТЬ" {
+        let n1 = t.borrow().next.clone()?;
+        let n1_term = {
+            let nb = n1.borrow();
+            match &nb.kind {
+                TokenKind::Text(td) => td.term.to_uppercase(),
+                _ => return None,
+            }
+        };
+        for &(prefix, suffix, day) in ORDINAL_DAYS_RU_COMPOUND {
+            if term == prefix && n1_term == suffix {
+                return Some((day, n1.clone()));
+            }
+        }
+    }
+    None
+}
+
 // ── Static month lookup tables ────────────────────────────────────────────────
 
 static MONTHS_RU: &[&str] = &[
@@ -372,6 +497,14 @@ pub fn try_parse(
     if let TokenKind::Text(td) = &tok.kind {
         let term = td.term.clone();
         drop(tok);
+
+        // Russian ordinal day word? ("девятнадцатого", "первого", "двадцать первого", ...)
+        // Only accepted when followed (eventually) by a month name OR when in a date list context.
+        if let Some((day, end_tok)) = try_match_ordinal_day_ru(t) {
+            let mut item = DateItemToken::new(t.clone(), end_tok, DateItemType::Day);
+            item.int_value = day;
+            return Some(item);
+        }
 
         // Month name?
         if let Some((month_num, lang)) = match_month(&t.borrow()) {

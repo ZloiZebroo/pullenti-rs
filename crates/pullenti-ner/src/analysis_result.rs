@@ -1,5 +1,6 @@
 use std::rc::Rc;
 use std::cell::RefCell;
+use std::sync::Arc;
 use pullenti_morph::MorphLang;
 use crate::source_of_analysis::SourceOfAnalysis;
 use crate::token::TokenRef;
@@ -7,8 +8,8 @@ use crate::referent::Referent;
 
 /// Output container from NER text processing
 pub struct AnalysisResult {
-    /// Input source
-    pub sofa: SourceOfAnalysis,
+    /// Input source (shared via Arc to avoid deep cloning)
+    pub sofa: Arc<SourceOfAnalysis>,
     /// Extracted named entities
     pub entities: Vec<Rc<RefCell<Referent>>>,
     /// First token in the chain
@@ -24,7 +25,7 @@ pub struct AnalysisResult {
 }
 
 impl AnalysisResult {
-    pub fn new(sofa: SourceOfAnalysis) -> Self {
+    pub fn new(sofa: Arc<SourceOfAnalysis>) -> Self {
         AnalysisResult {
             sofa,
             entities: Vec::new(),
@@ -62,6 +63,12 @@ impl AnalysisResult {
         None
     }
 }
+
+// SAFETY: AnalysisResult contains Rc<RefCell<Referent>> and Option<TokenRef> (also Rc-based).
+// These are created thread-locally inside Processor::process() and are exclusively owned
+// after the function returns. No Rc is shared across threads. This impl enables returning
+// AnalysisResult from parallel batch processing (rayon par_iter).
+unsafe impl Send for AnalysisResult {}
 
 impl Drop for AnalysisResult {
     fn drop(&mut self) {

@@ -242,7 +242,7 @@ fn process_block(
         mr::set_kind(&mut r, MailKind::Head);
         mr::set_text(&mut r, &text);
         let r_rc = Rc::new(RefCell::new(r));
-        kit.add_entity(r_rc.clone());
+        let r_rc = kit.add_entity(r_rc);
         let tok = Rc::new(RefCell::new(Token::new_referent(begin_tok, end_tok, r_rc)));
         kit.embed_token(tok);
     }
@@ -330,7 +330,7 @@ fn process_block(
                         mr::set_kind(&mut r, MailKind::Hello);
                         mr::set_text(&mut r, &text);
                         let r_rc = Rc::new(RefCell::new(r));
-                        kit.add_entity(r_rc.clone());
+                        let r_rc = kit.add_entity(r_rc);
                         let tok = Rc::new(RefCell::new(Token::new_referent(begin_tok, end_tok, r_rc)));
                         kit.embed_token(tok);
                         i0 = ii + 1;
@@ -374,7 +374,7 @@ fn process_block(
                     mr::set_kind(&mut r, MailKind::Body);
                     mr::set_text(&mut r, &text);
                     let r_rc = Rc::new(RefCell::new(r));
-                    kit.add_entity(r_rc.clone());
+                    let r_rc = kit.add_entity(r_rc);
                     let tok = Rc::new(RefCell::new(Token::new_referent(begin_tok, end_tok, r_rc)));
                     kit.embed_token(tok);
                 }
@@ -396,7 +396,7 @@ fn process_block(
                 mr::set_kind(&mut r, MailKind::Tail);
                 mr::set_text(&mut r, &text);
                 let r_rc = Rc::new(RefCell::new(r));
-                kit.add_entity(r_rc.clone());
+                let r_rc = kit.add_entity(r_rc);
                 let tok = Rc::new(RefCell::new(Token::new_referent(begin_tok, end_tok, r_rc)));
                 kit.embed_token(tok);
             }

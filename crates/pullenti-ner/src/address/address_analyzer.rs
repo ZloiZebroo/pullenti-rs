@@ -40,7 +40,7 @@ impl Analyzer for AddressAnalyzer {
                 Some((street, street_end)) => {
                     // Register the STREET referent
                     let s_rc = Rc::new(RefCell::new(street));
-                    kit.add_entity(s_rc.clone());
+                    let s_rc = kit.add_entity(s_rc);
                     let street_tok = Rc::new(RefCell::new(
                         Token::new_referent(t.clone(), street_end.clone(), s_rc.clone())
                     ));
@@ -52,7 +52,7 @@ impl Analyzer for AddressAnalyzer {
                         s_rc.clone(), &next_after_street, &sofa
                     ) {
                         let a_rc = Rc::new(RefCell::new(address));
-                        kit.add_entity(a_rc.clone());
+                        let a_rc = kit.add_entity(a_rc);
                         let addr_tok = Rc::new(RefCell::new(
                             Token::new_referent(street_tok.clone(), addr_end, a_rc)
                         ));

@@ -4,6 +4,7 @@
 use std::rc::Rc;
 use pullenti_morph::{MorphGenderFlags, MorphNumber};
 use pullenti_ner::token::{TokenRef, TokenKind};
+use pullenti_ner::referent::SlotValue;
 use pullenti_ner::core::noun_phrase::{NounPhraseToken, NounPhraseSpan};
 use pullenti_ner::core::verb_phrase::VerbPhraseToken;
 use pullenti_ner::source_of_analysis::SourceOfAnalysis;
@@ -13,12 +14,50 @@ use super::adverb_token::{self, AdverbToken};
 
 // ── Normal-text helpers ────────────────────────────────────────────────────
 
+/// Extract a display string from a Referent (mirrors C# `r.ToString()`).
+/// Tries common NAME/FIRSTNAME+LASTNAME slots; falls back to type_name.
+fn referent_to_string(r: &pullenti_ner::referent::Referent) -> String {
+    // Collect all NAME values
+    let names: Vec<String> = r.slots.iter()
+        .filter(|s| s.type_name == "NAME")
+        .filter_map(|s| match &s.value {
+            Some(SlotValue::Str(v)) => Some(v.clone()),
+            _ => None,
+        })
+        .collect();
+    if !names.is_empty() {
+        return names[0].clone();
+    }
+    // PERSON: build from FIRSTNAME + LASTNAME
+    let first = r.slots.iter().find(|s| s.type_name == "FIRSTNAME")
+        .and_then(|s| match &s.value { Some(SlotValue::Str(v)) => Some(v.as_str()), _ => None });
+    let last  = r.slots.iter().find(|s| s.type_name == "LASTNAME")
+        .and_then(|s| match &s.value { Some(SlotValue::Str(v)) => Some(v.as_str()), _ => None });
+    if last.is_some() || first.is_some() {
+        let mut parts = Vec::new();
+        if let Some(f) = first { parts.push(f); }
+        if let Some(l) = last  { parts.push(l); }
+        return parts.join(" ");
+    }
+    // Fallback: any string slot value
+    for slot in &r.slots {
+        if let Some(SlotValue::Str(v)) = &slot.value {
+            if !v.is_empty() { return v.clone(); }
+        }
+    }
+    r.type_name.clone()
+}
+
 /// Get the nominative singular form of a single token (first word form).
 pub fn token_normal(tok: &TokenRef) -> String {
     let tb = tok.borrow();
     for wf in tb.morph.items() {
         if let Some(ref nf) = wf.normal_full { return nf.clone(); }
         if let Some(ref nc) = wf.normal_case { return nc.clone(); }
+    }
+    // Referent token: extract display name from the referent
+    if let TokenKind::Referent(ref r) = tb.kind {
+        return referent_to_string(&r.referent.borrow());
     }
     // Fallback: raw term
     if let TokenKind::Text(ref txt) = tb.kind {

@@ -11,7 +11,8 @@ pub const ATTR_SEX:       &str = "SEX";
 pub const ATTR_NICKNAME:  &str = "NICKNAME";
 pub const ATTR_UNDEFNAME: &str = "UNDEFNAME";
 pub const ATTR_IDENTITY:  &str = "IDENTITY";
-pub const ATTR_ATTR:      &str = "ATTRIBUTE";  // PersonPropertyReferent (not yet ported)
+pub const ATTR_ATTR:      &str = "ATTRIBUTE";  // PersonPropertyReferent
+pub const ATTR_IDDOC:     &str = "IDDOC";      // PersonIdentityReferent link
 
 // Sex values
 pub const SEX_MALE:   &str = "Male";

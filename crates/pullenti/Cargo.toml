@@ -4,6 +4,10 @@ version = "4.33.0"
 edition = "2021"
 description = "Pullenti SDK - NLP library for morphological analysis, NER, and semantic analysis"
 
+[features]
+default = []
+parallel = ["pullenti-ner/parallel"]
+
 [dependencies]
 pullenti-morph = { path = "../pullenti-morph" }
 pullenti-ner = { path = "../pullenti-ner" }

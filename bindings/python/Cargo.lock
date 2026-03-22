@@ -99,11 +99,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "pullenti-semantic"
+version = "4.33.0"
+dependencies = [
+ "pullenti-morph",
+ "pullenti-ner",
+]
+
+[[package]]
 name = "pullentipy"
 version = "0.0.1"
 dependencies = [
  "pullenti-morph",
  "pullenti-ner",
+ "pullenti-semantic",
  "pyo3",
 ]
 

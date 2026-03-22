@@ -92,6 +92,16 @@ pub fn is_city_prefix(s: &str) -> bool {
         "ДЕР." | "ДЕРЕВНЯ" | "СТ." | "СТАНИЦА")
 }
 
+/// Returns true if `s` is an ABBREVIATED city prefix (not a full word).
+/// Abbreviated prefixes (е.g. "г.", "дер.", "пгт") may be followed by a "."
+/// separator that should be skipped. Full-word prefixes ("город", "деревня")
+/// must NOT skip a trailing period — it is sentence-ending punctuation.
+pub fn is_city_prefix_abbrev(s: &str) -> bool {
+    matches!(s, "Г" | "Г." | "ГОР." |
+        "П." | "ПОС." | "ПГТ" | "ПГТ." |
+        "С." | "СЕЛ." | "ДЕР." | "СТ.")
+}
+
 // ── Territory type keywords ───────────────────────────────────────────────────
 //
 // (uppercase match key, canonical lowercase type, always_prefix)

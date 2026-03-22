@@ -64,7 +64,7 @@ impl Analyzer for DefinitionAnalyzer {
                 None => { cur = t.borrow().next.clone(); }
                 Some((referent, begin, end)) => {
                     let r_rc = Rc::new(RefCell::new(referent));
-                    kit.add_entity(r_rc.clone());
+                    let r_rc = kit.add_entity(r_rc);
                     let tok = Rc::new(RefCell::new(
                         Token::new_referent(begin, end.clone(), r_rc)
                     ));

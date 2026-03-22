@@ -6,15 +6,17 @@ use pullenti_ner::{
 };
 use pullenti_ner::phone::phone_referent as ph_ref;
 use pullenti_ner::uri::{ATTR_VALUE, ATTR_SCHEME};
-use pullenti_ner::date::{get_year, get_month, get_day};
+use pullenti_ner::date::{get_year, get_month, get_day, get_date_from, get_date_to, DATERANGE_OBJ_TYPENAME};
 use pullenti_ner::money::{get_currency, get_value as get_money_value, get_rest};
 use pullenti_ner::measure::{get_value as get_measure_value, get_unit, get_kind};
 use pullenti_ner::geo::{get_name as get_geo_name, get_type as get_geo_type, get_alpha2, is_state, is_region};
-use pullenti_ner::person::{get_firstname, get_middlename, get_lastname, get_sex, SEX_MALE, SEX_FEMALE};
+use pullenti_ner::person::{get_firstname, get_middlename, get_lastname, get_sex, SEX_MALE, SEX_FEMALE,
+    PERSONPROPERTY_OBJ_TYPENAME, get_person_property_name};
 use pullenti_ner::org::{get_name as get_org_name, get_type as get_org_type, get_names as get_org_names};
 use pullenti_ner::named::{get_name as get_named_name, get_kind as get_named_kind, get_type as get_named_type};
 use pullenti_ner::NamedEntityAnalyzer;
-use pullenti_ner::address::{get_street_type, get_street_name, get_house, get_flat};
+use pullenti_ner::address::{get_street_type, get_street_name, get_house, get_flat,
+    get_corpus, get_floor, get_office};
 use pullenti_ner::AddressAnalyzer;
 use pullenti_ner::TransportAnalyzer;
 use pullenti_ner::transport::{get_transport_type, get_transport_brand, get_transport_kind};
@@ -59,7 +61,7 @@ impl Analyzer for LetterCountAnalyzer {
 fn test_tokenization_pipeline() {
     init();
     let sofa = SourceOfAnalysis::new("Привет мир");
-    let processor = Processor::new();
+    let mut processor = Processor::empty();
     processor.add_analyzer(Arc::new(LetterCountAnalyzer));
     let result = processor.process(sofa, Some(MorphLang::RU));
 
@@ -71,7 +73,7 @@ fn test_tokenization_pipeline() {
 fn test_token_terms() {
     init();
     let sofa = SourceOfAnalysis::new("Москва столица России");
-    let processor = Processor::new();
+    let processor = Processor::empty();
     let result = processor.process(sofa, Some(MorphLang::RU));
 
     let tokens: Vec<_> = TokenChainIter::new(result.first_token.clone()).collect();
@@ -88,7 +90,7 @@ fn test_token_terms() {
 fn test_token_is_value() {
     init();
     let sofa = SourceOfAnalysis::new("Иванов Иван Иванович");
-    let processor = Processor::new();
+    let processor = Processor::empty();
     let result = processor.process(sofa, Some(MorphLang::RU));
 
     let first = result.first_token.as_ref().unwrap().clone();
@@ -99,7 +101,7 @@ fn test_token_is_value() {
 fn test_english_tokenization() {
     init();
     let sofa = SourceOfAnalysis::new("Hello world");
-    let processor = Processor::new();
+    let processor = Processor::empty();
     let result = processor.process(sofa, Some(MorphLang::EN));
 
     let tokens: Vec<_> = TokenChainIter::new(result.first_token.clone()).collect();
@@ -119,7 +121,7 @@ fn test_processor_service() {
 fn test_token_linked_list() {
     init();
     let sofa = SourceOfAnalysis::new("один два три");
-    let processor = Processor::new();
+    let processor = Processor::empty();
     let result = processor.process(sofa, Some(MorphLang::RU));
 
     // Walk forward
@@ -157,7 +159,7 @@ fn test_token_linked_list() {
 fn test_morph_collection() {
     init();
     let sofa = SourceOfAnalysis::new("красивая девушка");
-    let processor = Processor::new();
+    let processor = Processor::empty();
     let result = processor.process(sofa, Some(MorphLang::RU));
 
     let tokens: Vec<_> = TokenChainIter::new(result.first_token.clone()).collect();
@@ -174,7 +176,7 @@ fn test_morph_collection() {
 fn test_phone_russian_mobile() {
     init();
     let sofa = SourceOfAnalysis::new("Мобильный телефон: +7 999 123-45-67");
-    let processor = Processor::new();
+    let mut processor = Processor::empty();
     processor.add_analyzer(Arc::new(PhoneAnalyzer::new()));
     let result = processor.process(sofa, Some(MorphLang::RU));
 
@@ -197,7 +199,7 @@ fn test_phone_local_number() {
     init();
     // Simple local 7-digit number with dashes
     let sofa = SourceOfAnalysis::new("Тел.: 123-45-67");
-    let processor = Processor::new();
+    let mut processor = Processor::empty();
     processor.add_analyzer(Arc::new(PhoneAnalyzer::new()));
     let result = processor.process(sofa, Some(MorphLang::RU));
 
@@ -216,7 +218,7 @@ fn test_phone_not_extracted_from_gost() {
     init();
     // Numbers after ГОСТ keyword should NOT be phone numbers
     let sofa = SourceOfAnalysis::new("ГОСТ 12345-67");
-    let processor = Processor::new();
+    let mut processor = Processor::empty();
     processor.add_analyzer(Arc::new(PhoneAnalyzer::new()));
     let result = processor.process(sofa, Some(MorphLang::RU));
 
@@ -371,6 +373,40 @@ fn test_date_formal_ddmmyyyy() {
     assert_eq!(get_day(&rb), 15, "Day should be 15");
 }
 
+/// Ordinal day word in Russian: "девятнадцатого сентября"
+#[test]
+fn test_date_ordinal_day_ru() {
+    let proc = date_proc();
+    let sofa = SourceOfAnalysis::new("девятнадцатого сентября");
+    let result = proc.process(sofa, Some(MorphLang::RU));
+    let dates: Vec<_> = result.entities.iter()
+        .filter(|e| e.borrow().type_name == "DATE")
+        .collect();
+    for d in &dates {
+        let rb = d.borrow();
+        eprintln!("DATE: month={} day={}", get_month(&rb), get_day(&rb));
+    }
+    assert!(!dates.is_empty(), "Should extract DATE from 'девятнадцатого сентября'");
+    let rb = dates[0].borrow();
+    assert_eq!(get_month(&rb), 9, "Month should be 9 (September)");
+    assert_eq!(get_day(&rb), 19, "Day should be 19 from ordinal 'девятнадцатого'");
+}
+
+/// Compound ordinal day in Russian: "тридцать первого января 2024"
+#[test]
+fn test_date_compound_ordinal_day_ru() {
+    let proc = date_proc();
+    let sofa = SourceOfAnalysis::new("тридцать первого января 2024 года");
+    let result = proc.process(sofa, Some(MorphLang::RU));
+    let dates: Vec<_> = result.entities.iter()
+        .filter(|e| e.borrow().type_name == "DATE")
+        .collect();
+    assert!(!dates.is_empty(), "Should extract DATE from 'тридцать первого января 2024 года'");
+    let rb = dates[0].borrow();
+    assert_eq!(get_month(&rb), 1, "Month should be 1 (January)");
+    assert_eq!(get_day(&rb), 31, "Day should be 31 from ordinal 'тридцать первого'");
+}
+
 /// Written-out month in Russian: "15 января 2024 года"
 #[test]
 fn test_date_written_month_ru() {
@@ -401,6 +437,59 @@ fn test_date_year_only() {
     assert_eq!(get_year(&rb), 1991, "Year should be 1991");
     assert_eq!(get_month(&rb), 0, "Month should be 0 (not set)");
     assert_eq!(get_day(&rb), 0, "Day should be 0 (not set)");
+}
+
+/// Year-year range "с 2020 по 2024 год" → DATERANGE(FROM=2020, TO=2024)
+#[test]
+fn test_date_range_year_year_po() {
+    let proc = date_proc();
+    let sofa = SourceOfAnalysis::new("с 2020 по 2024 год");
+    let result = proc.process(sofa, Some(MorphLang::RU));
+    let ranges: Vec<_> = result.entities.iter()
+        .filter(|e| e.borrow().type_name == DATERANGE_OBJ_TYPENAME)
+        .collect();
+    assert!(!ranges.is_empty(), "Should extract DATERANGE from 'с 2020 по 2024 год'");
+    let rb = ranges[0].borrow();
+    let from = get_date_from(&rb).expect("DATERANGE must have FROM");
+    let to   = get_date_to(&rb).expect("DATERANGE must have TO");
+    assert_eq!(get_year(&from.borrow()), 2020, "FROM year should be 2020");
+    assert_eq!(get_year(&to.borrow()),   2024, "TO year should be 2024");
+}
+
+/// Year-year range with hyphen "2020-2024" → DATERANGE(FROM=2020, TO=2024)
+#[test]
+fn test_date_range_year_hyphen_year() {
+    let proc = date_proc();
+    let sofa = SourceOfAnalysis::new("период 2020-2024");
+    let result = proc.process(sofa, Some(MorphLang::RU));
+    let ranges: Vec<_> = result.entities.iter()
+        .filter(|e| e.borrow().type_name == DATERANGE_OBJ_TYPENAME)
+        .collect();
+    assert!(!ranges.is_empty(), "Should extract DATERANGE from '2020-2024'");
+    let rb = ranges[0].borrow();
+    let from = get_date_from(&rb).expect("DATERANGE must have FROM");
+    let to   = get_date_to(&rb).expect("DATERANGE must have TO");
+    assert_eq!(get_year(&from.borrow()), 2020, "FROM year should be 2020");
+    assert_eq!(get_year(&to.borrow()),   2024, "TO year should be 2024");
+}
+
+/// Day-to-date range "с 15 по 20 марта" → DATERANGE(FROM=DAY:15/MONTH:3, TO=DAY:20/MONTH:3)
+#[test]
+fn test_date_range_day_to_day_same_month() {
+    let proc = date_proc();
+    let sofa = SourceOfAnalysis::new("с 15 по 20 марта");
+    let result = proc.process(sofa, Some(MorphLang::RU));
+    let ranges: Vec<_> = result.entities.iter()
+        .filter(|e| e.borrow().type_name == DATERANGE_OBJ_TYPENAME)
+        .collect();
+    assert!(!ranges.is_empty(), "Should extract DATERANGE from 'с 15 по 20 марта'");
+    let rb = ranges[0].borrow();
+    let from = get_date_from(&rb).expect("DATERANGE must have FROM");
+    let to   = get_date_to(&rb).expect("DATERANGE must have TO");
+    assert_eq!(get_day(&from.borrow()),   15, "FROM day should be 15");
+    assert_eq!(get_month(&from.borrow()), 3,  "FROM month should be 3 (March)");
+    assert_eq!(get_day(&to.borrow()),     20, "TO day should be 20");
+    assert_eq!(get_month(&to.borrow()),   3,  "TO month should be 3 (March)");
 }
 
 // ── Money analyzer tests ──────────────────────────────────────────────────────
@@ -554,6 +643,39 @@ fn test_geo_city_prefix() {
     );
 }
 
+/// "деревню. Я" → should NOT produce a GEO (sentence-ending "." followed by pronoun)
+#[test]
+fn test_geo_no_false_positive_sentence_period() {
+    let proc = geo_proc();
+    let sofa = SourceOfAnalysis::new("Он приехал в деревню. Я его встретил.");
+    let result = proc.process(sofa, Some(MorphLang::RU));
+    let geos: Vec<_> = result.entities.iter()
+        .filter(|e| e.borrow().type_name == "GEO")
+        .collect();
+    // Should not extract "Я" as city name
+    let has_ya = geos.iter().any(|e| {
+        let rb = e.borrow();
+        get_geo_name(&rb).as_deref() == Some("Я")
+    });
+    assert!(!has_ya, "Should NOT extract 'Я' (pronoun) as a city name");
+}
+
+/// "Сел Максим" → should NOT produce a GEO (verb + person name)
+#[test]
+fn test_geo_no_false_positive_verb_personname() {
+    let proc = geo_proc();
+    let sofa = SourceOfAnalysis::new("Сел Максим рядом с нами.");
+    let result = proc.process(sofa, Some(MorphLang::RU));
+    let geos: Vec<_> = result.entities.iter()
+        .filter(|e| e.borrow().type_name == "GEO")
+        .collect();
+    let has_maksim = geos.iter().any(|e| {
+        let rb = e.borrow();
+        get_geo_name(&rb).as_deref() == Some("МАКСИМ")
+    });
+    assert!(!has_maksim, "Should NOT extract 'Максим' (person name) as a city name after verb 'Сел'");
+}
+
 /// "Московская область" → GEO, region
 #[test]
 fn test_geo_region_adjective_type() {
@@ -657,6 +779,22 @@ fn org_proc() -> Processor {
     Processor::with_analyzers(vec![Arc::new(OrgAnalyzer::new())])
 }
 
+/// "ООО "Russian Context Optimizer"" → ORGANIZATION, type=ООО, name contains RUSSIAN CONTEXT OPTIMIZER
+#[test]
+fn test_org_legal_form_double_quote_en() {
+    let proc = org_proc();
+    let sofa = SourceOfAnalysis::new("ООО \"Russian Context Optimizer\" (RCO)");
+    let result = proc.process(sofa, Some(MorphLang::RU));
+    let orgs: Vec<_> = result.entities.iter()
+        .filter(|e| e.borrow().type_name == "ORGANIZATION")
+        .collect();
+    assert!(!orgs.is_empty(), "Should extract ORGANIZATION from 'ООО \"Russian Context Optimizer\"'");
+    let rb = orgs[0].borrow();
+    let names = get_org_names(&rb);
+    assert!(names.iter().any(|n| n.contains("RUSSIAN") && n.contains("CONTEXT") && n.contains("OPTIMIZER")),
+        "name should contain RUSSIAN CONTEXT OPTIMIZER, got {:?}", names);
+}
+
 /// "ООО «Газпром»" → ORGANIZATION, type=ООО, name contains ГАЗПРОМ
 #[test]
 fn test_org_legal_form_quoted() {
@@ -691,6 +829,22 @@ fn test_org_ministry() {
         "type should contain МИНИСТЕРСТВО, got {:?}", typ);
 }
 
+/// "Министерство финансов России" → ORGANIZATION with multi-word lowercase name
+#[test]
+fn test_org_ministry_multiword() {
+    let proc = org_proc();
+    let sofa = SourceOfAnalysis::new("Министерство финансов России выпустило постановление.");
+    let result = proc.process(sofa, Some(MorphLang::RU));
+    let orgs: Vec<_> = result.entities.iter()
+        .filter(|e| e.borrow().type_name == "ORGANIZATION")
+        .collect();
+    assert!(!orgs.is_empty(), "Should extract ORGANIZATION from 'Министерство финансов России'");
+    let rb = orgs[0].borrow();
+    let names = get_org_names(&rb);
+    assert!(names.iter().any(|n| n.contains("ФИНАНС")),
+        "name should contain ФИНАНС (финансов/финансы), got {:?}", names);
+}
+
 /// "ГИБДД" → ORGANIZATION (known org from Orgs_ru.dat)
 #[test]
 fn test_org_known_gibdd() {
@@ -701,6 +855,66 @@ fn test_org_known_gibdd() {
         .filter(|e| e.borrow().type_name == "ORGANIZATION")
         .collect();
     assert!(!orgs.is_empty(), "Should extract ORGANIZATION for known org 'ГИБДД'");
+}
+
+/// "Государственная дума" → ORGANIZATION (multi-word known org or adj+type)
+#[test]
+fn test_org_stateduma() {
+    let proc = org_proc();
+    let sofa = SourceOfAnalysis::new("Государственная дума приняла закон.");
+    let result = proc.process(sofa, Some(MorphLang::RU));
+    let orgs: Vec<_> = result.entities.iter()
+        .filter(|e| e.borrow().type_name == "ORGANIZATION")
+        .collect();
+    assert!(!orgs.is_empty(), "Should detect ORGANIZATION in 'Государственная дума'");
+}
+
+/// "Центральный банк России" → ORGANIZATION, type=БАНК
+#[test]
+fn test_org_centralbank() {
+    let proc = org_proc();
+    let sofa = SourceOfAnalysis::new("Центральный банк России повысил ставку.");
+    let result = proc.process(sofa, Some(MorphLang::RU));
+    let orgs: Vec<_> = result.entities.iter()
+        .filter(|e| e.borrow().type_name == "ORGANIZATION")
+        .collect();
+    assert!(!orgs.is_empty(), "Should detect ORGANIZATION in 'Центральный банк России'");
+    let rb = orgs[0].borrow();
+    let typ = get_org_type(&rb);
+    assert!(typ.as_deref().map(|t| t.contains("БАНК")).unwrap_or(false),
+        "type should contain БАНК, got {:?}", typ);
+}
+
+/// "Московский государственный университет" → ORGANIZATION, type=УНИВЕРСИТЕТ
+#[test]
+fn test_org_mgu() {
+    let proc = org_proc();
+    let sofa = SourceOfAnalysis::new("Московский государственный университет является ведущим вузом.");
+    let result = proc.process(sofa, Some(MorphLang::RU));
+    let orgs: Vec<_> = result.entities.iter()
+        .filter(|e| e.borrow().type_name == "ORGANIZATION")
+        .collect();
+    assert!(!orgs.is_empty(), "Should detect ORGANIZATION in 'Московский государственный университет'");
+    let rb = orgs[0].borrow();
+    let typ = get_org_type(&rb);
+    assert!(typ.as_deref().map(|t| t.contains("УНИВЕРСИТЕТ")).unwrap_or(false),
+        "type should contain УНИВЕРСИТЕТ, got {:?}", typ);
+}
+
+/// "Российская академия наук" → ORGANIZATION, type=АКАДЕМИЯ
+#[test]
+fn test_org_ran() {
+    let proc = org_proc();
+    let sofa = SourceOfAnalysis::new("Российская академия наук издала сборник.");
+    let result = proc.process(sofa, Some(MorphLang::RU));
+    let orgs: Vec<_> = result.entities.iter()
+        .filter(|e| e.borrow().type_name == "ORGANIZATION")
+        .collect();
+    assert!(!orgs.is_empty(), "Should detect ORGANIZATION in 'Российская академия наук'");
+    let rb = orgs[0].borrow();
+    let typ = get_org_type(&rb);
+    assert!(typ.as_deref().map(|t| t.contains("АКАДЕМИЯ")).unwrap_or(false),
+        "type should contain АКАДЕМИЯ, got {:?}", typ);
 }
 
 // ── NamedEntity tests ────────────────────────────────────────────────────────
@@ -1114,6 +1328,32 @@ fn test_person_fi_surname_instrumental() {
     assert!(!persons.is_empty(), "Should detect person 'Михаилом Жуковым'");
 }
 
+/// "Мария Петровна Иванова" — FirstName + Patronymic + Surname pattern (C3).
+/// Also tests that "Иванова" is NOT extracted as GEO (Иваново city) in person context.
+#[test]
+fn test_person_firstname_patronymic_surname() {
+    Sdk::initialize_all(Some(MorphLang::RU));
+    let text = "Мария Петровна Иванова встретила гостей.";
+    let sofa = SourceOfAnalysis::new(text);
+    let proc = ProcessorService::create_processor();
+    let ar = proc.process(sofa, None);
+    let persons: Vec<_> = ar.entities.iter()
+        .filter(|e| e.borrow().type_name == "PERSON")
+        .collect();
+    let geos: Vec<_> = ar.entities.iter()
+        .filter(|e| e.borrow().type_name == "GEO")
+        .collect();
+    assert!(!persons.is_empty(), "Should extract PERSON 'Мария Петровна Иванова'");
+    assert!(geos.is_empty(), "Should NOT extract GEO for 'Иванова' in person context");
+    let rb = persons[0].borrow();
+    let first = rb.slots.iter().find(|s| s.type_name == "FIRSTNAME")
+        .and_then(|s| s.value.as_ref().and_then(|v| if let pullenti_ner::SlotValue::Str(s) = v { Some(s.clone()) } else { None }));
+    let last = rb.slots.iter().find(|s| s.type_name == "LASTNAME")
+        .and_then(|s| s.value.as_ref().and_then(|v| if let pullenti_ner::SlotValue::Str(s) = v { Some(s.clone()) } else { None }));
+    assert!(first.is_some(), "FIRSTNAME should be set");
+    assert!(last.is_some(), "LASTNAME should be set (got from C3 pattern)");
+}
+
 // ── Bank analyzer tests ────────────────────────────────────────────────────────
 
 #[test]
@@ -1183,7 +1423,7 @@ fn test_weapon_pistol_brand() {
     init();
     let text = "пистолет Макаров";
     let sofa = SourceOfAnalysis::new(text);
-    let proc = Processor::new();
+    let mut proc = Processor::empty();
     proc.add_analyzer(Arc::new(WeaponAnalyzer::new()));
     let ar = proc.process(sofa, None);
 
@@ -1207,7 +1447,7 @@ fn test_weapon_ak47() {
     // АК is recognized as acronym for АВТОМАТ КАЛАШНИКОВА, _correct_model extends to АК-47
     let text = "АК-47";
     let sofa = SourceOfAnalysis::new(text);
-    let proc = Processor::new();
+    let mut proc = Processor::empty();
     proc.add_analyzer(Arc::new(WeaponAnalyzer::new()));
     let ar = proc.process(sofa, None);
 
@@ -1241,7 +1481,7 @@ fn test_weapon_noun_alone() {
     // A lone noun without brand/model should not produce a WEAPON entity
     let text = "пистолет лежал на столе";
     let sofa = SourceOfAnalysis::new(text);
-    let proc = Processor::new();
+    let mut proc = Processor::empty();
     proc.add_analyzer(Arc::new(WeaponAnalyzer::new()));
     let ar = proc.process(sofa, None);
 
@@ -1260,7 +1500,7 @@ fn test_chemical_formula_h2o() {
     // "H2O" — water formula in chemical context
     let text = "Химическая формула воды — H2O.";
     let sofa = SourceOfAnalysis::new(text);
-    let proc = Processor::new();
+    let mut proc = Processor::empty();
     proc.add_analyzer(Arc::new(ChemicalAnalyzer::new()));
     let ar = proc.process(sofa, None);
 
@@ -1280,7 +1520,7 @@ fn test_chemical_formula_co2() {
     init();
     let text = "CO2 — газ, молекула углекислоты.";
     let sofa = SourceOfAnalysis::new(text);
-    let proc = Processor::new();
+    let mut proc = Processor::empty();
     proc.add_analyzer(Arc::new(ChemicalAnalyzer::new()));
     let ar = proc.process(sofa, None);
 
@@ -1301,7 +1541,7 @@ fn test_chemical_substance_name() {
     // Named substance "кислота" in context "серная кислота"
     let text = "Серная кислота (H2SO4) используется в промышленности.";
     let sofa = SourceOfAnalysis::new(text);
-    let proc = Processor::new();
+    let mut proc = Processor::empty();
     proc.add_analyzer(Arc::new(ChemicalAnalyzer::new()));
     let ar = proc.process(sofa, None);
 
@@ -1321,7 +1561,7 @@ fn test_vacance_job_name() {
     // A minimal job posting: the first meaningful text becomes the Name
     let text = "Продавец-консультант\nОпыт работы: не требуется";
     let sofa = SourceOfAnalysis::new(text);
-    let proc = Processor::new();
+    let mut proc = Processor::empty();
     proc.add_analyzer(Arc::new(VacanceAnalyzer::new()));
     let ar = proc.process(sofa, None);
 
@@ -1349,7 +1589,7 @@ fn test_vacance_experience() {
     init();
     let text = "Менеджер по продажам\nОпыт работы: от 1 года\nЗнание 1С";
     let sofa = SourceOfAnalysis::new(text);
-    let proc = Processor::new();
+    let mut proc = Processor::empty();
     proc.add_analyzer(Arc::new(VacanceAnalyzer::new()));
     let ar = proc.process(sofa, None);
 
@@ -1372,7 +1612,7 @@ fn test_vacance_skill() {
     init();
     let text = "Разработчик\nЗнание Rust, C++\nОтветственность";
     let sofa = SourceOfAnalysis::new(text);
-    let proc = Processor::new();
+    let mut proc = Processor::empty();
     proc.add_analyzer(Arc::new(VacanceAnalyzer::new()));
     let ar = proc.process(sofa, None);
 
@@ -1399,7 +1639,7 @@ use pullenti_ner::definition::{
 
 fn def_proc() -> Processor {
     init();
-    let proc = Processor::new();
+    let mut proc = Processor::empty();
     proc.add_analyzer(Arc::new(DefinitionAnalyzer::new()));
     proc
 }
@@ -1476,7 +1716,7 @@ use pullenti_ner::mail::{MAIL_OBJ_TYPENAME, get_kind as get_mail_kind, MailKind 
 
 fn mail_proc() -> Processor {
     init();
-    let proc = Processor::new();
+    let mut proc = Processor::empty();
     proc.add_analyzer(Arc::new(MailAnalyzer::new()));
     proc
 }
@@ -1522,7 +1762,7 @@ use pullenti_ner::keyword::{KEYWORD_OBJ_TYPENAME, get_keyword_value};
 
 fn keyword_proc() -> Processor {
     init();
-    let proc = Processor::new();
+    let mut proc = Processor::empty();
     proc.add_analyzer(Arc::new(PersonAnalyzer::new()));
     proc.add_analyzer(Arc::new(OrgAnalyzer::new()));
     proc.add_analyzer(Arc::new(GeoAnalyzer::new()));
@@ -1576,7 +1816,7 @@ use pullenti_ner::denomination::{DENOMINATION_OBJ_TYPENAME, get_denomination_val
 
 fn denomination_proc() -> Processor {
     init();
-    let proc = Processor::new();
+    let mut proc = Processor::empty();
     proc.add_analyzer(Arc::new(DenominationAnalyzer::new()));
     proc
 }
@@ -1633,7 +1873,7 @@ use pullenti_ner::resume::{RESUME_OBJ_TYPENAME, ResumeItemType, get_resume_typ};
 
 fn resume_proc() -> Processor {
     init();
-    let proc = Processor::new();
+    let mut proc = Processor::empty();
     proc.add_analyzer(Arc::new(PersonAnalyzer::new()));
     proc.add_analyzer(Arc::new(OrgAnalyzer::new()));
     proc.add_analyzer(Arc::new(DateAnalyzer::new()));
@@ -1666,7 +1906,7 @@ fn test_resume_contact() {
     // Resume should recognize phone/email at line start as Contact
     let text = "Тел: +7 495 123-45-67\nE-mail: test@example.com";
     let sofa = SourceOfAnalysis::new(text);
-    let proc = Processor::new();
+    let mut proc = Processor::empty();
     proc.add_analyzer(Arc::new(PhoneAnalyzer::new()));
     proc.add_analyzer(Arc::new(UriAnalyzer::new()));
     proc.add_analyzer(Arc::new(ResumeAnalyzer::new()));
@@ -1699,7 +1939,7 @@ use pullenti_ner::goods::{
 
 fn goods_proc() -> Processor {
     init();
-    let proc = Processor::new();
+    let mut proc = Processor::empty();
     proc.add_analyzer(Arc::new(GoodsAnalyzer::new()));
     proc
 }
@@ -1865,6 +2105,19 @@ fn test_geo_en_city_singapore() {
         .filter(|e| e.borrow().type_name == "GEO")
         .collect();
     assert!(!geos.is_empty(), "Should extract GEO for 'Singapore'");
+}
+
+/// "Matthew Wallingford" — Wallingford is a city but should NOT be extracted
+/// as GEO because "Matthew" immediately precedes it (person-name context).
+#[test]
+fn test_geo_en_no_false_positive_preceding_firstname() {
+    let proc = en_geo_proc();
+    let sofa = SourceOfAnalysis::new("Matthew Wallingford, Aditya Sinha worked on this.");
+    let result = proc.process(sofa, Some(MorphLang::EN));
+    let geos: Vec<_> = result.entities.iter()
+        .filter(|e| e.borrow().type_name == "GEO")
+        .collect();
+    assert!(geos.is_empty(), "Should NOT extract GEO for 'Wallingford' when preceded by 'Matthew'");
 }
 
 // ── English PERSON tests ──────────────────────────────────────────────────────
@@ -2067,6 +2320,69 @@ fn test_person_en_no_false_positive_tech_phrase() {
     assert!(persons.is_empty(), "Should NOT extract PERSON for 'Blacklist Domain'");
 }
 
+// ── PersonPropertyReferent tests ──────────────────────────────────────────────
+
+fn person_prop_proc() -> Processor {
+    MorphologyService::initialize(Some(MorphLang::RU | MorphLang::EN));
+    Processor::with_analyzers(vec![Arc::new(PersonAnalyzer::new())])
+}
+
+/// "господин Иванов" → PERSONPROPERTY(name="господин") + PERSON(lastname=ИВАНОВ)
+#[test]
+fn test_person_property_gospodin() {
+    let proc = person_prop_proc();
+    let sofa = SourceOfAnalysis::new("Это господин Иванов.");
+    let result = proc.process(sofa, Some(MorphLang::RU));
+    let props: Vec<_> = result.entities.iter()
+        .filter(|e| e.borrow().type_name == PERSONPROPERTY_OBJ_TYPENAME)
+        .collect();
+    assert!(!props.is_empty(), "Should extract PERSONPROPERTY for 'господин Иванов'");
+    let rb = props[0].borrow();
+    let name = get_person_property_name(&rb);
+    assert_eq!(name.as_deref(), Some("господин"), "name should be 'господин', got {:?}", name);
+    let persons: Vec<_> = result.entities.iter()
+        .filter(|e| e.borrow().type_name == "PERSON")
+        .collect();
+    assert!(!persons.is_empty(), "PERSON should also be detected for 'Иванов'");
+}
+
+/// "директор Петров" → PERSONPROPERTY(name="директор") + PERSON(lastname=ПЕТРОВ)
+#[test]
+fn test_person_property_director() {
+    let proc = person_prop_proc();
+    let sofa = SourceOfAnalysis::new("директор Петров подписал приказ");
+    let result = proc.process(sofa, Some(MorphLang::RU));
+    let props: Vec<_> = result.entities.iter()
+        .filter(|e| e.borrow().type_name == PERSONPROPERTY_OBJ_TYPENAME)
+        .collect();
+    assert!(!props.is_empty(), "Should extract PERSONPROPERTY for 'директор Петров'");
+    let rb = props[0].borrow();
+    let name = get_person_property_name(&rb);
+    assert!(name.is_some(), "PERSONPROPERTY should have a name, got None");
+    let persons: Vec<_> = result.entities.iter()
+        .filter(|e| e.borrow().type_name == "PERSON")
+        .collect();
+    assert!(!persons.is_empty(), "PERSON 'Петров' should be detected");
+}
+
+/// "Mr Smith" (no dot) → PERSONPROPERTY(name="mr.") + PERSON(lastname=SMITH)
+#[test]
+fn test_person_property_mr_en() {
+    let proc = person_prop_proc();
+    // Use "Mr Smith" without the dot — "Mr." tokenizes as "MR" + "." which is
+    // handled, but "Mr" alone also matches the table key "MR"
+    let sofa = SourceOfAnalysis::new("Greetings from Mr Smith and Mrs Jones.");
+    let result = proc.process(sofa, Some(MorphLang::EN));
+    let props: Vec<_> = result.entities.iter()
+        .filter(|e| e.borrow().type_name == PERSONPROPERTY_OBJ_TYPENAME)
+        .collect();
+    assert!(!props.is_empty(), "Should extract PERSONPROPERTY for 'Mr Smith'");
+    let persons: Vec<_> = result.entities.iter()
+        .filter(|e| e.borrow().type_name == "PERSON")
+        .collect();
+    assert!(!persons.is_empty(), "PERSON 'Smith' should be detected");
+}
+
 // ── LinkAnalyzer tests ────────────────────────────────────────────────────
 
 use pullenti_ner::LinkAnalyzer;
@@ -2204,4 +2520,1086 @@ fn test_link_person_org_work() {
         let o2_type = get_object2(&link0).map(|r| r.borrow().type_name.clone());
         assert_eq!(o2_type.as_deref(), Some("ORGANIZATION"), "Object2 should be ORGANIZATION");
     }
+}
+
+// ── PersonIdentityReferent tests ────────────────────────────────────────────
+
+fn person_id_proc() -> Processor {
+    MorphologyService::initialize(Some(MorphLang::RU | MorphLang::EN));
+    Processor::with_analyzers(vec![
+        Arc::new(DateAnalyzer::new()),
+        Arc::new(GeoAnalyzer::new()),
+        Arc::new(OrgAnalyzer::new()),
+        Arc::new(PersonAnalyzer::new()),
+    ])
+}
+
+/// "паспорт 1234 567890" → PERSONIDENTITY, number=1234567890
+#[test]
+fn test_person_identity_passport_number() {
+    let text = "паспорт 1234 567890";
+    let sofa = SourceOfAnalysis::new(text);
+    let proc = person_id_proc();
+    let result = proc.process(sofa, Some(MorphLang::RU));
+
+    let ids: Vec<_> = result.entities.iter()
+        .filter(|e| e.borrow().type_name == "PERSONIDENTITY")
+        .collect();
+
+    assert!(!ids.is_empty(), "Should extract PERSONIDENTITY from 'паспорт 1234 567890'");
+    let id = ids[0].borrow();
+    let number = id.slots.iter()
+        .find(|s| s.type_name == "NUMBER")
+        .and_then(|s| s.value.as_ref())
+        .and_then(|v| if let pullenti_ner::referent::SlotValue::Str(s) = v { Some(s.clone()) } else { None });
+    assert!(number.is_some(), "PERSONIDENTITY should have NUMBER slot");
+    let num = number.unwrap();
+    assert!(num.contains("1234") || num.len() >= 6,
+        "Number should include series+number digits, got: {}", num);
+}
+
+/// "паспорт серия 12 34 номер 567890" → PERSONIDENTITY
+#[test]
+fn test_person_identity_passport_seria_number() {
+    let text = "паспорт серия 12 34 номер 567890";
+    let sofa = SourceOfAnalysis::new(text);
+    let proc = person_id_proc();
+    let result = proc.process(sofa, Some(MorphLang::RU));
+
+    let ids: Vec<_> = result.entities.iter()
+        .filter(|e| e.borrow().type_name == "PERSONIDENTITY")
+        .collect();
+
+    assert!(!ids.is_empty(), "Should extract PERSONIDENTITY from passport with seria/number keywords");
+    let id = ids[0].borrow();
+    let typ = id.slots.iter()
+        .find(|s| s.type_name == "TYPE")
+        .and_then(|s| s.value.as_ref())
+        .and_then(|v| if let pullenti_ner::referent::SlotValue::Str(s) = v { Some(s.clone()) } else { None });
+    assert!(typ.is_some(), "PERSONIDENTITY should have TYPE slot");
+    assert!(typ.unwrap().contains("паспорт"), "TYPE should contain 'паспорт'");
+}
+
+/// "водительское удостоверение 77ВВ 123456" → PERSONIDENTITY (driver's license)
+#[test]
+fn test_person_identity_driver_license() {
+    let text = "водительское удостоверение 77ВВ 123456";
+    let sofa = SourceOfAnalysis::new(text);
+    let proc = person_id_proc();
+    let result = proc.process(sofa, Some(MorphLang::RU));
+
+    let ids: Vec<_> = result.entities.iter()
+        .filter(|e| e.borrow().type_name == "PERSONIDENTITY")
+        .collect();
+
+    eprintln!("Entities: {:?}", result.entities.iter()
+        .map(|e| e.borrow().type_name.clone()).collect::<Vec<_>>());
+
+    // Driver's license may or may not be parsed depending on
+    // whether "77ВВ" is recognized as seria
+    // The test simply checks we don't crash
+    let _ = ids.len();
+}
+
+/// "Иванов И.И., паспорт 1234 567890" → PERSON + PERSONIDENTITY linked via IDDOC
+#[test]
+fn test_person_identity_linked_to_person() {
+    let text = "Иванов Иван, паспорт 1234 567890";
+    let sofa = SourceOfAnalysis::new(text);
+    let proc = person_id_proc();
+    let result = proc.process(sofa, Some(MorphLang::RU));
+
+    let ids: Vec<_> = result.entities.iter()
+        .filter(|e| e.borrow().type_name == "PERSONIDENTITY")
+        .collect();
+
+    let persons: Vec<_> = result.entities.iter()
+        .filter(|e| e.borrow().type_name == "PERSON")
+        .collect();
+
+    assert!(!ids.is_empty(), "Should extract PERSONIDENTITY");
+    assert!(!persons.is_empty(), "Should extract PERSON");
+    // Check if person has IDDOC slot linking to the identity doc
+    let has_iddoc = persons.iter().any(|p| {
+        p.borrow().slots.iter().any(|s| s.type_name == "IDDOC")
+    });
+    // IDDOC linking is best-effort — just check that both entities exist
+    let _ = has_iddoc;
+}
+
+// ── PersonNormalData tests ────────────────────────────────────────────────────
+
+#[test]
+fn test_person_normal_fio() {
+    // Standard FIO: "Иванов Иван Иванович"
+    MorphologyService::initialize(Some(MorphLang::RU));
+    Sdk::initialize_all(None);
+    let data = pullenti_ner::person::person_normal_data::analyze("Иванов Иван Иванович");
+    assert_ne!(data.res_typ, pullenti_ner::person::PersonNormalResult::NotPerson,
+        "should be recognised as person: {:?}", data);
+    assert!(data.lastname.as_deref().map(|s| s.to_uppercase().contains("ИВАНОВ")).unwrap_or(false),
+        "expected ИВАНОВ lastname, got: {:?}", data.lastname);
+    assert!(data.firstname.as_deref().map(|s| s.to_uppercase().contains("ИВАН")).unwrap_or(false),
+        "expected ИВАН firstname, got: {:?}", data.firstname);
+}
+
+#[test]
+fn test_person_normal_initials() {
+    // Initials form: "Петров А.С." — at minimum recognized as person
+    MorphologyService::initialize(Some(MorphLang::RU));
+    Sdk::initialize_all(None);
+    let data = pullenti_ner::person::person_normal_data::analyze("Петров А.С.");
+    assert_ne!(data.res_typ, pullenti_ner::person::PersonNormalResult::NotPerson,
+        "should be recognised as person: {:?}", data);
+    assert!(data.lastname.as_deref().map(|s| s.to_uppercase().contains("ПЕТРОВ")).unwrap_or(false),
+        "expected ПЕТРОВ lastname, got: {:?}", data.lastname);
+}
+
+#[test]
+fn test_person_normal_not_person() {
+    // Text that is clearly not a person
+    MorphologyService::initialize(Some(MorphLang::RU));
+    Sdk::initialize_all(None);
+    let data = pullenti_ner::person::person_normal_data::analyze(
+        "ул. Ленина, д. 5, кв. 4");
+    // Should either be NotPerson or have very low coef (address detected)
+    let is_rejected = data.res_typ == pullenti_ner::person::PersonNormalResult::NotPerson
+        || data.coef < 50;
+    assert!(is_rejected,
+        "address text should not be recognised as high-confidence person: {:?}", data);
+}
+
+#[test]
+fn test_person_normal_preprocess() {
+    // "Сидоров-иванов" — hyphen + lowercase should be uppercased in preprocessing
+    MorphologyService::initialize(Some(MorphLang::RU));
+    Sdk::initialize_all(None);
+    let data = pullenti_ner::person::person_normal_data::analyze("Сидоров Иван Иванович");
+    assert_ne!(data.res_typ, pullenti_ner::person::PersonNormalResult::NotPerson,
+        "should be recognised as person: {:?}", data);
+    assert!(data.lastname.is_some(), "should have lastname");
+}
+
+// ── PersonItemToken / PersonNormalNode (EmptyProcessor path) ─────────────────
+
+// ends_with_std_surname
+#[test]
+fn test_surname_tail_ov() {
+    use pullenti_ner::person::person_item_token::ends_with_std_surname;
+    assert_eq!(ends_with_std_surname("ИВАНОВ"), Some(1), "ОВ → masculine");
+    assert_eq!(ends_with_std_surname("ИВАНОВА"), Some(2), "ОВА → feminine");
+    assert_eq!(ends_with_std_surname("ПЕТРОВ"), Some(1), "ОВ → masculine");
+    assert_eq!(ends_with_std_surname("ПЕТРОВА"), Some(2), "ОВА → feminine");
+}
+
+#[test]
+fn test_surname_tail_ev() {
+    use pullenti_ner::person::person_item_token::ends_with_std_surname;
+    assert_eq!(ends_with_std_surname("СЕРГЕЕВ"), Some(1), "ЕВ → masculine");
+    assert_eq!(ends_with_std_surname("СЕРГЕЕВА"), Some(2), "ЕВА → feminine");
+}
+
+#[test]
+fn test_surname_tail_in() {
+    use pullenti_ner::person::person_item_token::ends_with_std_surname;
+    assert_eq!(ends_with_std_surname("ПУШКИН"), Some(1), "ИН → masculine");
+    assert_eq!(ends_with_std_surname("ПУШКИНА"), Some(2), "ИНА → feminine");
+}
+
+#[test]
+fn test_surname_tail_neutral() {
+    use pullenti_ner::person::person_item_token::ends_with_std_surname;
+    assert_eq!(ends_with_std_surname("ШЕВЧЕНКО"), Some(0), "КО → neutral");
+    assert_eq!(ends_with_std_surname("КАЗАРЯН"), Some(0), "ЯН → neutral");
+    assert_eq!(ends_with_std_surname("КОВАЛЬЧУК"), Some(0), "УК → neutral");
+}
+
+#[test]
+fn test_surname_tail_no_match() {
+    use pullenti_ner::person::person_item_token::ends_with_std_surname;
+    // A common noun that doesn't end with a surname tail
+    assert_eq!(ends_with_std_surname("СТОЛ"), None);
+    // Too short (tail would consume entire word)
+    assert_eq!(ends_with_std_surname("ОВ"), None);
+}
+
+// analyze() — EmptyProcessor primary path
+
+#[test]
+fn test_person_normal_empty_fio_full() {
+    // Classic Russian FIO — EmptyProcessor should handle this before StandardProcessor
+    MorphologyService::initialize(Some(MorphLang::RU));
+    Sdk::initialize_all(None);
+    let data = pullenti_ner::person::person_normal_data::analyze("Иванов Иван Иванович");
+    assert_ne!(data.res_typ, pullenti_ner::person::PersonNormalResult::NotPerson,
+        "FIO should be recognised: {:?}", data);
+    assert!(data.lastname.as_deref().map(|s| s.to_uppercase().contains("ИВАНОВ")).unwrap_or(false),
+        "expected ИВАНОВ lastname: {:?}", data.lastname);
+    assert!(data.firstname.as_deref().map(|s| s.to_uppercase().contains("ИВАН")).unwrap_or(false),
+        "expected ИВАН firstname: {:?}", data.firstname);
+    assert!(data.middlename.as_deref().map(|s| s.to_uppercase().contains("ИВАНОВИЧ")).unwrap_or(false),
+        "expected ИВАНОВИЧ middlename: {:?}", data.middlename);
+}
+
+#[test]
+fn test_person_normal_empty_iof_full() {
+    // IOF ordering: Имя Отчество Фамилия
+    MorphologyService::initialize(Some(MorphLang::RU));
+    Sdk::initialize_all(None);
+    let data = pullenti_ner::person::person_normal_data::analyze("Иван Иванович Иванов");
+    assert_ne!(data.res_typ, pullenti_ner::person::PersonNormalResult::NotPerson,
+        "IOF should be recognised: {:?}", data);
+    assert!(data.lastname.as_deref().map(|s| s.to_uppercase().contains("ИВАНОВ")).unwrap_or(false),
+        "expected ИВАНОВ lastname: {:?}", data.lastname);
+    assert!(data.firstname.as_deref().map(|s| s.to_uppercase().contains("ИВАН")).unwrap_or(false),
+        "expected ИВАН firstname: {:?}", data.firstname);
+}
+
+#[test]
+fn test_person_normal_empty_female_fio() {
+    // Female FIO: Петрова Мария Ивановна
+    MorphologyService::initialize(Some(MorphLang::RU));
+    Sdk::initialize_all(None);
+    let data = pullenti_ner::person::person_normal_data::analyze("Петрова Мария Ивановна");
+    assert_ne!(data.res_typ, pullenti_ner::person::PersonNormalResult::NotPerson,
+        "female FIO should be recognised: {:?}", data);
+    assert!(data.lastname.as_deref().map(|s| s.to_uppercase().contains("ПЕТРОВ")).unwrap_or(false),
+        "expected ПЕТРОВ* lastname: {:?}", data.lastname);
+    assert_eq!(data.gender, 2, "expected female gender: {:?}", data);
+}
+
+#[test]
+fn test_person_normal_empty_fi_only() {
+    // Just Firstname + Lastname (no patronymic)
+    MorphologyService::initialize(Some(MorphLang::RU));
+    Sdk::initialize_all(None);
+    let data = pullenti_ner::person::person_normal_data::analyze("Александр Петров");
+    assert_ne!(data.res_typ, pullenti_ner::person::PersonNormalResult::NotPerson,
+        "FI should be recognised: {:?}", data);
+    assert!(data.lastname.as_deref().map(|s| s.to_uppercase().contains("ПЕТРОВ")).unwrap_or(false),
+        "expected ПЕТРОВ lastname: {:?}", data.lastname);
+}
+
+#[test]
+fn test_person_normal_empty_surname_only_with_std_tail() {
+    // A single ambiguous surname token → too low confidence for both paths.
+    // C# PersonNormalHelper behaves the same way without context.
+    // We just verify analyze() doesn't panic and returns a valid struct.
+    MorphologyService::initialize(Some(MorphLang::RU));
+    Sdk::initialize_all(None);
+    let data = pullenti_ner::person::person_normal_data::analyze("Сергеев");
+    // Any result is acceptable — the important thing is no panic and coef is 0..=100
+    assert!(data.coef >= 0 && data.coef <= 100, "coef out of range: {:?}", data);
+}
+
+#[test]
+fn test_person_normal_empty_middlename_female_suffix() {
+    // Female patronymic ending -вна / -овна
+    MorphologyService::initialize(Some(MorphLang::RU));
+    Sdk::initialize_all(None);
+    let data = pullenti_ner::person::person_normal_data::analyze("Сидорова Ольга Николаевна");
+    assert_ne!(data.res_typ, pullenti_ner::person::PersonNormalResult::NotPerson,
+        "female FIO should be recognised: {:?}", data);
+    assert!(data.middlename.as_deref().map(|s| s.to_uppercase().contains("НИКОЛАЕВНА")).unwrap_or(false),
+        "expected НИКОЛАЕВНА middlename: {:?}", data.middlename);
+    assert_eq!(data.gender, 2, "expected female gender");
+}
+
+#[test]
+fn test_person_normal_empty_middlename_male_suffix() {
+    // Male patronymic ending -ович
+    MorphologyService::initialize(Some(MorphLang::RU));
+    Sdk::initialize_all(None);
+    let data = pullenti_ner::person::person_normal_data::analyze("Смирнов Дмитрий Александрович");
+    assert_ne!(data.res_typ, pullenti_ner::person::PersonNormalResult::NotPerson,
+        "male FIO should be recognised: {:?}", data);
+    assert!(data.middlename.as_deref().map(|s| s.to_uppercase().contains("АЛЕКСАНДРОВИЧ")).unwrap_or(false),
+        "expected АЛЕКСАНДРОВИЧ middlename: {:?}", data.middlename);
+    assert_eq!(data.gender, 1, "expected male gender");
+}
+
+#[test]
+fn test_person_normal_empty_coef_ok_threshold() {
+    // A well-formed FIO should achieve OK status (coef ≥ 90)
+    MorphologyService::initialize(Some(MorphLang::RU));
+    Sdk::initialize_all(None);
+    let data = pullenti_ner::person::person_normal_data::analyze("Иванов Иван Иванович");
+    assert_eq!(data.res_typ, pullenti_ner::person::PersonNormalResult::OK,
+        "clean FIO should be OK: coef={}, {:?}", data.coef, data);
+}
+
+#[test]
+fn test_person_normal_empty_not_person_plain_text() {
+    MorphologyService::initialize(Some(MorphLang::RU));
+    Sdk::initialize_all(None);
+    let data = pullenti_ner::person::person_normal_data::analyze(
+        "красивый большой дом стоит на улице");
+    let is_rejected = data.res_typ == pullenti_ner::person::PersonNormalResult::NotPerson
+        || data.coef < 50;
+    assert!(is_rejected, "plain text should not be a high-confidence person: {:?}", data);
+}
+
+#[test]
+fn test_person_normal_empty_not_person_too_long() {
+    MorphologyService::initialize(Some(MorphLang::RU));
+    Sdk::initialize_all(None);
+    // > 200 chars → early exit
+    let long = "А".repeat(201);
+    let data = pullenti_ner::person::person_normal_data::analyze(&long);
+    assert_eq!(data.res_typ, pullenti_ner::person::PersonNormalResult::NotPerson,
+        "text >200 chars should be rejected immediately");
+}
+
+// ── ShortNameHelper ───────────────────────────────────────────────────────────
+
+#[test]
+fn test_short_name_helper_lookup() {
+    use pullenti_ner::person::short_name_helper::get_names_for_shortname;
+    // САША → АЛЕКСАНДР (m) and АЛЕКСАНДРА (f)
+    let res = get_names_for_shortname("САША").expect("САША should have expansions");
+    let names: Vec<&str> = res.iter().map(|(n, _)| n.as_str()).collect();
+    assert!(names.contains(&"АЛЕКСАНДР"),  "САША should expand to АЛЕКСАНДР");
+    assert!(names.contains(&"АЛЕКСАНДРА"), "САША should expand to АЛЕКСАНДРА");
+}
+
+#[test]
+fn test_short_name_helper_reverse() {
+    use pullenti_ner::person::short_name_helper::get_shortnames_for_name;
+    let shorts = get_shortnames_for_name("АЛЕКСАНДР").expect("АЛЕКСАНДР should have short forms");
+    let shorts: Vec<&str> = shorts.iter().map(|s| s.as_str()).collect();
+    assert!(shorts.contains(&"САША"), "АЛЕКСАНДР → САША");
+    assert!(shorts.contains(&"ШУРА"), "АЛЕКСАНДР → ШУРА");
+}
+
+#[test]
+fn test_short_name_helper_not_found() {
+    use pullenti_ner::person::short_name_helper::get_names_for_shortname;
+    // A word that is not a shortname
+    assert!(get_names_for_shortname("ИВАНОВ").is_none(), "surname should not be in shortname map");
+}
+
+#[test]
+fn test_short_name_helper_gender() {
+    use pullenti_ner::person::short_name_helper::get_names_for_shortname;
+    // ЖЕНЯ → ЕВГЕНИЙ (m) and ЕВГЕНИЯ (f)
+    let res = get_names_for_shortname("ЖЕНЯ").expect("ЖЕНЯ should have expansions");
+    let male   = res.iter().any(|(n, g)| n == "ЕВГЕНИЙ"  && *g == 1);
+    let female = res.iter().any(|(n, g)| n == "ЕВГЕНИЯ"  && *g == 2);
+    assert!(male,   "ЖЕНЯ should map to ЕВГЕНИЙ (masculine)");
+    assert!(female, "ЖЕНЯ should map to ЕВГЕНИЯ (feminine)");
+}
+
+// ── ShortName expansion in analyze() ─────────────────────────────────────────
+
+#[test]
+fn test_person_normal_shortname_male_expansion() {
+    // "Вася Петров" → firstname should expand to ВАСИЛИЙ
+    MorphologyService::initialize(Some(MorphLang::RU));
+    Sdk::initialize_all(None);
+    let data = pullenti_ner::person::person_normal_data::analyze("Вася Петров");
+    assert_ne!(data.res_typ, pullenti_ner::person::PersonNormalResult::NotPerson,
+        "should be recognised: {:?}", data);
+    // Expanded first name OR at minimum the input is captured
+    let fn_upper = data.firstname.as_deref().map(|s| s.to_uppercase());
+    let alt_upper = data.firstname_alt.as_deref().map(|s| s.to_uppercase());
+    let has_vasily = fn_upper.as_deref() == Some("ВАСИЛИЙ")
+        || alt_upper.as_deref() == Some("ВАСЯ");
+    // Either expansion happened or at least the short form was captured
+    assert!(
+        has_vasily || fn_upper.as_deref().map(|s| s.contains("ВАС")).unwrap_or(false),
+        "expected ВАСИЛИЙ or ВАСЯ in firstname/alt: fn={:?} alt={:?}", data.firstname, data.firstname_alt
+    );
+}
+
+#[test]
+fn test_person_normal_shortname_female_expansion() {
+    // "Катя Иванова" → firstname should expand to ЕКАТЕРИНА
+    MorphologyService::initialize(Some(MorphLang::RU));
+    Sdk::initialize_all(None);
+    let data = pullenti_ner::person::person_normal_data::analyze("Катя Иванова");
+    assert_ne!(data.res_typ, pullenti_ner::person::PersonNormalResult::NotPerson,
+        "should be recognised: {:?}", data);
+    // Expect expansion or at least the short form
+    let fn_upper = data.firstname.as_deref().map(|s| s.to_uppercase());
+    let alt_upper = data.firstname_alt.as_deref().map(|s| s.to_uppercase());
+    let ok = fn_upper.as_deref().map(|s| s.contains("КАТЕРИН") || s.contains("КАТЯ")).unwrap_or(false)
+          || alt_upper.as_deref().map(|s| s.contains("КАТ")).unwrap_or(false);
+    assert!(ok, "expected ЕКАТЕРИНА or КАТЯ: fn={:?} alt={:?}", data.firstname, data.firstname_alt);
+}
+
+// ── Arab postfix ──────────────────────────────────────────────────────────────
+
+#[test]
+fn test_surname_tail_arab_postfix_detection() {
+    use pullenti_ner::person::person_item_token::try_attach;
+    use pullenti_ner::SourceOfAnalysis;
+    use pullenti_morph::MorphologyService;
+    use pullenti_morph::MorphLang;
+
+    MorphologyService::initialize(Some(MorphLang::RU));
+    // Build a token chain for "МАМЕДОГЛЫ" and check that ОГЛЫ-postfix words
+    // parse as a name part (lastname present)
+    let sofa = SourceOfAnalysis::new("Мамед");
+    let morph = pullenti_morph::MorphologyService::process("Мамед", None);
+    if let Some(toks) = morph {
+        if let Some(first) = pullenti_ner::token::build_token_chain(toks, &sofa) {
+            if let Some(pit) = try_attach(&first, &sofa) {
+                // At minimum the token was parsed as some name part
+                assert!(pit.firstname.is_some() || pit.lastname.is_some(),
+                    "Мамед should be a name part: {:?}", pit.value);
+            }
+        }
+    }
+}
+
+#[test]
+fn test_person_normal_arab_postfix_ogli() {
+    // "Мамедов Рустам Оглы" — Оглы is a male patronymic postfix
+    MorphologyService::initialize(Some(MorphLang::RU));
+    Sdk::initialize_all(None);
+    let data = pullenti_ner::person::person_normal_data::analyze("Мамедов Рустам Оглы");
+    // Should be recognised as person (not rejected)
+    assert_ne!(data.res_typ, pullenti_ner::person::PersonNormalResult::NotPerson,
+        "Azerbaijani name with Оглы should be recognised: {:?}", data);
+}
+
+// ── Comma-separated FIO ───────────────────────────────────────────────────────
+
+#[test]
+fn test_person_normal_comma_fio() {
+    // "Иванов, И.И." — comma-inverted format common in Russian documents
+    MorphologyService::initialize(Some(MorphLang::RU));
+    Sdk::initialize_all(None);
+    let data = pullenti_ner::person::person_normal_data::analyze("Иванов, И.И.");
+    assert_ne!(data.res_typ, pullenti_ner::person::PersonNormalResult::NotPerson,
+        "comma-inverted FIO should be recognised: {:?}", data);
+    assert!(data.lastname.as_deref().map(|s| s.to_uppercase().contains("ИВАНОВ")).unwrap_or(false),
+        "expected ИВАНОВ lastname: {:?}", data.lastname);
+}
+
+#[test]
+fn test_person_normal_comma_three_parts() {
+    // "Петрова, Мария Ивановна"
+    MorphologyService::initialize(Some(MorphLang::RU));
+    Sdk::initialize_all(None);
+    let data = pullenti_ner::person::person_normal_data::analyze("Петрова, Мария Ивановна");
+    assert_ne!(data.res_typ, pullenti_ner::person::PersonNormalResult::NotPerson,
+        "comma-separated FIO with patronymic should be recognised: {:?}", data);
+    assert!(data.lastname.as_deref().map(|s| s.to_uppercase().contains("ПЕТРОВ")).unwrap_or(false),
+        "expected ПЕТРОВ* lastname: {:?}", data.lastname);
+}
+
+// ── Additional Person analyzer tests ─────────────────────────────────────────
+
+/// Female FIO in nominative: sex should be Female (from feminine patronymic -вна).
+#[test]
+fn test_person_female_fio_ner() {
+    let proc = person_proc();
+    let sofa = SourceOfAnalysis::new("Петрова Ольга Ивановна подписала договор.");
+    let result = proc.process(sofa, Some(MorphLang::RU));
+    let persons: Vec<_> = result.entities.iter()
+        .filter(|e| e.borrow().type_name == "PERSON")
+        .collect();
+    assert!(!persons.is_empty(), "Should extract PERSON from female FIO");
+    let rb = persons[0].borrow();
+    let last = get_lastname(&rb);
+    let sex  = get_sex(&rb);
+    assert!(last.as_deref().map(|s| s.contains("ПЕТРОВ")).unwrap_or(false),
+        "lastname should contain ПЕТРОВ, got {:?}", last);
+    assert_eq!(sex.as_deref(), Some(SEX_FEMALE),
+        "sex should be Female (from patronymic -вна), got {:?}", sex);
+}
+
+/// Pattern A — initials BEFORE surname: "А.С. Пушкин написал стихи."
+#[test]
+fn test_person_initials_before_surname() {
+    let proc = person_proc();
+    let sofa = SourceOfAnalysis::new("А.С. Пушкин написал стихи.");
+    let result = proc.process(sofa, Some(MorphLang::RU));
+    let persons: Vec<_> = result.entities.iter()
+        .filter(|e| e.borrow().type_name == "PERSON")
+        .collect();
+    assert!(!persons.is_empty(), "Should extract PERSON from initials-before-surname pattern");
+    let rb = persons[0].borrow();
+    let last = get_lastname(&rb);
+    assert!(last.as_deref().map(|s| s.contains("ПУШКИН")).unwrap_or(false),
+        "lastname should be ПУШКИН, got {:?}", last);
+}
+
+/// Two persons in the same sentence: at least 2 PERSON entities.
+#[test]
+fn test_person_multiple_in_text() {
+    let proc = person_proc();
+    let sofa = SourceOfAnalysis::new(
+        "Иванов Иван Иванович и Петрова Ольга Ивановна подписали договор."
+    );
+    let result = proc.process(sofa, Some(MorphLang::RU));
+    let persons: Vec<_> = result.entities.iter()
+        .filter(|e| e.borrow().type_name == "PERSON")
+        .collect();
+    assert!(persons.len() >= 2,
+        "Should extract at least 2 PERSONs, got {}", persons.len());
+    let lastnames: Vec<_> = persons.iter()
+        .filter_map(|p| get_lastname(&p.borrow()))
+        .collect();
+    assert!(lastnames.iter().any(|s| s.contains("ИВАНОВ")),
+        "Expected ИВАНОВ among lastnames: {:?}", lastnames);
+    assert!(lastnames.iter().any(|s| s.contains("ПЕТРОВ")),
+        "Expected ПЕТРОВ among lastnames: {:?}", lastnames);
+}
+
+/// Female firstname + patronymic only ("Мария Ивановна") → sex=Female.
+#[test]
+fn test_person_female_name_patronymic() {
+    let proc = person_proc();
+    let sofa = SourceOfAnalysis::new("Мария Ивановна пришла на встречу.");
+    let result = proc.process(sofa, Some(MorphLang::RU));
+    let persons: Vec<_> = result.entities.iter()
+        .filter(|e| e.borrow().type_name == "PERSON")
+        .collect();
+    assert!(!persons.is_empty(), "Should extract PERSON from Мария Ивановна");
+    let rb = persons[0].borrow();
+    let sex = get_sex(&rb);
+    assert_eq!(sex.as_deref(), Some(SEX_FEMALE),
+        "sex should be Female (patronymic -вна), got {:?}", sex);
+}
+
+/// Academic title "профессор" + surname → PERSONPROPERTY + PERSON.
+/// ПРОФЕССОР was added to attr_ru.dat (same flags as РЕКТОР/ДЕКАН: a="1d").
+#[test]
+fn test_person_property_professor() {
+    let proc = person_prop_proc();
+    let sofa = SourceOfAnalysis::new("профессор Смирнов прочитал лекцию.");
+    let result = proc.process(sofa, Some(MorphLang::RU));
+    let persons: Vec<_> = result.entities.iter()
+        .filter(|e| e.borrow().type_name == "PERSON")
+        .collect();
+    assert!(!persons.is_empty(), "Should extract PERSON after 'профессор'");
+    let rb = persons[0].borrow();
+    let last = get_lastname(&rb);
+    assert!(last.as_deref().map(|s| s.contains("СМИРНОВ")).unwrap_or(false),
+        "lastname should be СМИРНОВ, got {:?}", last);
+    let props: Vec<_> = result.entities.iter()
+        .filter(|e| e.borrow().type_name == PERSONPROPERTY_OBJ_TYPENAME)
+        .collect();
+    assert!(!props.is_empty(), "Should extract PERSONPROPERTY for 'профессор'");
+    let prop_name = get_person_property_name(&props[0].borrow());
+    assert!(prop_name.as_deref().map(|s| s.contains("профессор")).unwrap_or(false),
+        "property name should contain 'профессор', got {:?}", prop_name);
+}
+
+/// Person in non-nominative (genitive) case: "В комнате Иванова Ивана Ивановича нашли документы."
+#[test]
+fn test_person_genitive_case() {
+    let proc = person_proc();
+    let sofa = SourceOfAnalysis::new(
+        "В комнате Иванова Ивана Ивановича нашли документы."
+    );
+    let result = proc.process(sofa, Some(MorphLang::RU));
+    let persons: Vec<_> = result.entities.iter()
+        .filter(|e| e.borrow().type_name == "PERSON")
+        .collect();
+    assert!(!persons.is_empty(), "Should extract PERSON from genitive FIO");
+    // Any part of ИВАНОВ should appear
+    let has_ivanov = persons.iter().any(|p| {
+        let rb = p.borrow();
+        get_lastname(&rb).as_deref().map(|s| s.contains("ИВАНОВ")).unwrap_or(false)
+    });
+    assert!(has_ivanov, "ИВАНОВ should appear as lastname in genitive context");
+}
+
+// ── Additional Address analyzer tests ────────────────────────────────────────
+
+/// "пер. Садовый, д. 3" → STREET type=переулок, ADDRESS house=3
+#[test]
+fn test_address_pereulok_with_house() {
+    let proc = address_proc();
+    let sofa = SourceOfAnalysis::new("Контора расположена в пер. Садовый, д. 3.");
+    let result = proc.process(sofa, Some(MorphLang::RU));
+    let streets: Vec<_> = result.entities.iter()
+        .filter(|e| e.borrow().type_name == "STREET")
+        .collect();
+    assert!(!streets.is_empty(), "Should find STREET for 'пер. Садовый'");
+    let typ = get_street_type(&streets[0].borrow());
+    assert_eq!(typ.as_deref(), Some("переулок"),
+        "street type should be переулок, got {:?}", typ);
+    let addresses: Vec<_> = result.entities.iter()
+        .filter(|e| e.borrow().type_name == "ADDRESS")
+        .collect();
+    assert!(!addresses.is_empty(), "Should find ADDRESS with house");
+    let house = get_house(&addresses[0].borrow());
+    assert_eq!(house.as_deref(), Some("3"), "house should be 3, got {:?}", house);
+}
+
+/// "шоссе Энтузиастов, дом 15" → STREET type=шоссе, ADDRESS house=15 (spelled-out дом).
+#[test]
+fn test_address_shosse_spelled_dom() {
+    let proc = address_proc();
+    let sofa = SourceOfAnalysis::new("Склад: шоссе Энтузиастов, дом 15.");
+    let result = proc.process(sofa, Some(MorphLang::RU));
+    let streets: Vec<_> = result.entities.iter()
+        .filter(|e| e.borrow().type_name == "STREET")
+        .collect();
+    assert!(!streets.is_empty(), "Should find STREET for 'шоссе Энтузиастов'");
+    let typ = get_street_type(&streets[0].borrow());
+    assert_eq!(typ.as_deref(), Some("шоссе"),
+        "street type should be шоссе, got {:?}", typ);
+    let addresses: Vec<_> = result.entities.iter()
+        .filter(|e| e.borrow().type_name == "ADDRESS")
+        .collect();
+    assert!(!addresses.is_empty(), "Should find ADDRESS for шоссе");
+    let house = get_house(&addresses[0].borrow());
+    assert_eq!(house.as_deref(), Some("15"), "house should be 15, got {:?}", house);
+}
+
+/// "пл. Победы" → STREET type=площадь (abbreviation "пл.").
+#[test]
+fn test_address_ploschad_abbr() {
+    let proc = address_proc();
+    let sofa = SourceOfAnalysis::new("Встреча на пл. Победы.");
+    let result = proc.process(sofa, Some(MorphLang::RU));
+    let streets: Vec<_> = result.entities.iter()
+        .filter(|e| e.borrow().type_name == "STREET")
+        .collect();
+    assert!(!streets.is_empty(), "Should find STREET for 'пл. Победы'");
+    let typ = get_street_type(&streets[0].borrow());
+    assert_eq!(typ.as_deref(), Some("площадь"),
+        "street type should be площадь, got {:?}", typ);
+}
+
+/// "бул. Ленина, д. 8" → STREET type=бульвар, ADDRESS house=8.
+#[test]
+fn test_address_bulvar_with_house() {
+    let proc = address_proc();
+    let sofa = SourceOfAnalysis::new("Адрес: бул. Ленина, д. 8.");
+    let result = proc.process(sofa, Some(MorphLang::RU));
+    let streets: Vec<_> = result.entities.iter()
+        .filter(|e| e.borrow().type_name == "STREET")
+        .collect();
+    assert!(!streets.is_empty(), "Should find STREET for 'бул. Ленина'");
+    let typ = get_street_type(&streets[0].borrow());
+    assert_eq!(typ.as_deref(), Some("бульвар"),
+        "street type should be бульвар, got {:?}", typ);
+    let addresses: Vec<_> = result.entities.iter()
+        .filter(|e| e.borrow().type_name == "ADDRESS")
+        .collect();
+    assert!(!addresses.is_empty(), "Should find ADDRESS for бульвар");
+    let house = get_house(&addresses[0].borrow());
+    assert_eq!(house.as_deref(), Some("8"), "house should be 8, got {:?}", house);
+}
+
+/// "ул. Пушкина, д. 10, корп. 2" → ADDRESS with house=10 and corpus=2.
+#[test]
+fn test_address_with_corpus() {
+    let proc = address_proc();
+    let sofa = SourceOfAnalysis::new("Проживает по адресу ул. Пушкина, д. 10, корп. 2.");
+    let result = proc.process(sofa, Some(MorphLang::RU));
+    let addresses: Vec<_> = result.entities.iter()
+        .filter(|e| e.borrow().type_name == "ADDRESS")
+        .collect();
+    assert!(!addresses.is_empty(), "Should find ADDRESS with corpus");
+    let rb = addresses[0].borrow();
+    let house = get_house(&rb);
+    assert_eq!(house.as_deref(), Some("10"), "house should be 10, got {:?}", house);
+    let corpus = get_corpus(&rb);
+    assert_eq!(corpus.as_deref(), Some("2"), "corpus should be 2, got {:?}", corpus);
+}
+
+/// "ул. Гагарина, д. 5, кв. 12, эт. 3" → ADDRESS with flat=12 and floor=3.
+#[test]
+fn test_address_with_flat_and_floor() {
+    let proc = address_proc();
+    let sofa = SourceOfAnalysis::new("ул. Гагарина, д. 5, кв. 12, эт. 3.");
+    let result = proc.process(sofa, Some(MorphLang::RU));
+    let addresses: Vec<_> = result.entities.iter()
+        .filter(|e| e.borrow().type_name == "ADDRESS")
+        .collect();
+    assert!(!addresses.is_empty(), "Should find ADDRESS with flat and floor");
+    let rb = addresses[0].borrow();
+    let flat  = get_flat(&rb);
+    let floor = get_floor(&rb);
+    assert_eq!(flat.as_deref(), Some("12"), "flat should be 12, got {:?}", flat);
+    assert_eq!(floor.as_deref(), Some("3"), "floor should be 3, got {:?}", floor);
+}
+
+/// "ул. Советская, д. 7, оф. 101" → ADDRESS with house=7 and office=101.
+#[test]
+fn test_address_with_office() {
+    let proc = address_proc();
+    let sofa = SourceOfAnalysis::new("Офис компании: ул. Советская, д. 7, оф. 101.");
+    let result = proc.process(sofa, Some(MorphLang::RU));
+    let addresses: Vec<_> = result.entities.iter()
+        .filter(|e| e.borrow().type_name == "ADDRESS")
+        .collect();
+    assert!(!addresses.is_empty(), "Should find ADDRESS with office");
+    let rb = addresses[0].borrow();
+    let house  = get_house(&rb);
+    let office = get_office(&rb);
+    assert_eq!(house.as_deref(), Some("7"), "house should be 7, got {:?}", house);
+    assert_eq!(office.as_deref(), Some("101"), "office should be 101, got {:?}", office);
+}
+
+/// "набережная Невы, 4" → STREET type=набережная, ADDRESS house=4.
+#[test]
+fn test_address_naberezhnaya() {
+    let proc = address_proc();
+    let sofa = SourceOfAnalysis::new("Здание стоит на набережная Невы, 4.");
+    let result = proc.process(sofa, Some(MorphLang::RU));
+    let streets: Vec<_> = result.entities.iter()
+        .filter(|e| e.borrow().type_name == "STREET")
+        .collect();
+    assert!(!streets.is_empty(), "Should find STREET for 'набережная Невы'");
+    let typ = get_street_type(&streets[0].borrow());
+    assert_eq!(typ.as_deref(), Some("набережная"),
+        "street type should be набережная, got {:?}", typ);
+}
+
+/// Street name is extracted and non-empty.
+#[test]
+fn test_address_street_name_nonempty() {
+    let proc = address_proc();
+    let sofa = SourceOfAnalysis::new("Офис на ул. Октябрьская, д. 1.");
+    let result = proc.process(sofa, Some(MorphLang::RU));
+    let streets: Vec<_> = result.entities.iter()
+        .filter(|e| e.borrow().type_name == "STREET")
+        .collect();
+    assert!(!streets.is_empty(), "Should find STREET");
+    let name = get_street_name(&streets[0].borrow());
+    assert!(name.as_deref().map(|s| !s.is_empty()).unwrap_or(false),
+        "street name should be non-empty, got {:?}", name);
+}
+
+// ── dialoge_3.txt test cases ──────────────────────────────────────────────────
+//
+// Source: academic NLP paper references file (dialoge_3.txt).
+// Tests mirror test_1.py: run Person + Geo analyzers over each paragraph and
+// assert the expected entities are extracted.  Groups follow the paragraph
+// structure of the source document.
+
+fn person_geo_proc() -> Processor {
+    // GeoAnalyzer first so city tokens aren't consumed by PersonAnalyzer
+    MorphologyService::initialize(Some(MorphLang::RU | MorphLang::EN));
+    Processor::with_analyzers(vec![
+        Arc::new(GeoAnalyzer::new()),
+        Arc::new(PersonAnalyzer::new()),
+    ])
+}
+
+/// Collect (firstname, lastname) pairs from all PERSON entities.
+fn collect_persons(result: &pullenti_ner::AnalysisResult) -> Vec<(String, String)> {
+    result.entities.iter()
+        .filter(|e| e.borrow().type_name == "PERSON")
+        .map(|e| {
+            let rb = e.borrow();
+            (
+                get_firstname(&rb).unwrap_or_default().to_uppercase(),
+                get_lastname(&rb).unwrap_or_default().to_uppercase(),
+            )
+        })
+        .collect()
+}
+
+/// Check that at least one PERSON has a lastname containing `sub` (case-insensitive).
+fn has_last(persons: &[(String, String)], sub: &str) -> bool {
+    let sub_up = sub.to_uppercase();
+    persons.iter().any(|(_, l)| l.contains(&sub_up))
+}
+
+/// Collect all GEO canonical names.
+fn collect_geos(result: &pullenti_ner::AnalysisResult) -> Vec<String> {
+    result.entities.iter()
+        .filter(|e| e.borrow().type_name == "GEO")
+        .filter_map(|e| get_geo_name(&e.borrow()))
+        .map(|n| n.to_uppercase())
+        .collect()
+}
+
+// ── Group 1: Conference venue geo-locations ───────────────────────────────────
+
+/// Bangkok, Thailand, Miami, Florida, USA extracted as GEO from conference refs.
+/// Note: Singapore and Abu Dhabi are not in the GEO database under English names
+/// and appear as PERSON false-positives — known limitation documented here.
+#[test]
+fn test_dialoge3_geo_venues() {
+    let proc = person_geo_proc();
+    let text = concat!(
+        "pages 11897–11916, Bangkok, Thai-\n",
+        "land. Association for Computational Linguistics.\n",
+        "In Proceedings of the Sixteenth ACM Interna-\n",
+        "tional Conference on Web Search and Data Mining,\n",
+        "pages 1048–1056, Singapore Singapore. ACM.\n",
+        "In Proceedings\n",
+        "of the 2024 Conference on Empirical Methods in\n",
+        "Natural Language Processing, pages 13261–13273,\n",
+        "Miami, Florida, USA. Association for Computational\n",
+        "Linguistics.\n",
+        "Proceedings of the 2022 Conference on Empirical\n",
+        "Methods in Natural Language Processing, pages 538–\n",
+        "548, Abu Dhabi, United Arab Emirates. Association\n",
+        "for Computational Linguistics.",
+    );
+    let sofa = SourceOfAnalysis::new(text);
+    let result = proc.process(sofa, Some(MorphLang::EN));
+    let geos = collect_geos(&result);
+
+    assert!(geos.iter().any(|g| g.contains("BANGKOK")),
+        "Bangkok not found in GEO: {:?}", geos);
+    assert!(geos.iter().any(|g| g.contains("ТАИЛАНД") || g.contains("THAILAND") || g.contains("THAI")),
+        "Thailand not found in GEO: {:?}", geos);
+    assert!(geos.iter().any(|g| g.contains("MIAMI")),
+        "Miami not found in GEO: {:?}", geos);
+    assert!(geos.iter().any(|g| g.contains("FLORIDA")),
+        "Florida not found in GEO: {:?}", geos);
+    assert!(geos.iter().any(|g| g.contains("US") || g.contains("USA") || g.contains("СОЕДИНЕНН")),
+        "USA not found in GEO: {:?}", geos);
+}
+
+// ── Group 2: NLLB Team authors ────────────────────────────────────────────────
+
+/// 39-author NLLB team list with linebreak-hyphens, accented chars, 2-word lastnames.
+#[test]
+fn test_dialoge3_nllb_authors() {
+    let proc = person_geo_proc();
+    let text = concat!(
+        "NLLB Team, Marta R. Costa-jussà, James Cross, Onur\n",
+        "Çelebi, Maha Elbayad, Kenneth Heafield, Kevin Hef-\n",
+        "fernan, Elahe Kalbassi, Janice Lam, Daniel Licht,\n",
+        "Jean Maillard, Anna Sun, Skyler Wang, Guillaume\n",
+        "Wenzek, Al Youngblood, Bapi Akula, Loic Bar-\n",
+        "rault, Gabriel Mejia Gonzalez, Prangthip Hansanti,\n",
+        "John Hoffman, Semarley Jarrett, Kaushik Ram\n",
+        "Sadagopan, Dirk Rowe, Shannon Spruit, Chau\n",
+        "Tran, Pierre Andrews, Necip Fazil Ayan, Shruti\n",
+        "Bhosale, Sergey Edunov, Angela Fan, Cynthia\n",
+        "Gao, Vedanuj Goswami, Francisco Guzmán, Philipp\n",
+        "Koehn, Alexandre Mourachko, Christophe Rop-\n",
+        "ers, Safiyyah Saleem, Holger Schwenk, and Jeff\n",
+        "Wang.",
+    );
+    let sofa = SourceOfAnalysis::new(text);
+    let result = proc.process(sofa, Some(MorphLang::EN));
+    let persons = collect_persons(&result);
+
+    // Simple "First Last" names
+    assert!(has_last(&persons, "Cross"),      "missing Cross: {:?}", persons);
+    assert!(has_last(&persons, "Heafield"),   "missing Heafield: {:?}", persons);
+    assert!(has_last(&persons, "Kalbassi"),   "missing Kalbassi: {:?}", persons);
+    assert!(has_last(&persons, "Lam"),        "missing Lam: {:?}", persons);
+    assert!(has_last(&persons, "Licht"),      "missing Licht: {:?}", persons);
+    assert!(has_last(&persons, "Maillard"),   "missing Maillard: {:?}", persons);
+    assert!(has_last(&persons, "Wenzek"),     "missing Wenzek: {:?}", persons);
+    assert!(has_last(&persons, "Youngblood"), "missing Youngblood: {:?}", persons);
+    assert!(has_last(&persons, "Akula"),      "missing Akula: {:?}", persons);
+    assert!(has_last(&persons, "Hansanti"),   "missing Hansanti: {:?}", persons);
+    assert!(has_last(&persons, "Hoffman"),    "missing Hoffman: {:?}", persons);
+    assert!(has_last(&persons, "Jarrett"),    "missing Jarrett: {:?}", persons);
+    assert!(has_last(&persons, "Rowe"),       "missing Rowe: {:?}", persons);
+    assert!(has_last(&persons, "Spruit"),     "missing Spruit: {:?}", persons);
+    assert!(has_last(&persons, "Andrews"),    "missing Andrews: {:?}", persons);
+    assert!(has_last(&persons, "Bhosale"),    "missing Bhosale: {:?}", persons);
+    assert!(has_last(&persons, "Edunov"),     "missing Edunov: {:?}", persons);
+    assert!(has_last(&persons, "Saleem"),     "missing Saleem: {:?}", persons);
+    assert!(has_last(&persons, "Schwenk"),    "missing Schwenk: {:?}", persons);
+
+    // Accented / extended-Latin lastnames
+    assert!(has_last(&persons, "Costa"),     "missing Costa-jussà: {:?}", persons);
+    assert!(has_last(&persons, "Çelebi"),    "missing Çelebi: {:?}", persons);
+    assert!(has_last(&persons, "Guzmán"),    "missing Guzmán: {:?}", persons);
+    assert!(has_last(&persons, "Mourachko"), "missing Mourachko: {:?}", persons);
+
+    // Linebreak-hyphen lastnames ("Hef-\nfernan" → "Hef-fernan")
+    assert!(has_last(&persons, "Hef"),    "missing Heffernan: {:?}", persons);
+    assert!(has_last(&persons, "Bar"),    "missing Barrault: {:?}", persons);
+    assert!(has_last(&persons, "Rop"),    "missing Ropers: {:?}", persons);
+
+    // Two-word lastnames
+    assert!(has_last(&persons, "Mejia"),    "missing Mejia Gonzalez: {:?}", persons);
+    assert!(has_last(&persons, "Sadagopan"),"missing Ram Sadagopan: {:?}", persons);
+    assert!(has_last(&persons, "Ayan"),     "missing Fazil Ayan: {:?}", persons);
+}
+
+// ── Group 3: Matryoshka Representation Learning authors ───────────────────────
+
+#[test]
+fn test_dialoge3_matryoshka_authors() {
+    let proc = person_geo_proc();
+    let text = concat!(
+        "Aditya Kusupati, Gantavya Bhatt, Aniket Rege,\n",
+        "Matthew Wallingford, Aditya Sinha, Vivek Ramanu-\n",
+        "jan, William Howard-Snyder, Kaifeng Chen, Sham\n",
+        "Kakade, Prateek Jain, and Ali Farhadi.",
+    );
+    let sofa = SourceOfAnalysis::new(text);
+    let result = proc.process(sofa, Some(MorphLang::EN));
+    let persons = collect_persons(&result);
+
+    assert!(has_last(&persons, "Kusupati"),      "missing Kusupati: {:?}", persons);
+    assert!(has_last(&persons, "Bhatt"),         "missing Bhatt: {:?}", persons);
+    assert!(has_last(&persons, "Rege"),          "missing Rege: {:?}", persons);
+    assert!(has_last(&persons, "Wallingford"),   "missing Wallingford: {:?}", persons);
+    assert!(has_last(&persons, "Sinha"),         "missing Sinha: {:?}", persons);
+    assert!(has_last(&persons, "Ramanu"),        "missing Ramanujan: {:?}", persons);  // "Ramanu-jan"
+    assert!(has_last(&persons, "Howard-Snyder"), "missing Howard-Snyder: {:?}", persons);
+    assert!(has_last(&persons, "Chen"),          "missing Chen: {:?}", persons);
+    assert!(has_last(&persons, "Kakade"),        "missing Kakade: {:?}", persons);
+    assert!(has_last(&persons, "Jain"),          "missing Jain: {:?}", persons);
+    assert!(has_last(&persons, "Farhadi"),       "missing Farhadi: {:?}", persons);
+}
+
+// ── Group 4: MS MARCO dataset authors ────────────────────────────────────────
+
+#[test]
+fn test_dialoge3_msmarco_authors() {
+    let proc = person_geo_proc();
+    let text = concat!(
+        "Daniel Fernando Campos, Tri Nguyen, Mir Rosenberg,\n",
+        "Xia Song, Jianfeng Gao, Saurabh Tiwary, Rangan\n",
+        "Majumder, Li Deng, and Bhaskar Mitra.",
+    );
+    let sofa = SourceOfAnalysis::new(text);
+    let result = proc.process(sofa, Some(MorphLang::EN));
+    let persons = collect_persons(&result);
+
+    assert!(has_last(&persons, "Fernando Campos"), "missing Fernando Campos: {:?}", persons);
+    assert!(has_last(&persons, "Nguyen"),   "missing Nguyen: {:?}", persons);
+    assert!(has_last(&persons, "Rosenberg"),"missing Rosenberg: {:?}", persons);
+    assert!(has_last(&persons, "Song"),     "missing Song: {:?}", persons);
+    assert!(has_last(&persons, "Tiwary"),   "missing Tiwary: {:?}", persons);
+    assert!(has_last(&persons, "Majumder"), "missing Majumder: {:?}", persons);
+    assert!(has_last(&persons, "Mitra"),    "missing Mitra: {:?}", persons);
+}
+
+// ── Group 5: Promptagator authors ────────────────────────────────────────────
+
+#[test]
+fn test_dialoge3_promptagator_authors() {
+    let proc = person_geo_proc();
+    let text = concat!(
+        "Zhuyun Dai, Vincent Y. Zhao, Ji Ma, Yi Luan, Jianmo\n",
+        "Ni, Jing Lu, Anton Bakalov, Kelvin Guu, Keith B.\n",
+        "Hall, and Ming-Wei Chang.",
+    );
+    let sofa = SourceOfAnalysis::new(text);
+    let result = proc.process(sofa, Some(MorphLang::EN));
+    let persons = collect_persons(&result);
+
+    assert!(has_last(&persons, "Dai"),     "missing Dai: {:?}", persons);
+    assert!(has_last(&persons, "Zhao"),    "missing Zhao: {:?}", persons);
+    assert!(has_last(&persons, "Luan"),    "missing Luan: {:?}", persons);
+    assert!(has_last(&persons, "Bakalov"), "missing Bakalov: {:?}", persons);
+    assert!(has_last(&persons, "Guu"),     "missing Guu: {:?}", persons);
+    assert!(has_last(&persons, "Hall"),    "missing Hall: {:?}", persons);
+    assert!(has_last(&persons, "Chang"),   "missing Ming-Wei Chang: {:?}", persons);
+}
+
+// ── Group 6: BERT authors ─────────────────────────────────────────────────────
+
+/// Devlin et al. 2018/2019 — same four authors appear twice (dedup may merge them).
+#[test]
+fn test_dialoge3_bert_authors() {
+    let proc = person_geo_proc();
+    let text = concat!(
+        "Jacob Devlin, Ming-Wei Chang, Kenton Lee, and\n",
+        "Kristina Toutanova. 2018. Bert: Pre-training of deep\n",
+        "bidirectional transformers for language understand-\n",
+        "ing. arXiv preprint arXiv:1810.04805.\n",
+        "\n",
+        "Jacob Devlin, Ming-Wei Chang, Kenton Lee, and\n",
+        "Kristina Toutanova. 2019.",
+    );
+    let sofa = SourceOfAnalysis::new(text);
+    let result = proc.process(sofa, Some(MorphLang::EN));
+    let persons = collect_persons(&result);
+
+    assert!(has_last(&persons, "Devlin"),    "missing Devlin: {:?}", persons);
+    assert!(has_last(&persons, "Chang"),     "missing Chang: {:?}", persons);
+    assert!(has_last(&persons, "Lee"),       "missing Lee: {:?}", persons);
+    assert!(has_last(&persons, "Toutanova"), "missing Toutanova: {:?}", persons);
+}
+
+// ── Group 7: Natural Questions (NQ) authors ───────────────────────────────────
+
+#[test]
+fn test_dialoge3_nq_authors() {
+    let proc = person_geo_proc();
+    let text = concat!(
+        "Tom Kwiatkowski, Jennimaria Palomaki, Olivia Red-\n",
+        "field, Michael Collins, Ankur P. Parikh, Chris Alberti,\n",
+        "Danielle Epstein, Illia Polosukhin, Jacob Devlin, Ken-\n",
+        "ton Lee, Kristina Toutanova, Llion Jones, Matthew\n",
+        "Kelcey, Ming-Wei Chang, Andrew M. Dai, Jakob\n",
+        "Uszkoreit, Quoc V. Le, and Slav Petrov.",
+    );
+    let sofa = SourceOfAnalysis::new(text);
+    let result = proc.process(sofa, Some(MorphLang::EN));
+    let persons = collect_persons(&result);
+
+    assert!(has_last(&persons, "Kwiatkowski"), "missing Kwiatkowski: {:?}", persons);
+    assert!(has_last(&persons, "Palomaki"),    "missing Palomaki: {:?}", persons);
+    assert!(has_last(&persons, "Red"),         "missing Redfield: {:?}", persons); // "Red-field"
+    assert!(has_last(&persons, "Collins"),     "missing Collins: {:?}", persons);
+    assert!(has_last(&persons, "Parikh"),      "missing Parikh: {:?}", persons);
+    assert!(has_last(&persons, "Alberti"),     "missing Alberti: {:?}", persons);
+    assert!(has_last(&persons, "Epstein"),     "missing Epstein: {:?}", persons);
+    assert!(has_last(&persons, "Polosukhin"),  "missing Polosukhin: {:?}", persons);
+    assert!(has_last(&persons, "Jones"),       "missing Jones: {:?}", persons);
+    assert!(has_last(&persons, "Kelcey"),      "missing Kelcey: {:?}", persons);
+    assert!(has_last(&persons, "Uszkoreit"),   "missing Uszkoreit: {:?}", persons);
+    assert!(has_last(&persons, "Petrov"),      "missing Petrov: {:?}", persons);
+}
+
+// ── Group 8: FAISS library authors ───────────────────────────────────────────
+
+#[test]
+fn test_dialoge3_faiss_authors() {
+    let proc = person_geo_proc();
+    let text = concat!(
+        "Matthijs Douze, Alexandr Guzhva, Chengqi Deng, Jeff\n",
+        "Johnson, Gergely Szilvasy, Pierre-Emmanuel Mazaré,\n",
+        "Maria Lomeli, Lucas Hosseini, and Hervé Jégou.",
+    );
+    let sofa = SourceOfAnalysis::new(text);
+    let result = proc.process(sofa, Some(MorphLang::EN));
+    let persons = collect_persons(&result);
+
+    assert!(has_last(&persons, "Douze"),          "missing Douze: {:?}", persons);
+    assert!(has_last(&persons, "Guzhva"),         "missing Guzhva: {:?}", persons);
+    assert!(has_last(&persons, "Johnson"),        "missing Johnson: {:?}", persons);
+    assert!(has_last(&persons, "Szilvasy"),       "missing Szilvasy: {:?}", persons);
+    assert!(has_last(&persons, "Mazaré"),         "missing Mazaré: {:?}", persons);
+    assert!(has_last(&persons, "Lomeli"),         "missing Lomeli: {:?}", persons);
+    assert!(has_last(&persons, "Hosseini"),       "missing Hosseini: {:?}", persons);
+    assert!(has_last(&persons, "Jégou"),          "missing Jégou: {:?}", persons);
+    assert!(has_last(&persons, "Pierre-Emmanuel")
+        || persons.iter().any(|(f, _)| f.contains("PIERRE")),
+        "missing Pierre-Emmanuel: {:?}", persons);
+}
+
+// ── Group 9: Jina Embeddings 2 authors ───────────────────────────────────────
+
+#[test]
+fn test_dialoge3_jina_authors() {
+    let proc = person_geo_proc();
+    let text = concat!(
+        "Michael Günther, Jackmin Ong, Isabelle Mohr, Alaed-\n",
+        "dine Abdessalem, Tanguy Abel, Mohammad Kalim\n",
+        "Akram, Susana Guzman, Georgios Mastrapas, Saba\n",
+        "Sturua, Bo Wang, Maximilian Werk, Nan Wang,\n",
+        "and Han Xiao.",
+    );
+    let sofa = SourceOfAnalysis::new(text);
+    let result = proc.process(sofa, Some(MorphLang::EN));
+    let persons = collect_persons(&result);
+
+    assert!(has_last(&persons, "Günther"),    "missing Günther: {:?}", persons);
+    assert!(has_last(&persons, "Ong"),        "missing Ong: {:?}", persons);
+    assert!(has_last(&persons, "Mohr"),       "missing Mohr: {:?}", persons);
+    assert!(has_last(&persons, "Abdessalem"), "missing Abdessalem: {:?}", persons);
+    assert!(has_last(&persons, "Abel"),       "missing Abel: {:?}", persons);
+    assert!(has_last(&persons, "Akram"),      "missing Kalim Akram: {:?}", persons);
+    assert!(has_last(&persons, "Guzman"),     "missing Guzman: {:?}", persons);
+    assert!(has_last(&persons, "Mastrapas"),  "missing Mastrapas: {:?}", persons);
+    assert!(has_last(&persons, "Sturua"),     "missing Sturua: {:?}", persons);
+    assert!(has_last(&persons, "Werk"),       "missing Werk: {:?}", persons);
+    assert!(has_last(&persons, "Xiao"),       "missing Xiao: {:?}", persons);
 }

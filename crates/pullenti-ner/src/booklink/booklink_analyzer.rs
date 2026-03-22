@@ -75,7 +75,7 @@ impl Analyzer for BookLinkAnalyzer {
                     // Register BOOKLINK entity (if we have one)
                     let book_rc_opt: Option<Rc<RefCell<Referent>>> = book_ref.map(|book| {
                         let rc = Rc::new(RefCell::new(book));
-                        kit.add_entity(rc.clone());
+                        let rc = kit.add_entity(rc);
                         rc
                     });
 
@@ -84,7 +84,7 @@ impl Analyzer for BookLinkAnalyzer {
                     if let Some(ref bk_rc) = book_rc_opt {
                         br::set_ref_book(&mut ref_rc.borrow_mut(), bk_rc.clone());
                     }
-                    kit.add_entity(ref_rc.clone());
+                    let ref_rc = kit.add_entity(ref_rc);
 
                     // Embed BOOKLINK token (if exists), spanning the full range
                     if let Some(ref bk_rc) = book_rc_opt {
@@ -145,7 +145,7 @@ impl Analyzer for BookLinkAnalyzer {
 
                 br::set_ref_type(&mut final_ref, BookLinkRefType::Inline);
                 let r_rc = Rc::new(RefCell::new(final_ref));
-                kit.add_entity(r_rc.clone());
+                let r_rc = kit.add_entity(r_rc);
                 let tok = Rc::new(RefCell::new(
                     Token::new_referent(t.clone(), end_tok, r_rc)
                 ));

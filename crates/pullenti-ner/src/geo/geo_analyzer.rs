@@ -38,7 +38,7 @@ impl Analyzer for GeoAnalyzer {
                 None => { cur = t.borrow().next.clone(); }
                 Some((referent, end)) => {
                     let r_rc = Rc::new(RefCell::new(referent));
-                    kit.add_entity(r_rc.clone());
+                    let r_rc = kit.add_entity(r_rc);
                     let tok = Rc::new(RefCell::new(
                         Token::new_referent(t.clone(), end, r_rc)
                     ));
@@ -54,31 +54,42 @@ impl Analyzer for GeoAnalyzer {
 
 fn try_parse(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Referent, TokenRef)> {
     // Check keyword matches while borrow is active, store results as owned values
-    let (is_city_prefix, type_kw): (bool, Option<&'static str>) = {
+    let (is_city_prefix, is_city_prefix_abbrev, type_kw): (bool, bool, Option<&'static str>) = {
         let tb = t.borrow();
         match &tb.kind {
             TokenKind::Text(txt) => {
                 // term and normal forms are already uppercase from morph engine
                 let term = &txt.term;
                 let mut is_cp = geo_table::is_city_prefix(term);
+                let mut is_cpa = geo_table::is_city_prefix_abbrev(term);
                 let mut tkw: Option<&'static str> = geo_table::type_keyword(term).map(|(s, _)| s);
 
                 for wf in tb.morph.items() {
+                    // Skip word forms with verb class when looking for city/territory
+                    // keywords — avoids matching verb forms like "сел" (past tense of
+                    // "сесть") via their noun normal form "СЕЛО".
+                    let is_verb_form = wf.base.class.is_verb();
                     if let Some(nc) = &wf.normal_case {
-                        if !is_cp { is_cp = geo_table::is_city_prefix(nc); }
-                        if tkw.is_none() {
-                            tkw = geo_table::type_keyword(nc).map(|(s, _)| s);
+                        if !is_verb_form {
+                            if !is_cp { is_cp = geo_table::is_city_prefix(nc); }
+                            if !is_cpa { is_cpa = geo_table::is_city_prefix_abbrev(nc); }
+                            if tkw.is_none() {
+                                tkw = geo_table::type_keyword(nc).map(|(s, _)| s);
+                            }
                         }
                     }
                     if let Some(nf) = &wf.normal_full {
-                        if !is_cp { is_cp = geo_table::is_city_prefix(nf); }
-                        if tkw.is_none() {
-                            tkw = geo_table::type_keyword(nf).map(|(s, _)| s);
+                        if !is_verb_form {
+                            if !is_cp { is_cp = geo_table::is_city_prefix(nf); }
+                            if !is_cpa { is_cpa = geo_table::is_city_prefix_abbrev(nf); }
+                            if tkw.is_none() {
+                                tkw = geo_table::type_keyword(nf).map(|(s, _)| s);
+                            }
                         }
                     }
                     if is_cp && tkw.is_some() { break; }
                 }
-                (is_cp, tkw)
+                (is_cp, is_cpa, tkw)
             }
             _ => return None,
         }
@@ -86,7 +97,7 @@ fn try_parse(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Referent, TokenRe
 
     // 1. City type prefix keyword (г., город, г, etc.)
     if is_city_prefix {
-        if let Some(result) = try_city_prefix(t, sofa) {
+        if let Some(result) = try_city_prefix(t, is_city_prefix_abbrev, sofa) {
             return Some(result);
         }
     }
@@ -115,11 +126,13 @@ fn try_parse(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Referent, TokenRe
 //
 // "г. Москва", "город Москва", "г Москва"
 
-fn try_city_prefix(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Referent, TokenRef)> {
+fn try_city_prefix(t: &TokenRef, is_abbrev: bool, sofa: &SourceOfAnalysis) -> Option<(Referent, TokenRef)> {
     let next = t.borrow().next.clone()?;
     let nb = next.borrow();
-    // Skip dots after abbreviation
-    if nb.length_char() == 1 && sofa.char_at(nb.begin_char) == '.' {
+    // Skip dots ONLY for abbreviation-style prefixes (г., дер., сел., etc.).
+    // Full-word prefixes (город, деревня, село) must NOT skip a trailing "." —
+    // it is sentence-ending punctuation, not an abbreviation separator.
+    if is_abbrev && nb.length_char() == 1 && sofa.char_at(nb.begin_char) == '.' {
         drop(nb);
         let after_dot = next.borrow().next.clone()?;
         return try_city_from_name(&after_dot, sofa, t);
@@ -137,6 +150,20 @@ fn try_city_from_name(
     sofa: &SourceOfAnalysis,
     _begin: &TokenRef,
 ) -> Option<(Referent, TokenRef)> {
+    // Reject common Russian pronouns/particles that can never be city names
+    // (they appear after sentence-ending "." as new sentences begin with "Я", "А", etc.)
+    {
+        let tb = name_tok.borrow();
+        if let TokenKind::Text(txt) = &tb.kind {
+            if matches!(txt.term.as_str(),
+                "Я" | "МЫ" | "ТЫ" | "ВЫ" | "ОН" | "ОНА" | "ОНО" | "ОНИ" |
+                "НО" | "А" | "И" | "ИЛИ" | "ЧТО" | "КТО" | "КАК" |
+                "НЕ" | "НИ" | "ДА" | "НЕТ" | "ЕСЛИ" | "ТО" | "АЛЕ"
+            ) {
+                return None;
+            }
+        }
+    }
     // Try the token and following tokens as a multi-word city name
     let candidates = collect_candidates(name_tok, sofa);
     for c in &candidates {
@@ -153,20 +180,28 @@ fn try_city_from_name(
         }
     }
     // Even if not found in city table, create a generic geo with city type
-    // if the token is a proper noun (starts with uppercase)
+    // if the token is a proper noun (starts with uppercase).
+    // But do NOT create fallback entities for tokens tagged as proper person names
+    // or surnames — e.g. "город Максим" where "Максим" is a given name, not a city.
     let tb = name_tok.borrow();
-    if let TokenKind::Text(txt) = &tb.kind {
+    if let TokenKind::Text(_) = &tb.kind {
         let surface = sofa.substring(tb.begin_char, tb.end_char);
         if surface.chars().next().map(|c| c.is_uppercase()).unwrap_or(false)
             && !tb.chars.is_all_lower()
         {
-            drop(tb);
-            // Try multi-word hyphenated city (e.g. "Санкт-Петербург")
-            let (full_name, end_tok) = collect_hyphenated_name(name_tok, sofa);
-            let mut r = gr::new_geo_referent();
-            gr::add_name(&mut r, &full_name);
-            gr::add_type(&mut r, "город");
-            return Some((r, end_tok));
+            // Reject proper person names / surnames used as "city" fallback
+            let is_person_name = tb.morph.items().iter().any(|wf|
+                wf.base.class.is_proper_name() || wf.base.class.is_proper_surname()
+            );
+            if !is_person_name {
+                drop(tb);
+                // Try multi-word hyphenated city (e.g. "Санкт-Петербург")
+                let (full_name, end_tok) = collect_hyphenated_name(name_tok, sofa);
+                let mut r = gr::new_geo_referent();
+                gr::add_name(&mut r, &full_name);
+                gr::add_type(&mut r, "город");
+                return Some((r, end_tok));
+            }
         }
     }
     None
@@ -222,14 +257,23 @@ fn try_type_keyword_prefix(
         // English words after a type keyword (e.g. "State Batches", "State Doc")
         // are almost certainly NOT place names; restrict to Cyrillic-script names
         // that may simply be missing from the embedded geo database.
+        // Also skip names tagged as proper person names or surnames.
         if has_cyrillic {
-            let (full_name, end_tok) = collect_hyphenated_name(&next, sofa);
-            if !full_name.is_empty() {
-                let mut r = gr::new_geo_referent();
-                gr::add_name(&mut r, &full_name);
-                gr::add_name(&mut r, &name);
-                gr::add_type(&mut r, type_str);
-                return Some((r, end_tok));
+            let is_person_name = {
+                let nb2 = next.borrow();
+                nb2.morph.items().iter().any(|wf|
+                    wf.base.class.is_proper_name() || wf.base.class.is_proper_surname()
+                )
+            };
+            if !is_person_name {
+                let (full_name, end_tok) = collect_hyphenated_name(&next, sofa);
+                if !full_name.is_empty() {
+                    let mut r = gr::new_geo_referent();
+                    gr::add_name(&mut r, &full_name);
+                    gr::add_name(&mut r, &name);
+                    gr::add_type(&mut r, type_str);
+                    return Some((r, end_tok));
+                }
             }
         }
     }
@@ -351,6 +395,33 @@ fn try_direct_name(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Referent, T
                 && surface.chars().all(|c| c.is_ascii_alphabetic())
             {
                 if in_person_name_context(t, sofa) { continue; }
+            }
+
+            // ── Guard: Cyrillic city/region with a proper-surname morph class
+            //    OR preceded by a Russian patronymic → likely a surname.
+            //    Example: "Иванова" (ИВАНОВО city) after "Петровна" is a surname.
+            if matches!(entry.kind, GeoEntryKind::City | GeoEntryKind::Region)
+                && !surface.chars().all(|c| c.is_ascii_alphabetic())
+            {
+                let is_surname = {
+                    let tb = t.borrow();
+                    tb.morph.items().iter().any(|wf| wf.base.class.is_proper_surname())
+                };
+                if is_surname {
+                    // Check if preceded by patronymic OR first name → person context
+                    let prev_is_name_context = t.borrow().prev.as_ref()
+                        .and_then(|w| w.upgrade())
+                        .map(|prev| {
+                            let pb = prev.borrow();
+                            if let TokenKind::Text(_) = &pb.kind {
+                                pb.morph.items().iter().any(|wf|
+                                    wf.base.class.is_proper_secname() || wf.base.class.is_proper_name()
+                                )
+                            } else { false }
+                        })
+                        .unwrap_or(false);
+                    if prev_is_name_context { continue; }
+                }
             }
 
             let mut r = gr::new_geo_referent();
@@ -731,11 +802,14 @@ fn in_person_name_context(t: &TokenRef, sofa: &SourceOfAnalysis) -> bool {
             }
         }
     }
-    // Check previous token
-    if let Some(prev_weak) = t.borrow().prev.clone() {
-        if let Some(prev) = prev_weak.upgrade() {
-            if prev.borrow().whitespaces_before_count(sofa) <= 1 && is_ascii_name_candidate(&prev) {
-                return true;
+    // Check previous token — use whitespace before t (between prev and t), not before prev.
+    let ws_before_t = t.borrow().whitespaces_before_count(sofa);
+    if ws_before_t <= 1 {
+        if let Some(prev_weak) = t.borrow().prev.clone() {
+            if let Some(prev) = prev_weak.upgrade() {
+                if is_ascii_name_candidate(&prev) {
+                    return true;
+                }
             }
         }
     }

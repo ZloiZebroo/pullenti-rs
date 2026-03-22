@@ -54,8 +54,17 @@ impl Analyzer for DenominationAnalyzer {
             if let Some(rt) = try_attach_spec(&t, sofa) {
                 let end_next = rt.borrow().next.clone();
                 // Extract referent and register it before embedding
-                if let TokenKind::Referent(rd) = &rt.borrow().kind {
-                    kit.add_entity(rd.referent.clone());
+                let canonical = {
+                    if let TokenKind::Referent(rd) = &rt.borrow().kind {
+                        Some(kit.add_entity(rd.referent.clone()))
+                    } else {
+                        None
+                    }
+                };
+                if let Some(c) = canonical {
+                    if let TokenKind::Referent(rd) = &mut rt.borrow_mut().kind {
+                        rd.referent = c;
+                    }
                 }
                 kit.embed_token(rt);
                 cur = end_next;
@@ -75,8 +84,17 @@ impl Analyzer for DenominationAnalyzer {
 
             if let Some(rt) = try_attach(&t, sofa) {
                 let end_next = rt.borrow().next.clone();
-                if let TokenKind::Referent(rd) = &rt.borrow().kind {
-                    kit.add_entity(rd.referent.clone());
+                let canonical = {
+                    if let TokenKind::Referent(rd) = &rt.borrow().kind {
+                        Some(kit.add_entity(rd.referent.clone()))
+                    } else {
+                        None
+                    }
+                };
+                if let Some(c) = canonical {
+                    if let TokenKind::Referent(rd) = &mut rt.borrow_mut().kind {
+                        rd.referent = c;
+                    }
                 }
                 kit.embed_token(rt);
                 cur = end_next;

@@ -19,6 +19,9 @@ use crate::referent::Referent;
 use crate::token::{Token, TokenRef, TokenKind};
 use crate::source_of_analysis::SourceOfAnalysis;
 use crate::person::person_referent as pr;
+use crate::person::person_property_referent as ppr;
+use crate::person::person_attr_table as pat;
+use crate::person::person_id_token;
 
 pub struct PersonAnalyzer;
 
@@ -31,6 +34,9 @@ impl Analyzer for PersonAnalyzer {
     fn caption(&self) -> &'static str { "Персоны" }
 
     fn process(&self, kit: &mut AnalysisKit) {
+        // Eagerly init the table so its cost is paid once.
+        let _ = pat::get_table();
+
         let sofa = kit.sofa.clone();
         let mut cur = kit.first_token.clone();
         while let Some(t) = cur.clone() {
@@ -38,11 +44,61 @@ impl Analyzer for PersonAnalyzer {
                 cur = t.borrow().next.clone();
                 continue;
             }
+            // Try: identity document (паспорт серия/номер) — before person patterns
+            if let Some((referent, begin, end)) = person_id_token::try_attach(&t, &sofa) {
+                let r_rc = Rc::new(RefCell::new(referent));
+                let r_rc = kit.add_entity(r_rc);
+                // Check if the immediately preceding token is a PERSON → link via IDDOC
+                {
+                    let prev = t.borrow().prev.as_ref().and_then(|w| w.upgrade());
+                    if let Some(prev_tok) = prev {
+                        let pb = prev_tok.borrow();
+                        // Check if it's a comma/colon before checking further back
+                        let check = if pb.is_char(',', &sofa) || pb.is_char(':', &sofa) {
+                            pb.prev.as_ref().and_then(|w| w.upgrade())
+                        } else {
+                            Some(prev_tok.clone())
+                        };
+                        drop(pb);
+                        if let Some(pers_tok) = check {
+                            let ptb = pers_tok.borrow();
+                            if let TokenKind::Referent(ref rd) = ptb.kind {
+                                if rd.referent.borrow().type_name == pr::OBJ_TYPENAME {
+                                    rd.referent.borrow_mut().add_slot(
+                                        pr::ATTR_IDDOC,
+                                        crate::referent::SlotValue::Referent(r_rc.clone()),
+                                        false,
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+                let tok = Rc::new(RefCell::new(Token::new_referent(begin, end, r_rc)));
+                kit.embed_token(tok.clone());
+                cur = tok.borrow().next.clone();
+                continue;
+            }
+            // Try: prefix/title term → person name
+            if let Some(pairs) = try_prefix_person(&t, &sofa) {
+                let mut last_tok = t.clone();
+                for (referent, begin, end) in pairs {
+                    let r_rc = Rc::new(RefCell::new(referent));
+                    let r_rc = kit.add_entity(r_rc);
+                    let tok = Rc::new(RefCell::new(
+                        Token::new_referent(begin, end, r_rc)
+                    ));
+                    kit.embed_token(tok.clone());
+                    last_tok = tok;
+                }
+                cur = last_tok.borrow().next.clone();
+                continue;
+            }
             match try_parse(&t, &sofa) {
                 None => { cur = t.borrow().next.clone(); }
                 Some((referent, end)) => {
                     let r_rc = Rc::new(RefCell::new(referent));
-                    kit.add_entity(r_rc.clone());
+                    let r_rc = kit.add_entity(r_rc);
                     let tok = Rc::new(RefCell::new(
                         Token::new_referent(t.clone(), end, r_rc)
                     ));
@@ -299,7 +355,7 @@ fn try_surname_alone(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Referent,
     Some((r, t.clone()))
 }
 
-// ── Pattern C: FirstName Patronymic ──────────────────────────────────────────
+// ── Pattern C: FirstName Patronymic [Surname] ─────────────────────────────────
 
 fn try_name_secname(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Referent, TokenRef)> {
     let firstname = normal_form_of(t);
@@ -308,6 +364,21 @@ fn try_name_secname(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Referent, 
     if !is_proper_secname_token(&n1) { return None; }
     let midname = normal_form_of(&n1);
     let sex = infer_sex_from_secname(&midname);
+
+    // C3 extension: FirstName + Patronymic + Surname ("Мария Петровна Иванова")
+    if let Some(n2) = n1.borrow().next.clone() {
+        if n2.borrow().whitespaces_before_count(sofa) <= 1
+            && is_proper_surname_token_ctx(&n2, sofa)
+        {
+            let surname = normal_form_of(&n2);
+            let mut r = pr::new_person_referent();
+            pr::set_firstname(&mut r, &firstname);
+            pr::set_middlename(&mut r, &midname);
+            pr::set_lastname(&mut r, &surname);
+            if let Some(s) = sex { pr::set_sex(&mut r, s); }
+            return Some((r, n2.clone()));
+        }
+    }
 
     let mut r = pr::new_person_referent();
     pr::set_firstname(&mut r, &firstname);
@@ -322,9 +393,11 @@ fn try_name_surname(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Referent, 
     let firstname = normal_form_of(t);
     let n1 = t.borrow().next.clone()?;
     if n1.borrow().whitespaces_before_count(sofa) == 0 { return None; }
-    if !is_proper_surname_token(&n1) { return None; }
-    // Avoid matching if n1 is ALSO a first name (ambiguous: "Иван Иван" → skip)
-    if is_proper_name_token(&n1) { return None; }
+    if !is_proper_surname_token_ctx(&n1, sofa) { return None; }
+    // Note: we do NOT filter on is_proper_name_token(n1) here because many common Russian
+    // surnames (Петров, Иванов, Сидоров) are flagged as both proper_surname AND proper_name
+    // in the morph dictionary. The is_proper_surname_token_ctx check above (which also
+    // requires uppercase) is the sufficient filter.
     let surname = normal_form_of(&n1);
     let mut r = pr::new_person_referent();
     pr::set_firstname(&mut r, &firstname);
@@ -334,8 +407,21 @@ fn try_name_surname(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Referent, 
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+fn starts_uppercase(t: &TokenRef, sofa: &SourceOfAnalysis) -> bool {
+    let tb = t.borrow();
+    let surface = sofa.substring(tb.begin_char, tb.end_char);
+    surface.chars().next().map(|c| c.is_uppercase()).unwrap_or(false)
+}
+
 fn is_proper_surname_token(t: &TokenRef) -> bool {
     t.borrow().morph.items().iter().any(|wf| wf.base.class.is_proper_surname())
+}
+
+fn is_proper_surname_token_ctx(t: &TokenRef, sofa: &SourceOfAnalysis) -> bool {
+    // Surnames always start with uppercase in Russian prose.
+    // Rejects lowercase homophones like "оттого" (conjunction) that happen to
+    // have a rare is_proper_surname morph form.
+    starts_uppercase(t, sofa) && is_proper_surname_token(t)
 }
 
 fn is_proper_name_token(t: &TokenRef) -> bool {
@@ -351,17 +437,31 @@ fn is_proper_secname_token(t: &TokenRef) -> bool {
 fn normal_form_of(t: &TokenRef) -> String {
     let tb = t.borrow();
     if let TokenKind::Text(txt) = &tb.kind {
-        // Single pass: prefer proper-noun normal_case, fall back to first normal_case
-        let mut first_nc: Option<&str> = None;
+        // Among proper-noun forms, prefer forms that also have `nf` set (the full
+        // dictionary base form — e.g. "АНФИСА" with nf="АНФИСА" over "АНФИС" with nf=None).
+        let mut proper_nc_with_nf: Option<String> = None;
+        let mut proper_nc_no_nf:   Option<String> = None;
+        let mut first_nc:          Option<String> = None;
         for wf in tb.morph.items() {
             if let Some(nc) = &wf.normal_case {
-                if wf.base.class.is_proper_surname() || wf.base.class.is_proper_name() || wf.base.class.is_proper_secname() {
-                    return nc.clone();
+                let is_proper = wf.base.class.is_proper_surname()
+                    || wf.base.class.is_proper_name()
+                    || wf.base.class.is_proper_secname();
+                if is_proper {
+                    if wf.normal_full.is_some() {
+                        if proper_nc_with_nf.is_none() {
+                            proper_nc_with_nf = Some(nc.clone());
+                        }
+                    } else if proper_nc_no_nf.is_none() {
+                        proper_nc_no_nf = Some(nc.clone());
+                    }
                 }
-                if first_nc.is_none() { first_nc = Some(nc.as_str()); }
+                if first_nc.is_none() { first_nc = Some(nc.clone()); }
             }
         }
-        if let Some(nc) = first_nc { return nc.to_string(); }
+        if let Some(nc) = proper_nc_with_nf { return nc; }
+        if let Some(nc) = proper_nc_no_nf   { return nc; }
+        if let Some(nc) = first_nc { return nc; }
         return txt.term.clone();
     }
     String::new()
@@ -391,7 +491,17 @@ fn is_person_title(term: &str) -> bool {
         "SENATOR" | "PROFESSOR" | "DOCTOR" | "JUDGE" | "GENERAL" |
         "КАПИТАН-ЛЕЙТЕНАНТ" | "ГЕНЕРАЛ-МАЙОР" | "ГЕНЕРАЛ-ЛЕЙТЕНАНТ" |
         "ГОСПОДИН" | "ГРАЖДАНИН" | "МУЖЧИНА" | "ЖЕНЩИНА" |
-        "ТОВАРИЩ" | "ТОВ." | "Г-Н" | "ГОСПОДА" | "ГН" | "ГЖА"
+        "ТОВАРИЩ" | "ТОВ." | "Г-Н" | "ГОСПОДА" | "ГН" | "ГЖА" |
+        // Historical / literary Russian titles
+        "ГРАФ" | "КНЯЗЬ" | "БАРОН" | "ГЕРЦОГ" | "МАРКИЗ" | "ВИКОНТ" |
+        "ПОМЕЩИК" | "БАРИН" | "ДВОРЯНИН" | "КУПЕЦ" | "БОЯРИН" |
+        "ПОРУЧИК" | "ШТАБС-КАПИТАН" | "КОЛЛЕЖСКИЙ" | "НАДВОРНЫЙ" | "СТАТСКИЙ" |
+        // Clergy
+        "АРХИЕПИСКОП" | "ЕПИСКОП" | "МИТРОПОЛИТ" | "ПАТРИАРХ" | "ПРОТОИЕРЕЙ" |
+        "СВЯЩЕННИК" | "БАТЮШКА" | "ДЬЯКОН" |
+        // More EN titles
+        "COLONEL" | "MAJOR" | "CAPTAIN" | "LIEUTENANT" | "SERGEANT" |
+        "MR" | "MRS" | "MS" | "MISS" | "SIR" | "LORD" | "LADY" | "DR" | "PROF"
     )
 }
 
@@ -717,4 +827,134 @@ fn is_en_stop_word(upper: &str) -> bool {
         "SIXTEENTH" | "SEVENTEENTH" | "EIGHTEENTH" | "NINETEENTH" |
         "TWENTIETH" | "THIRTIETH" | "FORTIETH" | "FIFTIETH" | "HUNDREDTH"
     )
+}
+
+// ── Prefix + Person detection ─────────────────────────────────────────────────
+//
+// If `t` is a known person-attribute prefix/position term (господин, директор,
+// профессор, mr., …) and the following token(s) parse as a person name, we
+// return a list of (referent, begin, end) pairs:
+//   [PersonPropertyReferent(begin=t, end=prefix_end),
+//    PersonReferent(begin=person_start, end=person_end)]
+//
+// Multi-word prefixes up to 3 tokens are tried: "генеральный директор", etc.
+
+fn try_prefix_person(
+    t: &TokenRef,
+    sofa: &SourceOfAnalysis,
+) -> Option<Vec<(Referent, TokenRef, TokenRef)>> {
+    let table = pat::get_table();
+
+    // Get the term of the current token
+    let term0 = {
+        let tb = t.borrow();
+        let TokenKind::Text(txt) = &tb.kind else { return None; };
+        txt.term.clone()
+    };
+
+    // Try single-word, then 2-word, then 3-word prefix
+    let mut prefix_end: TokenRef = t.clone();
+    let mut entry: Option<&pat::PersonAttrEntry> = None;
+
+    if let Some(e) = table.get(&term0) {
+        entry = Some(e);
+    } else {
+        // 2-word: term0 + term1
+        let t1 = t.borrow().next.clone()?;
+        if !t1.borrow().is_newline_before(sofa) {
+            let term1 = {
+                let tb = t1.borrow();
+                let TokenKind::Text(txt) = &tb.kind else { return None; };
+                txt.term.clone()
+            };
+            let two = format!("{} {}", term0, term1);
+            if let Some(e) = table.get(&two) {
+                entry = Some(e);
+                prefix_end = t1.clone();
+            } else {
+                // 3-word: term0 + term1 + term2
+                let t2 = t1.borrow().next.clone()?;
+                if !t2.borrow().is_newline_before(sofa) {
+                    let term2 = {
+                        let tb = t2.borrow();
+                        let TokenKind::Text(txt) = &tb.kind else { return None; };
+                        txt.term.clone()
+                    };
+                    let three = format!("{} {} {}", term0, term1, term2);
+                    if let Some(e) = table.get(&three) {
+                        entry = Some(e);
+                        prefix_end = t2.clone();
+                    }
+                }
+            }
+        }
+    }
+
+    let entry = entry?;
+
+    // Skip nationality / kin terms — they don't directly precede names
+    if entry.kind == pat::PersonAttrKind::Nationality
+        || entry.kind == pat::PersonAttrKind::Kin
+    {
+        return None;
+    }
+
+    // The next token after the prefix must not be separated by a newline
+    // Also: skip a single "." immediately after an abbreviation prefix (e.g. "Mr. Smith")
+    let person_start = {
+        let next = prefix_end.borrow().next.clone()?;
+        if next.borrow().is_newline_before(sofa) { return None; }
+        // Skip lone abbreviation dot: no whitespace before, single '.' char
+        let skip_dot = {
+            let nb = next.borrow();
+            nb.whitespaces_before_count(sofa) == 0
+                && nb.length_char() == 1
+                && sofa.char_at(nb.begin_char) == '.'
+        };
+        if skip_dot {
+            let after_dot = next.borrow().next.clone()?;
+            if after_dot.borrow().is_newline_before(sofa) { return None; }
+            after_dot
+        } else {
+            next
+        }
+    };
+
+    // Try to parse a person starting at person_start.
+    // For EN prefix terms (MR/MRS/MS/DR etc.) also accept a single uppercase EN
+    // word as a surname, since "Mr Smith" is valid even without a firstname.
+    let (mut person_ref, person_end) = if let Some(res) = try_parse(&person_start, sofa) {
+        res
+    } else if entry.kind == pat::PersonAttrKind::Prefix {
+        // Accept a single valid EN name word as a last name
+        let surface = get_surface(&person_start, sofa);
+        if is_valid_en_name_word(&surface) && !is_en_stop_word(&surface.to_uppercase()) {
+            let mut r = pr::new_person_referent();
+            pr::set_lastname(&mut r, &surface);
+            if let Some(gender_male) = entry.gender {
+                pr::set_sex(&mut r, if gender_male { pr::SEX_MALE } else { pr::SEX_FEMALE });
+            }
+            (r, person_start.clone())
+        } else {
+            return None;
+        }
+    } else {
+        return None;
+    };
+
+    // Apply gender hint from prefix if person has no sex yet
+    if pr::get_sex(&person_ref).is_none() {
+        if let Some(gender_male) = entry.gender {
+            pr::set_sex(&mut person_ref, if gender_male { pr::SEX_MALE } else { pr::SEX_FEMALE });
+        }
+    }
+
+    // Build PersonPropertyReferent
+    let mut prop = ppr::new_person_property_referent();
+    ppr::set_name(&mut prop, &entry.canonic);
+
+    Some(vec![
+        (prop, t.clone(), prefix_end),
+        (person_ref, person_start, person_end),
+    ])
 }

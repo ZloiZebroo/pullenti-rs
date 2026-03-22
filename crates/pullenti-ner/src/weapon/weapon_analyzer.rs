@@ -33,7 +33,7 @@ impl Analyzer for WeaponAnalyzer {
             if let Some(its) = try_parse_list(&t, &sofa) {
                 if let Some((referent, end)) = try_attach(&its, &sofa) {
                     let r_rc = Rc::new(RefCell::new(referent));
-                    kit.add_entity(r_rc.clone());
+                    let r_rc = kit.add_entity(r_rc);
                     let begin = its[0].begin.clone();
                     let tok = Rc::new(RefCell::new(Token::new_referent(begin, end, r_rc)));
                     kit.embed_token(tok.clone());

@@ -21,6 +21,6 @@ pub use deriv_group::DerivateGroup;
 pub use deriv_dict::DerivateDictionary;
 pub use deriv_service::{
     initialize as deriv_initialize,
-    find_derivate_group_ids, is_animated, is_named, find_words,
-    for_each_word,
+    find_derivate_group_ids, find_groups_cloned, is_animated, is_named, find_words,
+    for_each_word, find_verb_role,
 };

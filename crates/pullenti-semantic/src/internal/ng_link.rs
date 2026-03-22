@@ -3,8 +3,9 @@
 ///
 /// Link scoring uses `SemanticService.Params` defaults (all 1.0 or 2.0 as in AlgoParams.cs).
 
-use pullenti_morph::{MorphCase, MorphNumber, MorphGenderFlags, MorphVoice, MorphWordForm};
+use pullenti_morph::{MorphCase, MorphNumber, MorphGenderFlags, MorphVoice, MorphWordForm, MorphLang};
 use pullenti_morph::MorphMood;
+use pullenti_ner::deriv::{find_verb_role, SemanticRole};
 use super::sent_item::{SentItem, SentItemType, NounMorph, VerbMorphInfo};
 
 // ── AlgoParams defaults (from AlgoParams.cs) ─────────────────────────────
@@ -397,8 +398,31 @@ impl NGLink {
         let from_nm = match from_si.noun_morph.as_ref() { Some(m) => m, None => return };
         let morph = from_nm;
 
-        // Only valid for passive voice (patient becomes nominative subject)
-        if vmi.voice == MorphVoice::Passive || vmi.is_passive_str {
+        // Reflexive verbs (возвр.) used as passive: nominative noun is the logical Pacient.
+        // Approximates C# SemanticHelper.TryCreateLinks: when IsVerbReversive, nominative
+        // case → Pacient role (e.g. "система разрабатывается программистом").
+        // Positional rule: noun BEFORE the verb → Pacient; noun AFTER → -1 (excluded).
+        // C# applies sl.Rank -= 0.5 for post-verb items; we go further and exclude them
+        // to prevent cross-segment conflicts with the true pre-verb subject/patient.
+        if vmi.is_reflexive && morph.is_nominative() {
+            let noun_sent_idx = seg_items.get(self.from_ord).copied().unwrap_or(0);
+            let after_verb = self.to_verb_sent_idx
+                .map_or(false, |v_idx| noun_sent_idx > v_idx);
+            if after_verb {
+                // Not a patient — nominative after reflexive verb is not the passive subject
+                return; // coef stays -1.0
+            }
+            self.coef = MORPH_ACCORD;
+            return;
+        }
+
+        // Only valid for actual passive voice (страд.з.) — NOT for reflexive (возвр.).
+        // C# NGLink._calcPacient checks Voice==Passive||ContainsAttr("страд.з.") only;
+        // reflexive verbs (is_passive_str due to "возвр.") return -1 for Pacient.
+        let is_actual_passive = vmi.voice == MorphVoice::Passive
+            || (vmi.is_passive_str && !vmi.is_reflexive);
+
+        if is_actual_passive {
             if vf.base.number == MorphNumber::PLURAL {
                 if noplural {
                     if !self.from_is_plural {
@@ -416,9 +440,21 @@ impl NGLink {
                 self.coef = MORPH_ACCORD;
             }
         }
-        // Active voice: accusative case is patient
-        else if morph.is_accusative() || morph.case.is_undefined() {
-            self.coef = MORPH_ACCORD / 2.0;
+        // Control model lookup (mirrors C# SemanticHelper.TryCreateLinks → _createRoles):
+        // For active non-reflexive verbs, use the derivate dictionary to determine if
+        // this prep+case combination maps to Pacient according to the verb's control model.
+        else if !vmi.is_reflexive {
+            if let Some(lemma) = &vmi.lemma {
+                let prep_opt = if from_prep.is_empty() { None } else { Some(from_prep.as_str()) };
+                if let Some(SemanticRole::Pacient) = find_verb_role(lemma, false, MorphLang::RU, prep_opt, morph.case) {
+                    self.coef = MORPH_ACCORD; // strong model-based Pacient
+                    return;
+                }
+            }
+            // Fallback: accusative case is patient (weak heuristic for verbs not in dict)
+            if morph.is_accusative() || morph.case.is_undefined() {
+                self.coef = MORPH_ACCORD / 2.0;
+            }
         }
     }
 

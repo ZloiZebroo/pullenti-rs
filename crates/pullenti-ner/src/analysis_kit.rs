@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::cell::RefCell;
+use std::sync::Arc;
 use std::any::Any;
 
 use pullenti_morph::MorphLang;
@@ -19,8 +20,8 @@ impl AnalyzerData {
 
 /// Central working context during NER analysis
 pub struct AnalysisKit {
-    /// Input text
-    pub sofa: SourceOfAnalysis,
+    /// Input text (shared via Arc to avoid deep cloning per analyzer)
+    pub sofa: Arc<SourceOfAnalysis>,
     /// First token in the chain
     pub first_token: Option<TokenRef>,
     /// Detected base language
@@ -32,7 +33,7 @@ pub struct AnalysisKit {
 }
 
 impl AnalysisKit {
-    pub fn new(sofa: SourceOfAnalysis) -> Self {
+    pub fn new(sofa: Arc<SourceOfAnalysis>) -> Self {
         AnalysisKit {
             sofa,
             first_token: None,
@@ -69,9 +70,52 @@ impl AnalysisKit {
         None
     }
 
-    /// Register an entity in the kit
-    pub fn add_entity(&mut self, r: Rc<RefCell<Referent>>) {
-        self.entities.push(r);
+    /// Register an entity in the kit, deduplicating by slot equality.
+    /// Returns the canonical entity (existing one if dedup matched, otherwise the new one).
+    pub fn add_entity(&mut self, r: Rc<RefCell<Referent>>) -> Rc<RefCell<Referent>> {
+        // Collect non-internal string slots for comparison
+        let type_name = r.borrow().type_name.clone();
+        let slots: Vec<(String, String)> = r.borrow().slots.iter()
+            .filter(|s| !s.is_internal())
+            .filter_map(|s| {
+                s.value.as_ref()
+                    .and_then(|v| v.as_str())
+                    .map(|sv| (s.type_name.clone(), sv.to_string()))
+            })
+            .collect();
+
+        if !slots.is_empty() {
+            for existing in &self.entities {
+                let existing_b = existing.borrow();
+                if existing_b.type_name != type_name { continue; }
+                // Check bidirectional slot equality (string slots only)
+                let a_in_b = slots.iter().all(|(name, val)| {
+                    existing_b.find_slot(name, Some(val)).is_some()
+                });
+                if !a_in_b { continue; }
+                let b_in_a = existing_b.slots.iter()
+                    .filter(|s| !s.is_internal())
+                    .filter_map(|s| s.value.as_ref().and_then(|v| v.as_str())
+                        .map(|sv| (s.type_name.as_str(), sv.to_string())))
+                    .all(|(name, val)| {
+                        slots.iter().any(|(n, v)| n == name && v == &val)
+                    });
+                if b_in_a {
+                    // Merge occurrences from new into existing
+                    drop(existing_b);
+                    let new_occ: Vec<(i32, i32)> = r.borrow().occurrence.iter()
+                        .map(|o| (o.begin_char, o.end_char))
+                        .collect();
+                    for (bc, ec) in new_occ {
+                        existing.borrow_mut().add_occurrence(bc, ec);
+                    }
+                    return existing.clone();
+                }
+            }
+        }
+
+        self.entities.push(r.clone());
+        r
     }
 
     /// Embed a meta token into the chain, replacing the span from begin to end

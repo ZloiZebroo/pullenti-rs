@@ -92,7 +92,7 @@ impl Analyzer for BankAnalyzer {
                 let keyword_mode = kw_begin.is_some();
                 if let Some((referent, end)) = try_attach(&start, keyword_mode, &sofa) {
                     let r_rc = Rc::new(RefCell::new(referent));
-                    kit.add_entity(r_rc.clone());
+                    let r_rc = kit.add_entity(r_rc);
                     let begin = kw_begin.unwrap_or_else(|| start.clone());
                     let tok = Rc::new(RefCell::new(Token::new_referent(begin, end, r_rc)));
                     kit.embed_token(tok.clone());
