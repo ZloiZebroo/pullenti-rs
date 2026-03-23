@@ -45,10 +45,10 @@ const SURNAME_TAILS: &[(&str, i32)] = &[
 
 /// Check whether `s` ends with a standard Russian/Ukrainian surname tail.
 /// Returns `Some(gender)` (0=neutral, 1=masculine, 2=feminine) on match.
+/// NOTE: `s` is expected to be uppercase (morph terms are always uppercase).
 pub fn ends_with_std_surname(s: &str) -> Option<i32> {
-    let up = s.to_uppercase();
     for &(tail, gender) in SURNAME_TAILS {
-        if up.ends_with(tail) && up.len() > tail.len() {
+        if s.ends_with(tail) && s.len() > tail.len() {
             return Some(gender);
         }
     }
@@ -161,15 +161,16 @@ pub fn try_attach(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<PersonItemTok
 
     let ws = tb.whitespaces_before_count(sofa) as usize;
     let nl = tb.is_newline_before(sofa);
-    let term_chars: Vec<char> = txt.term.chars().collect();
-
     // ── Check for initial: single uppercase letter, possibly followed by "." ──
     // Note: single uppercase letters like "И" have is_all_upper=true but
     // is_capital_upper=false (capital_upper requires trailing lowercase letters).
     // So we test the char directly with is_uppercase() rather than is_capital_upper().
-    if term_chars.len() == 1 {
-        let ch = term_chars[0];
-        if ch.is_alphabetic() && ch.is_uppercase() {
+    // Check for single-char term without allocating a Vec<char>
+    let mut chars_iter = txt.term.chars();
+    let first_ch = chars_iter.next();
+    let second_ch_exists = chars_iter.next().is_some();
+    if let Some(ch) = first_ch {
+        if !second_ch_exists && ch.is_alphabetic() && ch.is_uppercase() {
             let next_opt = tb.next.clone();
             drop(tb);
             if let Some(next) = next_opt {
@@ -260,13 +261,19 @@ pub fn try_attach(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<PersonItemTok
     if fn_item.is_none() && mn_item.is_none() && ln_item.is_none() {
         let tb2 = t.borrow();
         let is_capital = tb2.chars.is_capital_upper();
-        let is_verb = tb2.morph.items().iter().any(|wf| wf.base.class.is_verb());
-        let is_adj  = tb2.morph.items().iter().any(|wf| wf.base.class.is_adjective());
-        let is_pron = tb2.morph.items().iter().any(|wf| wf.base.class.is_pronoun());
-        let is_prep = tb2.morph.items().iter().any(|wf| wf.base.class.is_preposition());
-        let is_conj = tb2.morph.items().iter().any(|wf| wf.base.class.is_conjunction());
+        // Single pass over morph items instead of 5 separate .any() calls
+        let mut is_non_name = false;
+        for wf in tb2.morph.items() {
+            let c = &wf.base.class;
+            if c.is_verb() || c.is_adjective() || c.is_pronoun()
+                || c.is_preposition() || c.is_conjunction()
+            {
+                is_non_name = true;
+                break;
+            }
+        }
         drop(tb2);
-        if !is_capital || is_verb || is_adj || is_pron || is_prep || is_conj {
+        if !is_capital || is_non_name {
             return None;
         }
         // Unknown capitalized word — treat as potential lastname

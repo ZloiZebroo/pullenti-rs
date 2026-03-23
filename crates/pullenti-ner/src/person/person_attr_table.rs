@@ -235,17 +235,24 @@ fn find_char(s: &str, ch: char, from: usize) -> Option<usize> {
 
 fn extract_attr<'a>(tag_slice: &'a str, attr_name: &str) -> Option<&'a str> {
     // Look for attr_name="..." or attr_name='...'
-    let pattern = format!("{}=\"", attr_name);
-    if let Some(p) = tag_slice.find(&pattern) {
-        let start = p + pattern.len();
-        let end = tag_slice[start..].find('"')? + start;
-        return Some(&tag_slice[start..end]);
-    }
-    let pattern2 = format!("{}='", attr_name);
-    if let Some(p) = tag_slice.find(&pattern2) {
-        let start = p + pattern2.len();
-        let end = tag_slice[start..].find('\'')? + start;
-        return Some(&tag_slice[start..end]);
+    // Avoid format!() allocation by searching for attr_name then checking delimiter
+    let mut search_from = 0;
+    while let Some(p) = tag_slice[search_from..].find(attr_name) {
+        let abs_p = search_from + p;
+        let after_name = abs_p + attr_name.len();
+        if after_name >= tag_slice.len() { break; }
+        let rest = &tag_slice[after_name..];
+        if rest.starts_with("=\"") {
+            let start = after_name + 2;
+            let end = tag_slice[start..].find('"')? + start;
+            return Some(&tag_slice[start..end]);
+        }
+        if rest.starts_with("='") {
+            let start = after_name + 2;
+            let end = tag_slice[start..].find('\'')? + start;
+            return Some(&tag_slice[start..end]);
+        }
+        search_from = after_name;
     }
     None
 }

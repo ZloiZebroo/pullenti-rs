@@ -95,37 +95,38 @@ impl MorphEngine {
         // Walk forward tree
         let mut tn = &self.m_root;
         let mut i = 0;
+        let mut word_begin_buf = String::new();
+        let mut word_end_buf = String::new();
         loop {
             if i > chars.len() { break; }
 
             if let Some(ref rule_ids) = tn.rule_ids {
-                let word_end = if i == 0 {
-                    word.to_string()
+                word_end_buf.clear();
+                if i == 0 {
+                    word_end_buf.push_str(word);
                 } else if i < chars.len() {
-                    chars[i..].iter().collect()
-                } else {
-                    String::new()
-                };
+                    word_end_buf.extend(chars[i..].iter());
+                }
 
                 if res.is_none() {
                     res = Some(Vec::new());
                 }
 
-                let mut word_begin: Option<String> = None;
+                let mut word_begin_set = false;
 
                 for &rid in rule_ids {
                     if let Some(r) = self.get_rule(rid) {
-                        if let Some(mvs) = r.get_vars(&word_end) {
-                            if word_begin.is_none() {
-                                word_begin = Some(if i == chars.len() {
-                                    word.to_string()
+                        if let Some(mvs) = r.get_vars(&word_end_buf) {
+                            if !word_begin_set {
+                                word_begin_buf.clear();
+                                if i == chars.len() {
+                                    word_begin_buf.push_str(word);
                                 } else if i > 0 {
-                                    chars[..i].iter().collect()
-                                } else {
-                                    String::new()
-                                });
+                                    word_begin_buf.extend(chars[..i].iter());
+                                }
+                                word_begin_set = true;
                             }
-                            self.process_result(res.as_mut().unwrap(), word_begin.as_ref().unwrap(), mvs);
+                            self.process_result(res.as_mut().unwrap(), &word_begin_buf, mvs);
                         }
                     }
                 }
@@ -215,11 +216,12 @@ impl MorphEngine {
                     let wf = &r[0];
                     if wf.base.class.is_verb() {
                         if let Some(ref misc) = wf.misc {
-                            if misc.attrs.contains(&"н.вр.".to_string()) && misc.attrs.contains(&"нес.в.".to_string()) && !misc.attrs.contains(&"страд.з.".to_string()) {
+                            let has = |s: &str| misc.attrs.iter().any(|a| a == s);
+                            if has("н.вр.") && has("нес.в.") && !has("страд.з.") {
                                 need_test_unknown = false;
-                            } else if misc.attrs.contains(&"б.вр.".to_string()) && misc.attrs.contains(&"сов.в.".to_string()) {
+                            } else if has("б.вр.") && has("сов.в.") {
                                 need_test_unknown = false;
-                            } else if misc.attrs.contains(&"инф.".to_string()) && misc.attrs.contains(&"сов.в.".to_string()) {
+                            } else if has("инф.") && has("сов.в.") {
                                 need_test_unknown = false;
                             }
                         }
@@ -231,7 +233,7 @@ impl MorphEngine {
                     }
                     if wf.base.class.is_undefined() {
                         if let Some(ref misc) = wf.misc {
-                            if misc.attrs.contains(&"прдктв.".to_string()) {
+                            if misc.attrs.iter().any(|a| a == "прдктв.") {
                                 need_test_unknown = false;
                             }
                         }
@@ -389,6 +391,7 @@ impl MorphEngine {
     }
 
     fn process_result(&self, res: &mut Vec<MorphWordForm>, word_begin: &str, mvs: &[MorphRuleVariant]) {
+        let mut buf = String::new();
         for mv in mvs {
             let mi = self.get_misc_info(mv.misc_info_id).cloned().unwrap_or_default();
             let mut r = MorphWordForm::from_rule_variant(mv, "", mi);
@@ -396,7 +399,10 @@ impl MorphEngine {
             // Construct normal_case from word_begin + normal_tail
             if let Some(ref nt) = mv.normal_tail {
                 if !nt.is_empty() && !nt.starts_with('-') {
-                    r.normal_case = Some(format!("{}{}", word_begin, nt));
+                    buf.clear();
+                    buf.push_str(word_begin);
+                    buf.push_str(nt);
+                    r.normal_case = Some(buf.clone());
                 } else {
                     r.normal_case = Some(word_begin.to_string());
                 }
@@ -406,7 +412,10 @@ impl MorphEngine {
 
             if let Some(ref fnt) = mv.full_normal_tail {
                 if !fnt.is_empty() && !fnt.starts_with('-') {
-                    r.normal_full = Some(format!("{}{}", word_begin, fnt));
+                    buf.clear();
+                    buf.push_str(word_begin);
+                    buf.push_str(fnt);
+                    r.normal_full = Some(buf.clone());
                 } else {
                     r.normal_full = Some(word_begin.to_string());
                 }
@@ -459,27 +468,32 @@ impl MorphEngine {
             return k;
         }
         let nc = wf.normal_case.as_ref().unwrap();
-        let nc_chars: Vec<char> = nc.chars().collect();
 
-        if wf.base.class.is_adjective() && wf.base.number != MorphNumber::PLURAL {
-            if nc_chars.len() >= 2 {
-                let last = nc_chars[nc_chars.len() - 1];
-                let last1 = nc_chars[nc_chars.len() - 2];
-                let mut ok = false;
-                if wf.base.gender == MorphGenderFlags::FEMINIE && last == 'Я' { ok = true; }
-                if wf.base.gender == MorphGenderFlags::MASCULINE {
-                    if last == 'Й' {
-                        if last1 == 'И' { k += 1; }
-                        ok = true;
-                    }
-                }
-                if wf.base.gender == MorphGenderFlags::NEUTER && last == 'Е' { ok = true; }
-                if ok && LanguageHelper::is_cyrillic_vowel(last1) { k += 1; }
+        if wf.base.class.is_adjective() {
+            // Get last two chars without Vec<char> allocation
+            let mut last1 = '\0';
+            let mut last = '\0';
+            let mut count = 0u32;
+            for ch in nc.chars() {
+                last1 = last;
+                last = ch;
+                count += 1;
             }
-        } else if wf.base.class.is_adjective() && wf.base.number == MorphNumber::PLURAL {
-            if nc_chars.len() >= 2 {
-                let last = nc_chars[nc_chars.len() - 1];
-                if last == 'Й' || last == 'Е' { k += 1; }
+            if count >= 2 {
+                if wf.base.number != MorphNumber::PLURAL {
+                    let mut ok = false;
+                    if wf.base.gender == MorphGenderFlags::FEMINIE && last == 'Я' { ok = true; }
+                    if wf.base.gender == MorphGenderFlags::MASCULINE {
+                        if last == 'Й' {
+                            if last1 == 'И' { k += 1; }
+                            ok = true;
+                        }
+                    }
+                    if wf.base.gender == MorphGenderFlags::NEUTER && last == 'Е' { ok = true; }
+                    if ok && LanguageHelper::is_cyrillic_vowel(last1) { k += 1; }
+                } else {
+                    if last == 'Й' || last == 'Е' { k += 1; }
+                }
             }
         }
         k
@@ -488,18 +502,12 @@ impl MorphEngine {
     fn sort(&self, res: &mut Vec<MorphWordForm>, _word: &str) {
         if res.len() < 2 { return; }
 
-        // Bubble sort (matching C# implementation)
-        for _ in 0..res.len() {
-            let mut changed = false;
-            for i in 0..res.len() - 1 {
-                let j = self.compare(&res[i], &res[i + 1]);
-                if j > 0 {
-                    res.swap(i, i + 1);
-                    changed = true;
-                }
-            }
-            if !changed { break; }
-        }
+        res.sort_by(|a, b| {
+            let c = self.compare(a, b);
+            if c < 0 { std::cmp::Ordering::Less }
+            else if c > 0 { std::cmp::Ordering::Greater }
+            else { std::cmp::Ordering::Equal }
+        });
 
         // Remove duplicates
         let mut i = 0;

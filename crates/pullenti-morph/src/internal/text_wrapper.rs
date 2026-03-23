@@ -1,26 +1,29 @@
 use super::unicode_info::UnicodeInfo;
 
 pub struct TextWrapper {
-    chars: Vec<UnicodeInfo>,
+    uni_chars: Vec<UnicodeInfo>,
+    /// Original text characters (avoids separate Vec<char> allocation in callers)
+    pub text_chars: Vec<char>,
     pub length: usize,
 }
 
 impl TextWrapper {
     pub fn new(text: &str, _good_text: bool) -> Self {
-        let chars: Vec<UnicodeInfo> = text.chars().map(|ch| UnicodeInfo::get_char(ch)).collect();
-        let length = chars.len();
-        TextWrapper { chars, length }
+        let text_chars: Vec<char> = text.chars().collect();
+        let uni_chars: Vec<UnicodeInfo> = text_chars.iter().map(|&ch| UnicodeInfo::get_char(ch)).collect();
+        let length = uni_chars.len();
+        TextWrapper { uni_chars, text_chars, length }
     }
 
     pub fn get_char(&self, idx: usize) -> UnicodeInfo {
-        if idx < self.chars.len() {
-            self.chars[idx]
+        if idx < self.uni_chars.len() {
+            self.uni_chars[idx]
         } else {
             UnicodeInfo::get_char('?')
         }
     }
 
     pub fn chars_count(&self) -> usize {
-        self.chars.len()
+        self.uni_chars.len()
     }
 }

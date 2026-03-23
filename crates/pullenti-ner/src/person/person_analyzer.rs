@@ -439,29 +439,30 @@ fn normal_form_of(t: &TokenRef) -> String {
     if let TokenKind::Text(txt) = &tb.kind {
         // Among proper-noun forms, prefer forms that also have `nf` set (the full
         // dictionary base form — e.g. "АНФИСА" with nf="АНФИСА" over "АНФИС" with nf=None).
-        let mut proper_nc_with_nf: Option<String> = None;
-        let mut proper_nc_no_nf:   Option<String> = None;
-        let mut first_nc:          Option<String> = None;
-        for wf in tb.morph.items() {
-            if let Some(nc) = &wf.normal_case {
+        // Use indices to avoid cloning strings until we know which one we need.
+        let items = tb.morph.items();
+        let mut proper_idx_with_nf: Option<usize> = None;
+        let mut proper_idx_no_nf:   Option<usize> = None;
+        let mut first_idx:          Option<usize> = None;
+        for (i, wf) in items.iter().enumerate() {
+            if wf.normal_case.is_some() {
                 let is_proper = wf.base.class.is_proper_surname()
                     || wf.base.class.is_proper_name()
                     || wf.base.class.is_proper_secname();
                 if is_proper {
                     if wf.normal_full.is_some() {
-                        if proper_nc_with_nf.is_none() {
-                            proper_nc_with_nf = Some(nc.clone());
-                        }
-                    } else if proper_nc_no_nf.is_none() {
-                        proper_nc_no_nf = Some(nc.clone());
+                        if proper_idx_with_nf.is_none() { proper_idx_with_nf = Some(i); }
+                    } else if proper_idx_no_nf.is_none() {
+                        proper_idx_no_nf = Some(i);
                     }
                 }
-                if first_nc.is_none() { first_nc = Some(nc.clone()); }
+                if first_idx.is_none() { first_idx = Some(i); }
             }
         }
-        if let Some(nc) = proper_nc_with_nf { return nc; }
-        if let Some(nc) = proper_nc_no_nf   { return nc; }
-        if let Some(nc) = first_nc { return nc; }
+        let chosen = proper_idx_with_nf.or(proper_idx_no_nf).or(first_idx);
+        if let Some(idx) = chosen {
+            return items[idx].normal_case.as_ref().unwrap().clone();
+        }
         return txt.term.clone();
     }
     String::new()
@@ -859,7 +860,7 @@ fn try_prefix_person(
     if let Some(e) = table.get(&term0) {
         entry = Some(e);
     } else {
-        // 2-word: term0 + term1
+        // 2-word: term0 + term1 — use a reusable buffer instead of format!()
         let t1 = t.borrow().next.clone()?;
         if !t1.borrow().is_newline_before(sofa) {
             let term1 = {
@@ -867,12 +868,15 @@ fn try_prefix_person(
                 let TokenKind::Text(txt) = &tb.kind else { return None; };
                 txt.term.clone()
             };
-            let two = format!("{} {}", term0, term1);
-            if let Some(e) = table.get(&two) {
+            let mut buf = String::with_capacity(term0.len() + 1 + term1.len() + 1 + 20);
+            buf.push_str(&term0);
+            buf.push(' ');
+            buf.push_str(&term1);
+            if let Some(e) = table.get(&buf) {
                 entry = Some(e);
                 prefix_end = t1.clone();
             } else {
-                // 3-word: term0 + term1 + term2
+                // 3-word: extend buffer with term2
                 let t2 = t1.borrow().next.clone()?;
                 if !t2.borrow().is_newline_before(sofa) {
                     let term2 = {
@@ -880,8 +884,9 @@ fn try_prefix_person(
                         let TokenKind::Text(txt) = &tb.kind else { return None; };
                         txt.term.clone()
                     };
-                    let three = format!("{} {} {}", term0, term1, term2);
-                    if let Some(e) = table.get(&three) {
+                    buf.push(' ');
+                    buf.push_str(&term2);
+                    if let Some(e) = table.get(&buf) {
                         entry = Some(e);
                         prefix_end = t2.clone();
                     }

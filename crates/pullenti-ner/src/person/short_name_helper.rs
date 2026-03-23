@@ -61,14 +61,16 @@ fn get_names_map() -> &'static HashMap<String, Vec<String>> {
     NAMES_MAP.get_or_init(build_names_map)
 }
 
-/// Returns `(full_name, gender)` pairs for a given short name (case-insensitive).
+/// Returns `(full_name, gender)` pairs for a given short name.
+/// Input should be uppercase (morph terms are always uppercase).
 /// E.g. "САША" → [("АЛЕКСАНДР", 1), ("АЛЕКСАНДРА", 2)]
 pub fn get_names_for_shortname(shortname: &str) -> Option<&'static Vec<(String, i32)>> {
-    get_map().get(&shortname.to_uppercase())
+    get_map().get(shortname)
 }
 
-/// Returns short-name variants for a given full name (case-insensitive).
+/// Returns short-name variants for a given full name.
+/// Input should be uppercase (morph terms are always uppercase).
 /// E.g. "АЛЕКСАНДР" → ["САША", "ШУРА", "АЛЕКС", …]
 pub fn get_shortnames_for_name(name: &str) -> Option<&'static Vec<String>> {
-    get_names_map().get(&name.to_uppercase())
+    get_names_map().get(name)
 }

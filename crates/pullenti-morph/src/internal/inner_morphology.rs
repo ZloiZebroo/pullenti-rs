@@ -86,7 +86,6 @@ impl InnerMorphology {
         }
 
         let twr = TextWrapper::new(text, good_text);
-        let text_chars: Vec<char> = text.chars().collect();
         let mut res: Vec<MorphToken> = Vec::with_capacity(text.len() / 6);
         let mut uni_lex: HashMap<String, UniLexWrap> = HashMap::new();
 
@@ -125,7 +124,7 @@ impl InnerMorphology {
                 };
             }
 
-            let wstr: String = text_chars[i..j].iter().collect();
+            let wstr: String = twr.text_chars[i..j].iter().collect();
             let term = if good_text {
                 Some(wstr.clone())
             } else {
@@ -227,40 +226,31 @@ impl InnerMorphology {
                     if ui00.is_latin() { ci.set_latin_letter(true); }
                     else if ui00.is_cyrillic() { ci.set_cyrillic_letter(true); }
 
-                    if tok.language().is_undefined() {
-                        if LanguageHelper::is_cyrillic(term) {
-                            tok.set_language(if def_lang.is_undefined() { MorphLang::RU } else { def_lang });
-                        }
+                    if tok.language().is_undefined() && ui00.is_cyrillic() {
+                        tok.set_language(if def_lang.is_undefined() { MorphLang::RU } else { def_lang });
                     }
 
                     if !good_text {
-                        let mut all_up = true;
-                        let mut all_lo = true;
+                        // Single-pass case detection
+                        let len = end - begin + 1;
+                        let mut upper_count = 0usize;
+                        let mut lower_count = 0usize;
                         for j in begin..=end {
                             let ch = twr.get_char(j);
-                            if ch.is_upper() || ch.is_digit() { all_lo = false; }
-                            else { all_up = false; }
+                            if ch.is_upper() || ch.is_digit() { upper_count += 1; }
+                            else if ch.is_lower() { lower_count += 1; }
                         }
-                        if all_up { ci.set_all_upper(true); }
-                        else if all_lo { ci.set_all_lower(true); }
+                        if upper_count == len { ci.set_all_upper(true); }
+                        else if lower_count == len { ci.set_all_lower(true); }
                         else if (ui0.is_upper() || twr.get_char(begin).is_digit()) && end > begin {
-                            let mut rest_lo = true;
-                            for j in (begin + 1)..=end {
-                                if twr.get_char(j).is_upper() || twr.get_char(j).is_digit() {
-                                    rest_lo = false;
-                                    break;
+                            // First char is upper — check if rest are all lower
+                            if upper_count == 1 && lower_count == len - 1 {
+                                ci.set_capital_upper(true);
+                            } else if twr.get_char(end).is_lower() && len > 2 {
+                                // Check if only last char is lower (init_up pattern)
+                                if lower_count == 1 {
+                                    ci.set_last_lower(true);
                                 }
-                            }
-                            if rest_lo { ci.set_capital_upper(true); }
-                            else if twr.get_char(end).is_lower() && (end - begin) > 1 {
-                                let mut init_up = true;
-                                for j in begin..end {
-                                    if twr.get_char(j).is_lower() {
-                                        init_up = false;
-                                        break;
-                                    }
-                                }
-                                if init_up { ci.set_last_lower(true); }
                             }
                         }
                     }

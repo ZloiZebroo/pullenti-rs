@@ -6,6 +6,28 @@ use crate::{MorphLang, MorphCase};
 static PREP_CASES: OnceLock<HashMap<String, MorphCase>> = OnceLock::new();
 static PREP_NORMS: OnceLock<HashMap<String, String>> = OnceLock::new();
 
+struct CachedChars {
+    lat: Vec<char>,
+    cyr: Vec<char>,
+    udar: Vec<char>,
+    udar_cyr: Vec<char>,
+    rus0: Vec<char>,
+    rus1: Vec<char>,
+}
+
+static CACHED_CHARS: OnceLock<CachedChars> = OnceLock::new();
+
+fn get_cached_chars() -> &'static CachedChars {
+    CACHED_CHARS.get_or_init(|| CachedChars {
+        lat: LanguageHelper::LAT_CHARS.chars().collect(),
+        cyr: LanguageHelper::CYR_CHARS.chars().collect(),
+        udar: LanguageHelper::UDAR_CHARS.chars().collect(),
+        udar_cyr: LanguageHelper::UDAR_CYR_CHARS.chars().collect(),
+        rus0: LanguageHelper::RUS0.chars().collect(),
+        rus1: LanguageHelper::RUS1.chars().collect(),
+    })
+}
+
 pub struct LanguageHelper;
 
 impl LanguageHelper {
@@ -202,8 +224,9 @@ impl LanguageHelper {
         let mut res: String = w.to_uppercase();
 
         // Replace special Russian characters
-        let rus0_chars: Vec<char> = Self::RUS0.chars().collect();
-        let rus1_chars: Vec<char> = Self::RUS1.chars().collect();
+        let cc = get_cached_chars();
+        let rus0_chars = &cc.rus0;
+        let rus1_chars = &cc.rus1;
         let needs_fix = res.chars().any(|ch| rus0_chars.contains(&ch));
         if needs_fix {
             let mut tmp: Vec<char> = res.chars().collect();
@@ -231,10 +254,11 @@ impl LanguageHelper {
     }
 
     pub fn transliteral_correction(value: &str, prev_value: Option<&str>, always: bool) -> String {
-        let lat_chars: Vec<char> = Self::LAT_CHARS.chars().collect();
-        let cyr_chars: Vec<char> = Self::CYR_CHARS.chars().collect();
-        let udar_chars: Vec<char> = Self::UDAR_CHARS.chars().collect();
-        let udar_cyr_chars: Vec<char> = Self::UDAR_CYR_CHARS.chars().collect();
+        let cc = get_cached_chars();
+        let lat_chars = &cc.lat;
+        let cyr_chars = &cc.cyr;
+        let udar_chars = &cc.udar;
+        let udar_cyr_chars = &cc.udar_cyr;
 
         let mut pure_cyr = 0i32;
         let mut pure_lat = 0i32;

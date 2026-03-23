@@ -1,9 +1,10 @@
+use std::collections::HashMap;
 use super::byte_array_wrapper::ByteArrayWrapper;
 use super::morph_rule_variant::MorphRuleVariant;
 
 pub struct MorphRule {
     pub id: i32,
-    pub tails: Vec<String>,
+    tail_map: HashMap<String, usize>,
     pub morph_vars: Vec<Vec<MorphRuleVariant>>,
     pub lazy_pos: usize,
 }
@@ -12,19 +13,18 @@ impl MorphRule {
     pub fn new() -> Self {
         MorphRule {
             id: 0,
-            tails: Vec::new(),
+            tail_map: HashMap::new(),
             morph_vars: Vec::new(),
             lazy_pos: 0,
         }
     }
 
     pub fn contains_var(&self, tail: &str) -> bool {
-        self.tails.iter().any(|t| t == tail)
+        self.tail_map.contains_key(tail)
     }
 
     pub fn get_vars(&self, key: &str) -> Option<&Vec<MorphRuleVariant>> {
-        self.tails.iter().position(|t| t == key)
-            .map(|i| &self.morph_vars[i])
+        self.tail_map.get(key).map(|&i| &self.morph_vars[i])
     }
 
     pub fn find_var(&self, id: i16) -> Option<&MorphRuleVariant> {
@@ -39,8 +39,13 @@ impl MorphRule {
     }
 
     pub fn add(&mut self, tail: String, vars: Vec<MorphRuleVariant>) {
-        self.tails.push(tail);
+        let idx = self.morph_vars.len();
+        self.tail_map.insert(tail, idx);
         self.morph_vars.push(vars);
+    }
+
+    pub fn tails(&self) -> impl Iterator<Item = &String> {
+        self.tail_map.keys()
     }
 
     pub fn deserialize(&mut self, str: &ByteArrayWrapper, pos: &mut usize) {
@@ -75,7 +80,7 @@ impl MorphRule {
 
 impl std::fmt::Display for MorphRule {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let parts: Vec<String> = self.tails.iter().map(|t| format!("-{}", t)).collect();
+        let parts: Vec<String> = self.tail_map.keys().map(|t| format!("-{}", t)).collect();
         write!(f, "{}", parts.join(", "))
     }
 }
