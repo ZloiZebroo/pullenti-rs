@@ -73,27 +73,43 @@ impl Analyzer for AddressAnalyzer {
 /// Returns (StreetReferent, end_token).
 fn try_parse_street(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Referent, TokenRef)> {
     let tb = t.borrow();
-    if let TokenKind::Text(txt) = &tb.kind {
-        // txt.term is already uppercase; morph normal_case/normal_full are too
-        let surf_upper = txt.term.clone();
-        let morph_uppers = collect_morph_forms(&tb);
-        drop(tb);
+    let txt = match &tb.kind {
+        TokenKind::Text(txt) => txt,
+        _ => return None,
+    };
+    // txt.term is already uppercase; morph normal_case/normal_full are too
 
-        // Pattern A: street-type abbreviation/keyword FIRST, then name(s)
-        // e.g. "ул. Ленина", "пр. Мира", "проспект Революции"
-        for key in std::iter::once(surf_upper.as_str()).chain(morph_uppers.iter().map(String::as_str)) {
-            if let Some(entry) = street_table::lookup_street_type(key) {
-                if let Some((name, end)) = collect_street_name_after(t, sofa) {
-                    let mut r = ar::new_street_referent();
-                    ar::add_slot_str(&mut r, ar::STREET_ATTR_TYPE, &entry.canonical);
-                    ar::add_slot_str(&mut r, ar::STREET_ATTR_NAME, &name);
-                    return Some((r, end));
-                }
-            }
+    // Fast path: try term directly — no Vec allocation for the ~99% of tokens
+    // that are not street-type keywords.
+    if let Some(entry) = street_table::lookup_street_type(&txt.term) {
+        let canonical = entry.canonical.clone();
+        drop(tb);
+        if let Some((name, end)) = collect_street_name_after(t, sofa) {
+            let mut r = ar::new_street_referent();
+            ar::add_slot_str(&mut r, ar::STREET_ATTR_TYPE, &canonical);
+            ar::add_slot_str(&mut r, ar::STREET_ATTR_NAME, &name);
+            return Some((r, end));
         }
         return None;
     }
+
+    // Slow path: check morph normal forms (Vec allocated only on term miss,
+    // which is already rare — morph inflection of "улица" → "УЛИЦА" etc.)
+    let morph_uppers = collect_morph_forms(&tb);
     drop(tb);
+
+    for key in morph_uppers.iter().map(String::as_str) {
+        if let Some(entry) = street_table::lookup_street_type(key) {
+            let canonical = entry.canonical.clone();
+            if let Some((name, end)) = collect_street_name_after(t, sofa) {
+                let mut r = ar::new_street_referent();
+                ar::add_slot_str(&mut r, ar::STREET_ATTR_TYPE, &canonical);
+                ar::add_slot_str(&mut r, ar::STREET_ATTR_NAME, &name);
+                return Some((r, end));
+            }
+            return None;
+        }
+    }
     None
 }
 
@@ -195,9 +211,13 @@ fn extend_street_name(start: String, start_tok: TokenRef, sofa: &SourceOfAnalysi
                     cur = next;
                     continue;
                 }
-                // If this token is a street type keyword, stop (e.g. "Ленина ул." — suffix form)
-                let morph_forms = collect_morph_forms(&tb);
-                if morph_forms.iter().any(|u| street_table::lookup_street_type(u).is_some()) { break; }
+                // If this token is a street type keyword, stop (e.g. "Ленина ул." — suffix form).
+                // Check term first (no alloc), then morph forms inline (no Vec).
+                if street_table::lookup_street_type(&txt.term).is_some() { break; }
+                if tb.morph.items().iter().any(|wf| {
+                    wf.normal_case.as_deref().map_or(false, |s| street_table::lookup_street_type(s).is_some())
+                    || wf.normal_full.as_deref().map_or(false, |s| street_table::lookup_street_type(s).is_some())
+                }) { break; }
 
                 // Stop on clearly-stop words
                 if is_name_stop_word(&txt.term) { break; }

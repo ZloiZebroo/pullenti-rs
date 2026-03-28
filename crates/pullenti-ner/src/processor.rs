@@ -130,6 +130,11 @@ impl Processor {
         self.analyzers.len()
     }
 
+    /// Names of registered analyzers
+    pub fn analyzer_names(&self) -> Vec<String> {
+        self.analyzers.iter().map(|a| a.name().to_string()).collect()
+    }
+
     /// Main analysis entry point
     pub fn process(&self, sofa: SourceOfAnalysis, lang: Option<MorphLang>) -> AnalysisResult {
         let lang = lang.unwrap_or(MorphLang::UNKNOWN);

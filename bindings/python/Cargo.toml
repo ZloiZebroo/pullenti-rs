@@ -13,6 +13,6 @@ crate-type = ["cdylib"]
 
 [dependencies]
 pyo3 = { version = "0.28.2", features = ["extension-module"] }
-pullenti-ner      = { path = "../../crates/pullenti-ner" }
+pullenti-ner      = { path = "../../crates/pullenti-ner", features = ["parallel"] }
 pullenti-morph    = { path = "../../crates/pullenti-morph" }
 pullenti-semantic = { path = "../../crates/pullenti-semantic" }

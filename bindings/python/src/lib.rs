@@ -196,6 +196,23 @@ impl PyReferent {
         self.occurrences_data.iter().map(|o| Py::new(py, o.clone())).collect()
     }
 
+    /// Dict-like access: ``referent["FIRSTNAME"]`` — returns first value or raises KeyError.
+    fn __getitem__(&self, name: &str) -> PyResult<String> {
+        self.slots_data.iter().find(|s| s.name == name)
+            .map(|s| s.value.clone())
+            .ok_or_else(|| pyo3::exceptions::PyKeyError::new_err(name.to_string()))
+    }
+
+    /// Check if a slot with the given name exists: ``"FIRSTNAME" in referent``.
+    fn __contains__(&self, name: &str) -> bool {
+        self.slots_data.iter().any(|s| s.name == name)
+    }
+
+    /// Get all values of the named slot.
+    fn get_all(&self, name: &str) -> Vec<String> {
+        self.slots_data.iter().filter(|s| s.name == name).map(|s| s.value.clone()).collect()
+    }
+
     /// Get the first value of the named slot, or None.
     fn get(&self, name: &str) -> Option<String> {
         self.slots_data.iter().find(|s| s.name == name).map(|s| s.value.clone())
@@ -224,8 +241,34 @@ impl PyAnalysisResult {
 
     fn __len__(&self) -> usize { self.referents_data.len() }
 
+    fn __iter__(slf: Py<Self>, py: Python<'_>) -> PyResult<Py<PyAnalysisResultIter>> {
+        Py::new(py, PyAnalysisResultIter { inner: slf, index: 0 })
+    }
+
     fn __repr__(&self) -> String {
         format!("AnalysisResult({} entities)", self.referents_data.len())
+    }
+}
+
+#[pyclass]
+struct PyAnalysisResultIter {
+    inner: Py<PyAnalysisResult>,
+    index: usize,
+}
+
+#[pymethods]
+impl PyAnalysisResultIter {
+    fn __iter__(slf: Py<Self>) -> Py<Self> { slf }
+
+    fn __next__(&mut self, py: Python<'_>) -> Option<Py<PyReferent>> {
+        let ar = self.inner.borrow(py);
+        if self.index < ar.referents_data.len() {
+            let item = ar.referents_data[self.index].clone_ref(py);
+            self.index += 1;
+            Some(item)
+        } else {
+            None
+        }
     }
 }
 
@@ -630,6 +673,41 @@ impl PyProcessor {
         let sofa = SourceOfAnalysis::new(text.to_string());
         let ar = self.inner.process(sofa, rust_lang);
         convert_analysis_result(py, ar)
+    }
+
+    /// Analyze multiple texts in parallel (uses all CPU cores).
+    ///
+    /// Args:
+    ///   texts: List of input strings.
+    ///   lang: Optional ``MorphLang`` (default: auto-detect).
+    ///
+    /// Returns a list of :class:`AnalysisResult`, one per input text.
+    #[pyo3(signature = (texts, lang=None))]
+    fn analyze_batch(
+        &self,
+        py: Python<'_>,
+        texts: Vec<String>,
+        lang: Option<Bound<'_, PyMorphLang>>,
+    ) -> PyResult<Vec<Py<PyAnalysisResult>>> {
+        let rust_lang = lang.as_ref().map(|l| l.borrow().to_rust());
+        let docs: Vec<_> = texts.into_iter()
+            .map(|t| (SourceOfAnalysis::new(t), rust_lang))
+            .collect();
+        let results = self.inner.process_batch(docs);
+        results.into_iter()
+            .map(|ar| convert_analysis_result(py, ar))
+            .collect()
+    }
+
+    /// Remove an analyzer by name (e.g. ``"LINK"``, ``"PERSON"``).
+    fn remove_analyzer(&mut self, name: &str) {
+        self.inner.remove_analyzer(name);
+    }
+
+    /// List of analyzer names currently registered in this processor.
+    #[getter]
+    fn analyzer_names(&self) -> Vec<String> {
+        self.inner.analyzer_names()
     }
 
     /// Analyze text with NER and semantic analysis.
@@ -1056,6 +1134,7 @@ fn module_init(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PySlot>()?;
     m.add_class::<PyReferent>()?;
     m.add_class::<PyAnalysisResult>()?;
+    m.add_class::<PyAnalysisResultIter>()?;
     // Semantic types
     m.add_class::<PySemObject>()?;
     m.add_class::<PySemLink>()?;

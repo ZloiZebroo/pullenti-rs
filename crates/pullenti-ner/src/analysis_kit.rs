@@ -6,7 +6,7 @@ use std::any::Any;
 
 use pullenti_morph::MorphLang;
 use crate::source_of_analysis::SourceOfAnalysis;
-use crate::token::{TokenRef, build_token_chain};
+use crate::token::{TokenRef, TokenKind, build_token_chain};
 use crate::referent::Referent;
 
 /// Per-analyzer state stored in AnalysisKit
@@ -30,6 +30,8 @@ pub struct AnalysisKit {
     pub entities: Vec<Rc<RefCell<Referent>>>,
     /// Per-analyzer scratch data (keyed by analyzer name)
     pub analyzer_data: HashMap<String, AnalyzerData>,
+    /// Dedup index: (type_name, first_slot_value) → indices into entities Vec
+    entity_dedup: HashMap<(String, String), Vec<usize>>,
 }
 
 impl AnalysisKit {
@@ -40,6 +42,7 @@ impl AnalysisKit {
             base_language: MorphLang::UNKNOWN,
             entities: Vec::new(),
             analyzer_data: HashMap::new(),
+            entity_dedup: HashMap::new(),
         }
     }
 
@@ -73,72 +76,105 @@ impl AnalysisKit {
     /// Register an entity in the kit, deduplicating by slot equality.
     /// Returns the canonical entity (existing one if dedup matched, otherwise the new one).
     pub fn add_entity(&mut self, r: Rc<RefCell<Referent>>) -> Rc<RefCell<Referent>> {
-        // Collect non-internal string slots for comparison
-        let type_name = r.borrow().type_name.clone();
-        let slots: Vec<(String, String)> = r.borrow().slots.iter()
-            .filter(|s| !s.is_internal())
-            .filter_map(|s| {
-                s.value.as_ref()
-                    .and_then(|v| v.as_str())
-                    .map(|sv| (s.type_name.clone(), sv.to_string()))
-            })
-            .collect();
+        // Collect non-internal string slots for comparison — single borrow block
+        let (type_name, slots): (String, Vec<(String, String)>) = {
+            let rb = r.borrow();
+            let tn = rb.type_name.clone();
+            let sl = rb.slots.iter()
+                .filter(|s| !s.is_internal())
+                .filter_map(|s| {
+                    s.value.as_ref()
+                        .and_then(|v| v.as_str())
+                        .map(|sv| (s.type_name.clone(), sv.to_string()))
+                })
+                .collect();
+            (tn, sl)
+        };
 
         if !slots.is_empty() {
-            for existing in &self.entities {
-                let existing_b = existing.borrow();
-                if existing_b.type_name != type_name { continue; }
-                // Check bidirectional slot equality (string slots only)
-                let a_in_b = slots.iter().all(|(name, val)| {
-                    existing_b.find_slot(name, Some(val)).is_some()
-                });
-                if !a_in_b { continue; }
-                let b_in_a = existing_b.slots.iter()
-                    .filter(|s| !s.is_internal())
-                    .filter_map(|s| s.value.as_ref().and_then(|v| v.as_str())
-                        .map(|sv| (s.type_name.as_str(), sv.to_string())))
-                    .all(|(name, val)| {
-                        slots.iter().any(|(n, v)| n == name && v == &val)
+            // Build dedup key from first slot
+            let dedup_key = (type_name.clone(), slots[0].1.clone());
+
+            // Only check candidates with matching dedup key (instead of ALL entities)
+            if let Some(candidates) = self.entity_dedup.get(&dedup_key) {
+                for &idx in candidates {
+                    let existing = &self.entities[idx];
+                    let existing_b = existing.borrow();
+                    // Check bidirectional slot equality (string slots only)
+                    let a_in_b = slots.iter().all(|(name, val)| {
+                        existing_b.find_slot(name, Some(val)).is_some()
                     });
-                if b_in_a {
-                    // Merge occurrences from new into existing
-                    drop(existing_b);
-                    let new_occ: Vec<(i32, i32)> = r.borrow().occurrence.iter()
-                        .map(|o| (o.begin_char, o.end_char))
-                        .collect();
-                    for (bc, ec) in new_occ {
-                        existing.borrow_mut().add_occurrence(bc, ec);
+                    if !a_in_b { continue; }
+                    let b_in_a = existing_b.slots.iter()
+                        .filter(|s| !s.is_internal())
+                        .filter_map(|s| s.value.as_ref().and_then(|v| v.as_str())
+                            .map(|sv| (s.type_name.as_str(), sv.to_string())))
+                        .all(|(name, val)| {
+                            slots.iter().any(|(n, v)| n == name && v == &val)
+                        });
+                    if b_in_a {
+                        // Merge occurrences from new into existing
+                        drop(existing_b);
+                        let new_occ: Vec<(i32, i32)> = r.borrow().occurrence.iter()
+                            .map(|o| (o.begin_char, o.end_char))
+                            .collect();
+                        for (bc, ec) in new_occ {
+                            existing.borrow_mut().add_occurrence(bc, ec);
+                        }
+                        return existing.clone();
                     }
-                    return existing.clone();
                 }
             }
+
+            // No match found — register in dedup index
+            let idx = self.entities.len();
+            self.entity_dedup.entry(dedup_key).or_default().push(idx);
         }
 
         self.entities.push(r.clone());
         r
     }
 
-    /// Embed a meta token into the chain, replacing the span from begin to end
+    /// Embed a meta token into the chain, replacing the span from begin to end.
+    /// Uses begin_token/end_token from MetaTokenData for O(1) neighbor lookup
+    /// instead of scanning the entire token chain.
     pub fn embed_token(&mut self, meta: TokenRef) {
-        let (meta_begin, meta_end) = {
+        // Try fast path: extract begin/end tokens from MetaTokenData
+        let (prev, after) = {
             let m = meta.borrow();
-            (m.begin_char, m.end_char)
+            match &m.kind {
+                TokenKind::Referent(rd) => {
+                    let prev = rd.meta.begin_token.as_ref()
+                        .and_then(|bt| bt.borrow().prev.as_ref().and_then(|w| w.upgrade()));
+                    let after = rd.meta.end_token.as_ref()
+                        .and_then(|et| et.borrow().next.clone());
+                    (prev, after)
+                }
+                _ => {
+                    // Fallback: scan for position (non-referent tokens)
+                    let meta_begin = m.begin_char;
+                    let meta_end = m.end_char;
+                    drop(m);
+                    return self.embed_token_scan(meta, meta_begin, meta_end);
+                }
+            }
         };
 
-        // Find the token just before meta_begin
+        self.wire_token(meta, prev, after);
+    }
+
+    /// Fallback: scan token chain to find neighbors (for non-referent tokens)
+    fn embed_token_scan(&mut self, meta: TokenRef, meta_begin: i32, meta_end: i32) {
         let mut prev: Option<TokenRef> = None;
         let mut t = self.first_token.clone();
-
         while let Some(tok) = t.clone() {
-            let tok_begin = tok.borrow().begin_char;
-            if tok_begin >= meta_begin { break; }
+            if tok.borrow().begin_char >= meta_begin { break; }
             prev = Some(tok.clone());
             t = tok.borrow().next.clone();
         }
 
-        // Find the token just after meta_end
         let mut after: Option<TokenRef> = None;
-        let mut t2 = t.clone();
+        let mut t2 = t;
         while let Some(tok) = t2 {
             let tok_end = tok.borrow().end_char;
             t2 = tok.borrow().next.clone();
@@ -148,7 +184,11 @@ impl AnalysisKit {
             }
         }
 
-        // Wire meta token into chain
+        self.wire_token(meta, prev, after);
+    }
+
+    /// Wire a meta token between prev and after in the chain
+    fn wire_token(&mut self, meta: TokenRef, prev: Option<TokenRef>, after: Option<TokenRef>) {
         {
             let mut m = meta.borrow_mut();
             m.prev = prev.as_ref().map(|p| Rc::downgrade(p));

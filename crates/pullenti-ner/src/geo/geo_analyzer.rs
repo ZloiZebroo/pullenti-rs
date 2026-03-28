@@ -286,62 +286,62 @@ fn try_type_keyword_prefix(
 
 fn try_direct_name(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Referent, TokenRef)> {
     // ── Pre-lookup guards ──────────────────────────────────────────────────────
-    // Compute surface text and term once; all guards below use them.
-    let (surface, term): (String, String) = {
+    // Compute all scalar properties in one borrow block — no sofa.substring() allocation,
+    // O(1) length via length_char(), O(1) first char via sofa.char_at().
+    // is_all_ascii is computed once from txt.term bytes (txt.term IS uppercase surface),
+    // avoiding 3× repeated surface.chars() scans in the candidates loop.
+    let (term, char_count, first_char, is_all_ascii, is_adj, is_all_upper): (String, i32, char, bool, bool, bool) = {
         let tb = t.borrow();
         match &tb.kind {
-            TokenKind::Text(txt) => (
-                sofa.substring(tb.begin_char, tb.end_char).to_string(),
-                txt.term.clone(), // already uppercase from morph engine
-            ),
+            TokenKind::Text(txt) => {
+                let fc = sofa.char_at(tb.begin_char);
+                let all_ascii = txt.term.bytes().all(|b| b.is_ascii_alphabetic());
+                let adj = tb.morph.items().iter().any(|wf| wf.base.class.is_adjective());
+                (txt.term.clone(), tb.length_char(), fc, all_ascii, adj, tb.chars.is_all_upper())
+            }
             _ => return None,
         }
     };
-    let char_count = surface.chars().count();
 
     // Guard 1 — Geo proper nouns always start with an uppercase letter.
     //   Rejects common English words mid-sentence: "early", "long", "ness", …
-    if surface.chars().next().map(|c| c.is_alphabetic() && c.is_lowercase()).unwrap_or(false) {
+    if first_char.is_alphabetic() && first_char.is_lowercase() {
         return None;
     }
 
     // Guard 1b — Russian function words (conjunctions, particles) that begin a
     //   sentence with an uppercase letter but are never place names.
-    //   Use term (already uppercase) to avoid allocating an uppercase copy of surface.
-    {
-        if matches!(term.as_str(),
-            "ЕСЛИ" | "КОГДА" | "ХОТЯ" | "ПОКА" | "ПУСТЬ" | "ПОТОМУ" |
-            "ПОЭТОМУ" | "ОДНАКО" | "ЗАТО" | "ЛИБО" | "ТОЖЕ" | "ТАКЖЕ" |
-            "КОТОРЫЙ" | "КОТОРАЯ" | "КОТОРОЕ" | "КОТОРЫЕ" |
-            "ЧТОБЫ" | "ПРИЧЁМ" | "ПРИТОМ"
-        ) {
-            return None;
-        }
+    if matches!(term.as_str(),
+        "ЕСЛИ" | "КОГДА" | "ХОТЯ" | "ПОКА" | "ПУСТЬ" | "ПОТОМУ" |
+        "ПОЭТОМУ" | "ОДНАКО" | "ЗАТО" | "ЛИБО" | "ТОЖЕ" | "ТАКЖЕ" |
+        "КОТОРЫЙ" | "КОТОРАЯ" | "КОТОРОЕ" | "КОТОРЫЕ" |
+        "ЧТОБЫ" | "ПРИЧЁМ" | "ПРИТОМ"
+    ) {
+        return None;
     }
 
     // Guard 2 — Very short tokens (≤ 2 chars).
     if char_count <= 2 {
-        // 2a. Must be all-uppercase.
+        // 2a. Must be all-uppercase (CharsInfo flag — O(1), no chars() scan).
         //   Rejects "At", "In", "Li", "re", "by", … (title-case/lowercase).
-        let all_upper = surface.chars().all(|c| !c.is_alphabetic() || c.is_uppercase());
-        if !all_upper {
+        if !is_all_upper {
             return None;
         }
         // 2b. All-ASCII-Latin 2-char tokens are too ambiguous.
         //   "IR"=Information Retrieval vs Iran, "ID"=Identifier vs Indonesia,
-        //   "LR"=Learning Rate vs Liberia, "AI"=artificial intelligence vs Anguilla.
-        //   Cyrillic abbreviations like "РФ", "ЕС" are NOT affected by this check.
-        if surface.chars().all(|c| c.is_ascii_alphabetic()) {
+        //   Cyrillic abbreviations like "РФ", "ЕС" are NOT affected.
+        if is_all_ascii {
             return None;
         }
         // 2c. All-uppercase 2-char token immediately followed by apostrophe →
         //   possessive (e.g. "AI's"), not a standalone geo entity.
+        //   Use sofa.char_at() instead of substring() — no allocation.
         let tb = t.borrow();
         if let Some(next) = tb.next.clone() {
             let nb = next.borrow();
             if nb.whitespaces_before_count(sofa) == 0 {
-                let ns = sofa.substring(nb.begin_char, nb.end_char);
-                if ns.starts_with('\'') || ns.starts_with('\u{2019}') {
+                let nc = sofa.char_at(nb.begin_char);
+                if nc == '\'' || nc == '\u{2019}' {
                     return None;
                 }
             }
@@ -349,11 +349,8 @@ fn try_direct_name(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Referent, T
     }
 
     // ── Single-token table lookup ──────────────────────────────────────────────
+    // is_adj and is_all_ascii already computed above — no extra borrow needed here.
     let candidates = collect_candidates(t, sofa);
-    let is_adj = {
-        let tb = t.borrow();
-        tb.morph.items().iter().any(|wf| wf.base.class.is_adjective())
-    };
 
     for c in &candidates {
         if let Some(entry) = geo_table::lookup_name(c) {
@@ -363,46 +360,30 @@ fn try_direct_name(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Referent, T
             }
 
             // Guard 3 — Selective filter for pure-ASCII-Latin surfaces.
-            if surface.chars().all(|c| c.is_ascii_alphabetic()) {
+            // Uses pre-computed is_all_ascii — no repeated chars() scan.
+            if is_all_ascii {
                 let should_block = match entry.kind {
                     // City entries: block only very short canonical names (≤ 4 chars).
-                    // Words like "Long" (4), "Yolo" (4), "Ness" (4), "Bath" (4) appear
-                    // in worldwide city databases but are clearly common English words
-                    // in context.  Well-known cities — Miami (5), Bangkok (7),
-                    // Singapore (9) — still pass.
                     GeoEntryKind::City => entry.canonical_name.chars().count() <= 4,
-
                     // Region entries: block sub-national county / district units.
-                    // US county names (Howard County, Lewis County, Long County, …)
-                    // are identical to common English surnames and cause PERSON tokens
-                    // to be wrongly labelled GEO.  Major administrative divisions
-                    // (states / provinces / oblasts) are legitimate and kept.
                     GeoEntryKind::Region => matches!(
                         entry.type_str.as_str(),
                         "county" | "графство" | "район" | "уезд" | "волость" | "district"
                     ),
-
                     // State (sovereign country): never blocked.
                     GeoEntryKind::State => false,
                 };
                 if should_block { continue; }
             }
 
-            // ── Guard: ASCII city/region preceded or followed by an uppercase
-            //    Latin word that is NOT itself a geo name → likely a person name
-            //    context ("Pierre Andrews", "Kaifeng Chen", "Matthew Wallingford").
-            if matches!(entry.kind, GeoEntryKind::City | GeoEntryKind::Region)
-                && surface.chars().all(|c| c.is_ascii_alphabetic())
-            {
+            // ── Guard: ASCII city/region in person-name context.
+            if matches!(entry.kind, GeoEntryKind::City | GeoEntryKind::Region) && is_all_ascii {
                 if in_person_name_context(t, sofa) { continue; }
             }
 
             // ── Guard: Cyrillic city/region with a proper-surname morph class
             //    OR preceded by a Russian patronymic → likely a surname.
-            //    Example: "Иванова" (ИВАНОВО city) after "Петровна" is a surname.
-            if matches!(entry.kind, GeoEntryKind::City | GeoEntryKind::Region)
-                && !surface.chars().all(|c| c.is_ascii_alphabetic())
-            {
+            if matches!(entry.kind, GeoEntryKind::City | GeoEntryKind::Region) && !is_all_ascii {
                 let is_surname = {
                     let tb = t.borrow();
                     tb.morph.items().iter().any(|wf| wf.base.class.is_proper_surname())
@@ -905,14 +886,8 @@ fn collect_candidates(t: &TokenRef, sofa: &SourceOfAnalysis) -> Vec<String> {
     let tb = t.borrow();
     let mut out: Vec<String> = Vec::with_capacity(6);
     if let TokenKind::Text(txt) = &tb.kind {
-        // morph term (already uppercase)
+        // txt.term is already the uppercase surface — no sofa.substring() needed
         out.push(txt.term.clone());
-        // surface text (may differ from term for transliterated words)
-        let surface = sofa.substring(tb.begin_char, tb.end_char);
-        let surface_up = surface.to_uppercase();
-        if surface_up != txt.term {
-            out.push(surface_up);
-        }
         // morph normal forms (already uppercase)
         for wf in tb.morph.items() {
             if let Some(nc) = &wf.normal_case {
@@ -923,6 +898,7 @@ fn collect_candidates(t: &TokenRef, sofa: &SourceOfAnalysis) -> Vec<String> {
             }
         }
     }
+    let _ = sofa; // suppress unused warning
     out
 }
 

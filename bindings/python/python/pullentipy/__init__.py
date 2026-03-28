@@ -3,20 +3,28 @@ pullentipy — Python bindings for the Pullenti NLP SDK.
 
 Quick start::
 
-    from pullentipy import Sdk, MorphLang, PersonAnalyzer, GeoAnalyzer, OrgAnalyzer
+    from pullentipy import Processor, PersonAnalyzer, GeoAnalyzer
 
     # Option A — all built-in analyzers
-    Sdk.initialize_all(lang='ru')
+    proc = Processor(lang='ru')
+    result = proc.analyze("Иван Петров живёт в Москве")
+    for r in result:
+        print(r.entity_type, r.text)
+        print(r["FIRSTNAME"])   # dict-like slot access
 
     # Option B — specific analyzers only
-    Sdk.initialize_with(lang='ru', analyzers=[PersonAnalyzer(), GeoAnalyzer(), OrgAnalyzer()])
+    proc = Processor(lang='ru', analyzers=[PersonAnalyzer(), GeoAnalyzer()])
 
+    # Option C — legacy Sdk API (still works)
+    from pullentipy import Sdk
+    Sdk.initialize_all(lang='ru')
     proc = Sdk.create_processor()
-    result = proc.analyze("Иван Петров живёт в Москве")
-    for r in result.referents:
-        print(r.entity_type, r.text)
-        for s in r.slots:
-            print(" ", s.name, "=", s.value)
+    result = proc.analyze("Иван живёт в Москве")
+
+Batch processing (parallel, uses all CPU cores)::
+
+    proc = Processor(lang='ru')
+    results = proc.analyze_batch(["Иван в Москве", "Петров в Казани"])
 
 Person name normalization::
 
@@ -31,6 +39,15 @@ Morphological analysis::
     Sdk.initialize_all()
     for tok in morph_analyze("красные дома стоят"):
         print(tok.text, tok.lemma, [(f.pos, f.case) for f in tok.forms])
+
+Semantic analysis::
+
+    proc = Processor(lang='ru')
+    doc = proc.analyze_semantic("Иван работает в Москве")
+    for block in doc.blocks:
+        for frag in block.fragments:
+            for link in frag.links:
+                print(link.typ, link.source.normal, "->", link.target.normal)
 """
 
 from pullentipy._pullentipy import (

@@ -136,8 +136,21 @@ fn try_parse(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Referent, TokenRe
         return Some(r);
     }
 
+    // --- Single-pass morph classification for Pattern B and C ---
+    let (is_surname, is_name) = {
+        let tb = t.borrow();
+        let mut s = false;
+        let mut n = false;
+        for wf in tb.morph.items().iter() {
+            if wf.base.class.is_proper_surname() { s = true; }
+            if wf.base.class.is_proper_name() { n = true; }
+            if s && n { break; }
+        }
+        (s, n)
+    };
+
     // --- Pattern B: Surname as start ---
-    if is_proper_surname_token(t) {
+    if is_surname {
         // B1: Surname FirstName Patronymic
         if let Some(r) = try_surname_name_secname(t, sofa) { return Some(r); }
         // B2: Surname FirstName
@@ -149,7 +162,7 @@ fn try_parse(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Referent, TokenRe
     }
 
     // --- Pattern C: FirstName [Patronymic | Surname] ---
-    if is_proper_name_token(t) {
+    if is_name {
         // C1: FirstName + Patronymic
         if let Some(r) = try_name_secname(t, sofa) { return Some(r); }
         // C2: FirstName + Surname (e.g. "Михаилом Жуковым")
