@@ -40,9 +40,12 @@ impl Analyzer for PersonAnalyzer {
         let sofa = kit.sofa.clone();
         let mut cur = kit.first_token.clone();
         while let Some(t) = cur.clone() {
-            if t.borrow().is_ignored(&sofa) {
-                cur = t.borrow().next.clone();
-                continue;
+            {
+                let tb = t.borrow();
+                if tb.is_ignored(&sofa) || !matches!(tb.kind, TokenKind::Text(_) | TokenKind::Referent(_)) {
+                    cur = tb.next.clone();
+                    continue;
+                }
             }
             // Try: identity document (паспорт серия/номер) — before person patterns
             if let Some((referent, begin, end)) = person_id_token::try_attach(&t, &sofa) {
@@ -169,6 +172,54 @@ fn try_parse(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Referent, TokenRe
         if let Some(r) = try_name_surname(t, sofa) { return Some(r); }
     }
 
+    // --- Pattern F: Compound firstname + surname ---
+    // "Мария-Луиза фон Штраус", "Жан-Полем Бельмондо"
+    // Must try BEFORE hyphenated surname to avoid consuming "Мария-Луиза" as surname
+    if is_name {
+        if let Some(r) = try_compound_firstname_surname(t, sofa) {
+            return Some(r);
+        }
+    }
+
+    // --- Pattern E: Hyphenated compound surname ("Римский-Корсаков", "Хан-Магомедов") ---
+    if let Some(r) = try_hyphenated_surname(t, sofa) {
+        return Some(r);
+    }
+
+    // --- Pattern D: Capitalized word + Initials fallback ---
+    // When morph doesn't flag the word as surname/name, but it's capitalized
+    // and followed by initials ("Пестов Д.И."), try it as a person anyway.
+    // Skip if the token AFTER the initials is a proper surname (let Pattern A
+    // handle "word I.O. Surname" → "I.O. Surname" instead).
+    if !is_surname && !is_name {
+        let is_capitalized = {
+            let tb = t.borrow();
+            let surface = sofa.substring(tb.begin_char, tb.end_char);
+            surface.chars().count() >= 2
+                && surface.chars().next().map(|c| c.is_uppercase()).unwrap_or(false)
+                && surface.chars().skip(1).all(|c| c.is_lowercase())
+        };
+        if is_capitalized {
+            // Peek ahead: if initials exist and are followed by a proper surname,
+            // skip — Pattern A will match "I.O. Surname" on a later token.
+            let after_initials_is_surname = {
+                let n1 = t.borrow().next.clone();
+                if let Some(ref n1t) = n1 {
+                    if let Some((_, _, end)) = collect_initials(n1t, sofa) {
+                        let after = end.borrow().next.clone();
+                        after.map(|a| {
+                            let ab = a.borrow();
+                            ab.morph.items().iter().any(|wf| wf.base.class.is_proper_surname())
+                        }).unwrap_or(false)
+                    } else { false }
+                } else { false }
+            };
+            if !after_initials_is_surname {
+                if let Some(r) = try_surname_initials(t, sofa) { return Some(r); }
+            }
+        }
+    }
+
     None
 }
 
@@ -193,11 +244,12 @@ fn try_initials_then_surname(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(R
     drop(n1b);
 
     // Try to collect second initial: "В." pattern
+    // Allow a single space between first dot and second initial (e.g. "А. С." or "А.С.")
     let mut end_tok = next1.clone(); // end at first dot
     let n2b = next2.borrow();
     let surface2 = sofa.substring(n2b.begin_char, n2b.end_char);
     let second_ch = surface2.chars().next();
-    let has_second_initial = n2b.whitespaces_before_count(sofa) == 0
+    let has_second_initial = n2b.whitespaces_before_count(sofa) <= 1
         && surface2.chars().count() == 1
         && second_ch.map(|c| c.is_uppercase() && c.is_alphabetic()).unwrap_or(false);
 
@@ -325,11 +377,11 @@ fn collect_initials(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(char, Opti
     let dot1 = next1.clone();
     drop(n1b);
 
-    // Try second initial
+    // Try second initial (allow space between first dot and second initial)
     if let Some(n2) = next2 {
         let n2b = n2.borrow();
         let surf2 = sofa.substring(n2b.begin_char, n2b.end_char);
-        if n2b.whitespaces_before_count(sofa) == 0 && surf2.chars().count() == 1 {
+        if n2b.whitespaces_before_count(sofa) <= 1 && surf2.chars().count() == 1 {
             let c2 = surf2.chars().next().unwrap_or('\0');
             if c2.is_uppercase() && c2.is_alphabetic() {
                 let next3 = n2b.next.clone();
@@ -352,15 +404,33 @@ fn collect_initials(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(char, Opti
 
 fn try_surname_alone(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Referent, TokenRef)> {
     // Only extract surname alone if preceded by a person-title keyword.
-    // Check if the previous token is a known title.
+    // Check if the previous token is a known title (including declined forms via morph lemma).
     let prev = t.borrow().prev.as_ref()?.upgrade()?;
-    let pb = prev.borrow();
-    let is_title = match &pb.kind {
-        TokenKind::Text(txt) => is_person_title(&txt.term),
-        _ => false,
+    let is_title = {
+        let pb = prev.borrow();
+        match &pb.kind {
+            TokenKind::Text(txt) => {
+                // First check the surface term directly
+                if is_person_title(&txt.term) {
+                    true
+                } else {
+                    // Then check morph normal forms (handles declined forms like
+                    // "клиента" → КЛИЕНТ, "директором" → ДИРЕКТОР)
+                    pb.morph.items().iter().any(|wf| {
+                        wf.normal_case.as_ref().map(|nc| is_person_title(nc)).unwrap_or(false)
+                    })
+                }
+            }
+            _ => false,
+        }
     };
-    drop(pb);
-    if !is_title { return None; }
+    // Also check for context words that introduce a person ("какой-то Иванов", "некий Иванов")
+    let is_person_context = if !is_title {
+        is_person_intro_context(&prev, sofa)
+    } else {
+        false
+    };
+    if !is_title && !is_person_context { return None; }
 
     let surname = normal_form_of(t);
     let mut r = pr::new_person_referent();
@@ -416,6 +486,152 @@ fn try_name_surname(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Referent, 
     pr::set_firstname(&mut r, &firstname);
     pr::set_lastname(&mut r, &surname);
     Some((r, n1.clone()))
+}
+
+// ── Pattern E: Hyphenated compound surname ───────────────────────────────────
+// "Римский-Корсаков", "Хан-Магомедов" — tokens: [Word][-][Word]
+// At least one part should be a proper surname/name, OR both parts uppercase.
+
+fn try_hyphenated_surname(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Referent, TokenRef)> {
+    let (combined, last_tok) = try_collect_hyphenated_word(t, sofa)?;
+
+    // At least one part should be morph-recognized as proper or the full combo is uppercase-initial
+    let tb = t.borrow();
+    let any_proper = tb.morph.items().iter().any(|wf|
+        wf.base.class.is_proper_surname() || wf.base.class.is_proper_name()
+    );
+    drop(tb);
+
+    let last_proper = {
+        let lb = last_tok.borrow();
+        lb.morph.items().iter().any(|wf|
+            wf.base.class.is_proper_surname() || wf.base.class.is_proper_name()
+        )
+    };
+
+    if !any_proper && !last_proper { return None; }
+
+    let mut r = pr::new_person_referent();
+    pr::set_lastname(&mut r, &combined);
+    Some((r, last_tok))
+}
+
+/// Collect a hyphenated compound word: "Word-Word[-Word]" where hyphens and parts
+/// are adjacent (no whitespace). Returns (combined_string, last_word_token).
+fn try_collect_hyphenated_word(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(String, TokenRef)> {
+    let surface0 = get_surface(t, sofa);
+    // Must start uppercase, at least 2 chars
+    if surface0.chars().count() < 2 { return None; }
+    if !surface0.chars().next().map(|c| c.is_uppercase()).unwrap_or(false) { return None; }
+
+    let hyp = t.borrow().next.clone()?;
+    {
+        let hb = hyp.borrow();
+        if hb.whitespaces_before_count(sofa) != 0 { return None; }
+        if hb.length_char() != 1 { return None; }
+        let ch = sofa.char_at(hb.begin_char);
+        if ch != '-' { return None; }
+    }
+
+    let word2 = hyp.borrow().next.clone()?;
+    {
+        let wb = word2.borrow();
+        if wb.whitespaces_before_count(sofa) != 0 { return None; }
+        if !matches!(wb.kind, TokenKind::Text(_)) { return None; }
+    }
+    let surface2 = get_surface(&word2, sofa);
+    // Second part must start with a letter (can be lowercase for particles like "на")
+    if surface2.is_empty() || !surface2.chars().next().unwrap().is_alphabetic() { return None; }
+
+    let mut combined = format!("{}-{}", surface0, surface2);
+    let mut last = word2.clone();
+
+    // Try a third segment (e.g. for future extension)
+    if let Some(h2) = word2.borrow().next.clone() {
+        let h2b = h2.borrow();
+        if h2b.whitespaces_before_count(sofa) == 0
+            && h2b.length_char() == 1
+            && sofa.char_at(h2b.begin_char) == '-'
+        {
+            let w3 = h2b.next.clone();
+            drop(h2b);
+            if let Some(w3) = w3 {
+                let w3b = w3.borrow();
+                if w3b.whitespaces_before_count(sofa) == 0 && matches!(w3b.kind, TokenKind::Text(_)) {
+                    let s3 = sofa.substring(w3b.begin_char, w3b.end_char).to_string();
+                    drop(w3b);
+                    combined = format!("{}-{}", combined, s3);
+                    last = w3;
+                }
+            }
+        }
+    }
+
+    Some((combined, last))
+}
+
+// ── Pattern F: Compound firstname + surname ──────────────────────────────────
+// "Мария-Луиза фон Штраус", "Жан-Полем Бельмондо"
+// Compound firstname (hyphenated name) followed by optional particle + surname.
+
+fn try_compound_firstname_surname(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Referent, TokenRef)> {
+    // Try to collect a hyphenated firstname
+    let (firstname, fn_end) = try_collect_hyphenated_word(t, sofa)?;
+
+    // After the compound firstname, look for optional particle + surname
+    let next = fn_end.borrow().next.clone()?;
+    if next.borrow().whitespaces_before_count(sofa) == 0 { return None; }
+
+    // Check for nobiliary particle: "фон", "де", "ди", "ван", "von", "de", "di", "van"
+    let (surname_start, particle) = {
+        let nb = next.borrow();
+        if let TokenKind::Text(ref txt) = nb.kind {
+            if is_nobiliary_particle(&txt.term) {
+                let after_particle = nb.next.clone();
+                drop(nb);
+                if let Some(ap) = after_particle {
+                    if ap.borrow().whitespaces_before_count(sofa) > 0 {
+                        let part_surface = get_surface(&next, sofa);
+                        (ap, Some(part_surface))
+                    } else {
+                        return None;
+                    }
+                } else {
+                    return None;
+                }
+            } else {
+                drop(nb);
+                (next.clone(), None)
+            }
+        } else {
+            return None;
+        }
+    };
+
+    // surname_start must be uppercase text
+    if !starts_uppercase(&surname_start, sofa) { return None; }
+    {
+        let sb = surname_start.borrow();
+        if !matches!(sb.kind, TokenKind::Text(_)) { return None; }
+    }
+
+    let surname_surface = get_surface(&surname_start, sofa);
+
+    let full_surname = if let Some(p) = particle {
+        format!("{} {}", p, surname_surface)
+    } else {
+        surname_surface
+    };
+
+    let mut r = pr::new_person_referent();
+    pr::set_firstname(&mut r, &firstname);
+    pr::set_lastname(&mut r, &full_surname);
+    Some((r, surname_start))
+}
+
+/// Returns true for nobiliary particles commonly found in person names.
+fn is_nobiliary_particle(term: &str) -> bool {
+    matches!(term, "ФОН" | "ДЕ" | "ДИ" | "ВАН" | "VON" | "DE" | "DI" | "VAN" | "DU" | "LE" | "LA")
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -490,6 +706,49 @@ fn infer_sex_from_secname(secname: &str) -> Option<&'static str> {
     None
 }
 
+/// Check if prev token is part of a person-introduction context:
+/// "какой-то Иванов", "некий Иванов", "некая Иванова", "этот Иванов"
+fn is_person_intro_context(prev: &TokenRef, sofa: &SourceOfAnalysis) -> bool {
+    let pb = prev.borrow();
+    let term = match &pb.kind {
+        TokenKind::Text(txt) => &txt.term,
+        _ => return false,
+    };
+    // Direct match for standalone context words
+    if matches!(term.as_str(), "НЕКИЙ" | "НЕКАЯ" | "НЕКТО" | "ЭТОТ" | "ЭТА"
+        | "ОДИН" | "ОДНА")
+    {
+        return true;
+    }
+    // Handle "какой-то" → tokenized as "какой" "-" "то": prev is "ТО"
+    if term == "ТО" || term == "НИБУДЬ" {
+        // Check if preceded by "-" then a pronoun
+        let hyp = pb.prev.as_ref().and_then(|w| w.upgrade());
+        drop(pb);
+        if let Some(h) = hyp {
+            let hb = h.borrow();
+            if hb.whitespaces_before_count(sofa) == 0
+                && hb.length_char() == 1
+                && sofa.char_at(hb.begin_char) == '-'
+            {
+                let word_before = hb.prev.as_ref().and_then(|w| w.upgrade());
+                drop(hb);
+                if let Some(wb) = word_before {
+                    let wbb = wb.borrow();
+                    if let TokenKind::Text(ref txt) = wbb.kind {
+                        if matches!(txt.term.as_str(), "КАКОЙ" | "КАКАЯ" | "КТО" | "КОЕ") {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        return false;
+    }
+    drop(pb);
+    false
+}
+
 /// Returns true if the uppercase term is a common person-title keyword.
 fn is_person_title(term: &str) -> bool {
     matches!(term,
@@ -504,7 +763,12 @@ fn is_person_title(term: &str) -> bool {
         "MEMBER" | "DIRECTOR" | "PRESIDENT" | "MINISTER" | "GOVERNOR" |
         "SENATOR" | "PROFESSOR" | "DOCTOR" | "JUDGE" | "GENERAL" |
         "КАПИТАН-ЛЕЙТЕНАНТ" | "ГЕНЕРАЛ-МАЙОР" | "ГЕНЕРАЛ-ЛЕЙТЕНАНТ" |
-        "ГОСПОДИН" | "ГРАЖДАНИН" | "МУЖЧИНА" | "ЖЕНЩИНА" |
+        "ГОСПОДИН" | "ГОСПОЖА" | "ГРАЖДАНИН" | "ГРАЖДАНКА" | "МУЖЧИНА" | "ЖЕНЩИНА" |
+        "КЛИЕНТ" | "КЛИЕНТКА" | "ЮРИСТ" | "АДВОКАТ" | "НОТАРИУС" |
+        "ВРАЧ" | "ХИРУРГ" | "ТЕРАПЕВТ" | "ПЕДИАТР" | "ПАЦИЕНТ" |
+        "ИНЖЕНЕР" | "ПРОГРАММИСТ" | "БУХГАЛТЕР" | "ЭКОНОМИСТ" |
+        "ЖУРНАЛИСТ" | "КОРРЕСПОНДЕНТ" | "ПИСАТЕЛЬ" | "АВТОР" |
+        "СЕМЬЯ" | "КОМАНДА" | "КОЛЛЕКТИВ" | "ГРУППА" |
         "ТОВАРИЩ" | "ТОВ." | "Г-Н" | "ГОСПОДА" | "ГН" | "ГЖА" |
         // Historical / literary Russian titles
         "ГРАФ" | "КНЯЗЬ" | "БАРОН" | "ГЕРЦОГ" | "МАРКИЗ" | "ВИКОНТ" |
@@ -870,9 +1134,42 @@ fn try_prefix_person(
     let mut prefix_end: TokenRef = t.clone();
     let mut entry: Option<&pat::PersonAttrEntry> = None;
 
-    if let Some(e) = table.get(&term0) {
-        entry = Some(e);
-    } else {
+    // Handle tokenized abbreviations "г-н" / "г-жа" / "д-р":
+    // tokenizer splits "г-жа" → ["Г", "-", "ЖА"], so we try combining.
+    if term0.len() <= 2 {
+        let hyp = t.borrow().next.clone();
+        if let Some(ref h) = hyp {
+            let hb = h.borrow();
+            if hb.whitespaces_before_count(sofa) == 0
+                && hb.length_char() == 1
+                && sofa.char_at(hb.begin_char) == '-'
+            {
+                let word_after = hb.next.clone();
+                drop(hb);
+                if let Some(ref wa) = word_after {
+                    let wab = wa.borrow();
+                    if wab.whitespaces_before_count(sofa) == 0 {
+                        if let TokenKind::Text(ref txt2) = wab.kind {
+                            let combined = format!("{}-{}", term0, txt2.term);
+                            drop(wab);
+                            if let Some(e) = table.get(&combined) {
+                                entry = Some(e);
+                                prefix_end = wa.clone();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if entry.is_none() {
+        if let Some(e) = table.get(&term0) {
+            entry = Some(e);
+        }
+    }
+
+    if entry.is_none() {
         // 2-word: term0 + term1 — use a reusable buffer instead of format!()
         let t1 = t.borrow().next.clone()?;
         if !t1.borrow().is_newline_before(sofa) {
@@ -944,11 +1241,17 @@ fn try_prefix_person(
     let (mut person_ref, person_end) = if let Some(res) = try_parse(&person_start, sofa) {
         res
     } else if entry.kind == pat::PersonAttrKind::Prefix {
-        // Accept a single valid EN name word as a last name
+        // Accept a single valid name word as a last name:
+        // either an EN name word OR a Cyrillic proper surname
         let surface = get_surface(&person_start, sofa);
-        if is_valid_en_name_word(&surface) && !is_en_stop_word(&surface.to_uppercase()) {
+        let is_en = is_valid_en_name_word(&surface) && !is_en_stop_word(&surface.to_uppercase());
+        let is_cyrillic_surname = !is_en
+            && starts_uppercase(&person_start, sofa)
+            && is_proper_surname_token(&person_start);
+        if is_en || is_cyrillic_surname {
+            let surname = if is_cyrillic_surname { normal_form_of(&person_start) } else { surface };
             let mut r = pr::new_person_referent();
-            pr::set_lastname(&mut r, &surface);
+            pr::set_lastname(&mut r, &surname);
             if let Some(gender_male) = entry.gender {
                 pr::set_sex(&mut r, if gender_male { pr::SEX_MALE } else { pr::SEX_FEMALE });
             }

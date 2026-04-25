@@ -56,12 +56,12 @@ fn get_tables() -> &'static Tables {
 
 pub fn lookup_name(name: &str) -> Option<&'static GeoEntry> {
     let t = get_tables();
-    t.name_map.get(&name.to_uppercase()).map(|&i| &t.entries[i])
+    t.name_map.get(name).map(|&i| &t.entries[i])
 }
 
 pub fn lookup_adj(name: &str) -> Option<&'static GeoEntry> {
     let t = get_tables();
-    t.adj_map.get(&name.to_uppercase()).map(|&i| &t.entries[i])
+    t.adj_map.get(name).map(|&i| &t.entries[i])
 }
 
 /// Returns true if the uppercase word is registered in the geo name table as a
@@ -74,9 +74,15 @@ pub fn is_likely_geo_name(word: &str) -> bool {
 /// Classify a token string as a territory type keyword.
 /// Returns (canonical_type_str, is_always_prefix) or None.
 pub fn type_keyword(s: &str) -> Option<(&'static str, bool)> {
-    TYPE_KEYWORDS.iter().find_map(|&(k, v, prefix)| {
-        if k == s { Some((v, prefix)) } else { None }
-    })
+    static MAP: OnceLock<HashMap<&'static str, (&'static str, bool)>> = OnceLock::new();
+    let m = MAP.get_or_init(|| {
+        let mut map = HashMap::with_capacity(TYPE_KEYWORDS.len());
+        for &(k, v, prefix) in TYPE_KEYWORDS {
+            map.entry(k).or_insert((v, prefix));
+        }
+        map
+    });
+    m.get(s).copied()
 }
 
 /// Returns true if `s` is a city type prefix abbreviation (e.g. "Г", "Г.", "ГОР.").

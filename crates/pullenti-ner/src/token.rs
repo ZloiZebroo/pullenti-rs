@@ -93,6 +93,7 @@ pub struct Token {
     pub next: Option<TokenRef>,
     pub prev: Option<WeakTokenRef>,
     attrs: Cell<i16>,
+    ws_before_cache: Cell<i32>,
 }
 
 impl std::fmt::Debug for Token {
@@ -113,6 +114,7 @@ impl Token {
             next: None,
             prev: None,
             attrs: Cell::new(0),
+            ws_before_cache: Cell::new(i32::MIN),
         }
     }
 
@@ -132,6 +134,7 @@ impl Token {
             next: None,
             prev: None,
             attrs: Cell::new(0),
+            ws_before_cache: Cell::new(i32::MIN),
         }
     }
 
@@ -156,6 +159,7 @@ impl Token {
             next: None,
             prev: None,
             attrs: Cell::new(0),
+            ws_before_cache: Cell::new(i32::MIN),
         }
     }
 
@@ -175,6 +179,7 @@ impl Token {
             next: None,
             prev: None,
             attrs: Cell::new(0),
+            ws_before_cache: Cell::new(i32::MIN),
         }
     }
 
@@ -493,19 +498,23 @@ impl Token {
         }
     }
 
-    /// Count whitespace units before this token
+    /// Count whitespace units before this token (cached after first call)
     pub fn whitespaces_before_count(&self, sofa: &SourceOfAnalysis) -> i32 {
-        match &self.prev {
+        let cached = self.ws_before_cache.get();
+        if cached != i32::MIN { return cached; }
+        let result = match &self.prev {
             None => 100,
             Some(prev_weak) => {
                 let prev_end = match prev_weak.upgrade() {
-                    None => return 100,
+                    None => 100,
                     Some(p) => p.borrow().end_char,
                 };
-                if prev_end + 1 == self.begin_char { return 0; }
-                self.calc_whitespaces(prev_end + 1, self.begin_char - 1, sofa)
+                if prev_end + 1 == self.begin_char { 0 }
+                else { self.calc_whitespaces(prev_end + 1, self.begin_char - 1, sofa) }
             }
-        }
+        };
+        self.ws_before_cache.set(result);
+        result
     }
 
     fn calc_whitespaces(&self, p0: i32, p1: i32, sofa: &SourceOfAnalysis) -> i32 {

@@ -32,9 +32,12 @@ impl Analyzer for OrgAnalyzer {
         let sofa = kit.sofa.clone();
         let mut cur = kit.first_token.clone();
         while let Some(t) = cur.clone() {
-            if t.borrow().is_ignored(&sofa) {
-                cur = t.borrow().next.clone();
-                continue;
+            {
+                let tb = t.borrow();
+                if tb.is_ignored(&sofa) || !matches!(tb.kind, TokenKind::Text(_)) {
+                    cur = tb.next.clone();
+                    continue;
+                }
             }
             match try_parse(&t, &sofa) {
                 None => { cur = t.borrow().next.clone(); }
@@ -237,6 +240,9 @@ fn try_adj_prefix_then_type(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Re
         let found_entry = type_word.morph_forms.iter()
             .find_map(|f| org_table::lookup_type(f));
         let Some(entry) = found_entry else { continue };
+        // Skip legal form abbreviations (ООО, ОАО, etc.) — they are handled
+        // by Pattern 1/2 where they appear as prefix, not after a noun.
+        if entry.is_legal_form { continue; }
 
         let name_parts: Vec<&str> = words[..type_pos]
             .iter()

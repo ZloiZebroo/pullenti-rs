@@ -31,9 +31,12 @@ impl Analyzer for AddressAnalyzer {
         let sofa = kit.sofa.clone();
         let mut cur = kit.first_token.clone();
         while let Some(t) = cur.clone() {
-            if t.borrow().is_ignored(&sofa) {
-                cur = t.borrow().next.clone();
-                continue;
+            {
+                let tb = t.borrow();
+                if tb.is_ignored(&sofa) || !matches!(tb.kind, TokenKind::Text(_)) {
+                    cur = tb.next.clone();
+                    continue;
+                }
             }
             match try_parse_street(&t, &sofa) {
                 None => { cur = t.borrow().next.clone(); }
@@ -110,7 +113,85 @@ fn try_parse_street(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Referent, 
             return None;
         }
     }
+
+    // ── Suffix pattern: "Name Type" (e.g. "Невский проспект", "Московское шоссе") ──
+    // Current token is a capitalized word; check if a following token is a street type.
+    if let Some(r) = try_suffix_street_type(t, sofa) {
+        return Some(r);
+    }
+
     None
+}
+
+/// Try suffix street type pattern: "Невский проспект", "Московское шоссе".
+/// The current token is the name; check if a subsequent token (1-3 ahead) is a street type.
+fn try_suffix_street_type(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Referent, TokenRef)> {
+    // Current token must be uppercase text
+    {
+        let tb = t.borrow();
+        if !matches!(tb.kind, TokenKind::Text(_)) { return None; }
+        let surf = sofa.substring(tb.begin_char, tb.end_char);
+        if !surf.chars().next().map(|c| c.is_uppercase()).unwrap_or(false) { return None; }
+    }
+
+    // Scan ahead up to 3 tokens for a street type keyword
+    let mut name_parts: Vec<String> = Vec::new();
+    {
+        let tb = t.borrow();
+        name_parts.push(get_nominative_form(&tb, sofa));
+    }
+    let mut cur = t.borrow().next.clone();
+    let mut type_end: Option<TokenRef> = None;
+    let mut canonical: Option<String> = None;
+
+    for _i in 0..3 {
+        let tok = match cur {
+            Some(ref c) => c.clone(),
+            None => break,
+        };
+        let tb = tok.borrow();
+        if tb.whitespaces_before_count(sofa) > 1 { break; }
+
+        if let TokenKind::Text(ref txt) = tb.kind {
+            // Check if this token is a street type keyword
+            let entry = street_table::lookup_street_type(&txt.term)
+                .or_else(|| {
+                    tb.morph.items().iter().find_map(|wf| {
+                        wf.normal_case.as_deref().and_then(street_table::lookup_street_type)
+                            .or_else(|| wf.normal_full.as_deref().and_then(street_table::lookup_street_type))
+                    })
+                });
+
+            if let Some(e) = entry {
+                canonical = Some(e.canonical.clone());
+                type_end = Some(tok.clone());
+                drop(tb);
+                break;
+            }
+
+            // Not a street type — accumulate as name part if uppercase
+            let surf = sofa.substring(tb.begin_char, tb.end_char);
+            if surf.chars().next().map(|c| c.is_uppercase()).unwrap_or(false) {
+                name_parts.push(get_nominative_form(&tb, sofa));
+            } else {
+                break;
+            }
+        } else {
+            break;
+        }
+        let next = tb.next.clone();
+        drop(tb);
+        cur = next;
+    }
+
+    let canonical = canonical?;
+    let _type_end = type_end?;
+
+    let name = name_parts.join(" ");
+    let mut r = ar::new_street_referent();
+    ar::add_slot_str(&mut r, ar::STREET_ATTR_TYPE, &canonical);
+    ar::add_slot_str(&mut r, ar::STREET_ATTR_NAME, &name);
+    Some((r, _type_end))
 }
 
 /// Collect morph normal forms for a Token. These are already uppercase.

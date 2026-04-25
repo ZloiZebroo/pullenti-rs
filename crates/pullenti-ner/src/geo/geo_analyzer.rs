@@ -15,6 +15,7 @@ use crate::token::{Token, TokenRef, TokenKind};
 use crate::source_of_analysis::SourceOfAnalysis;
 use crate::geo::geo_referent as gr;
 use crate::geo::geo_table::{self, GeoEntryKind};
+use crate::address::street_table;
 
 pub struct GeoAnalyzer;
 
@@ -30,9 +31,13 @@ impl Analyzer for GeoAnalyzer {
         let sofa = kit.sofa.clone();
         let mut cur = kit.first_token.clone();
         while let Some(t) = cur.clone() {
-            if t.borrow().is_ignored(&sofa) {
-                cur = t.borrow().next.clone();
-                continue;
+            {
+                let tb = t.borrow();
+                // Skip ignored, non-text, and single-char non-letter tokens early
+                if tb.is_ignored(&sofa) || !matches!(tb.kind, TokenKind::Text(_)) {
+                    cur = tb.next.clone();
+                    continue;
+                }
             }
             match try_parse(&t, &sofa) {
                 None => { cur = t.borrow().next.clone(); }
@@ -381,6 +386,11 @@ fn try_direct_name(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Referent, T
                 if in_person_name_context(t, sofa) { continue; }
             }
 
+            // ── Guard: city/region preceded by a street type keyword → part of address
+            if matches!(entry.kind, GeoEntryKind::City | GeoEntryKind::Region) {
+                if preceded_by_street_type(t, sofa) { continue; }
+            }
+
             // ── Guard: Cyrillic city/region with a proper-surname morph class
             //    OR preceded by a Russian patronymic → likely a surname.
             if matches!(entry.kind, GeoEntryKind::City | GeoEntryKind::Region) && !is_all_ascii {
@@ -402,6 +412,15 @@ fn try_direct_name(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Referent, T
                         })
                         .unwrap_or(false);
                     if prev_is_name_context { continue; }
+
+                    // Check if FOLLOWED by initials pattern (e.g. "К.Л.") → person context
+                    if followed_by_initials(t, sofa) { continue; }
+
+                    // Check if PRECEDED by initials pattern (e.g. "И.И. Ивановым")
+                    if preceded_by_initials(t, sofa) { continue; }
+
+                    // Check if preceded by a person title/prefix (г-жа, господин, etc.)
+                    if preceded_by_person_title(t, sofa) { continue; }
                 }
             }
 
@@ -713,6 +732,164 @@ fn try_linebreak_join(
         }
     }
     None
+}
+
+/// Returns true if the next token is a single uppercase letter followed by a period
+/// (e.g. "Николаев К.Л." — "К" + "."), indicating a person-name initials pattern.
+/// Returns true when the token is preceded by an initials pattern like "И.И."
+/// (walking backwards: dot, letter, dot, letter — with no whitespace between each).
+fn preceded_by_initials(t: &TokenRef, sofa: &SourceOfAnalysis) -> bool {
+    let tb = t.borrow();
+    if tb.whitespaces_before_count(sofa) == 0 { return false; }
+    // Walk backwards: expect "." "X" "." "X" (reverse of "X.X.")
+    let dot1 = match tb.prev.as_ref().and_then(|w| w.upgrade()) {
+        Some(d) => d,
+        None => return false,
+    };
+    drop(tb);
+    {
+        let db = dot1.borrow();
+        if db.length_char() != 1 || sofa.char_at(db.begin_char) != '.' { return false; }
+        if db.whitespaces_before_count(sofa) != 0 { return false; }
+    }
+    let letter1 = match dot1.borrow().prev.as_ref().and_then(|w| w.upgrade()) {
+        Some(l) => l,
+        None => return false,
+    };
+    {
+        let lb = letter1.borrow();
+        let surface = sofa.substring(lb.begin_char, lb.end_char);
+        if surface.chars().count() != 1 { return false; }
+        let ch = match surface.chars().next() {
+            Some(c) if c.is_uppercase() && c.is_alphabetic() => c,
+            _ => return false,
+        };
+        let _ = ch;
+    }
+    true
+}
+
+/// Returns true if the token is preceded by a person-title word or abbreviation
+/// like "г-жа", "г-н", "господин", "директор", etc.
+fn preceded_by_person_title(t: &TokenRef, sofa: &SourceOfAnalysis) -> bool {
+    let prev = match t.borrow().prev.as_ref().and_then(|w| w.upgrade()) {
+        Some(p) => p,
+        None => return false,
+    };
+    let pb = prev.borrow();
+    if let TokenKind::Text(ref txt) = pb.kind {
+        // Direct title match
+        if is_geo_person_title(&txt.term) { return true; }
+        // Check morph lemma for declined forms
+        let morph_match = pb.morph.items().iter().any(|wf| {
+            wf.normal_case.as_ref().map(|nc| is_geo_person_title(nc)).unwrap_or(false)
+        });
+        if morph_match { return true; }
+    }
+    drop(pb);
+
+    // Check for "г-жа" / "г-н" pattern: prev = "жа"/"н", prev-1 = "-", prev-2 = "г"
+    let prev_term = {
+        let pb = prev.borrow();
+        match &pb.kind {
+            TokenKind::Text(ref txt) => Some(txt.term.clone()),
+            _ => None,
+        }
+    };
+    if let Some(pt) = prev_term {
+        if pt == "ЖА" || pt == "Н" {
+            let hyp = prev.borrow().prev.as_ref().and_then(|w| w.upgrade());
+            if let Some(h) = hyp {
+                let hb = h.borrow();
+                if hb.whitespaces_before_count(sofa) == 0
+                    && hb.length_char() == 1
+                    && sofa.char_at(hb.begin_char) == '-'
+                {
+                    let g = hb.prev.as_ref().and_then(|w| w.upgrade());
+                    drop(hb);
+                    if let Some(g) = g {
+                        let gb = g.borrow();
+                        if let TokenKind::Text(ref txt) = gb.kind {
+                            if txt.term == "Г" { return true; }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    false
+}
+
+/// Subset of person-title terms used by GEO guard to detect person context.
+fn is_geo_person_title(term: &str) -> bool {
+    matches!(term,
+        "ГОСПОДИН" | "ГОСПОЖА" | "ДИРЕКТОР" | "ПРЕЗИДЕНТ" | "МИНИСТР" |
+        "ПРОФЕССОР" | "ДОКТОР" | "ГРАЖДАНИН" | "ГРАЖДАНКА" |
+        "КЛИЕНТ" | "КЛИЕНТКА" | "ЮРИСТ" | "АДВОКАТ" | "ВРАЧ" |
+        "СУДЬЯ" | "ДЕПУТАТ" | "ГУБЕРНАТОР" | "ГЕНЕРАЛ" |
+        "АКАДЕМИК" | "РЕКТОР" | "ДЕКАН" | "НАЧАЛЬНИК" |
+        "РУКОВОДИТЕЛЬ" | "ЗАМЕСТИТЕЛЬ" | "СЕКРЕТАРЬ" |
+        "ТОВАРИЩ" | "MR" | "MRS" | "MS" | "DR"
+    )
+}
+
+/// Returns true if the token is preceded by a street type keyword
+/// (проспект, шоссе, бульвар, etc.) — meaning this word is a street name, not a GEO entity.
+fn preceded_by_street_type(t: &TokenRef, sofa: &SourceOfAnalysis) -> bool {
+    let prev = match t.borrow().prev.as_ref().and_then(|w| w.upgrade()) {
+        Some(p) => p,
+        None => return false,
+    };
+    let pb = prev.borrow();
+    if let TokenKind::Text(ref txt) = pb.kind {
+        // Check surface term
+        if street_table::lookup_street_type(&txt.term).is_some() { return true; }
+        // Check morph normal forms (for declined forms like "проспекту")
+        if pb.morph.items().iter().any(|wf| {
+            wf.normal_case.as_deref().map_or(false, |s| street_table::lookup_street_type(s).is_some())
+            || wf.normal_full.as_deref().map_or(false, |s| street_table::lookup_street_type(s).is_some())
+        }) {
+            return true;
+        }
+    }
+    // Also check if prev is a dot preceded by a street abbreviation (e.g. "ул." → [ул][.])
+    if let TokenKind::Text(_) = pb.kind {} else {
+        drop(pb);
+        let pb2 = prev.borrow();
+        if pb2.length_char() == 1 && sofa.char_at(pb2.begin_char) == '.' {
+            if let Some(before_dot) = pb2.prev.as_ref().and_then(|w| w.upgrade()) {
+                let bb = before_dot.borrow();
+                if let TokenKind::Text(ref txt) = bb.kind {
+                    if street_table::lookup_street_type(&txt.term).is_some() { return true; }
+                }
+            }
+        }
+    }
+    false
+}
+
+fn followed_by_initials(t: &TokenRef, sofa: &SourceOfAnalysis) -> bool {
+    let next = match t.borrow().next.clone() {
+        Some(n) => n,
+        None => return false,
+    };
+    let nb = next.borrow();
+    if nb.whitespaces_before_count(sofa) == 0 { return false; }
+    let surface = sofa.substring(nb.begin_char, nb.end_char);
+    if surface.chars().count() != 1 { return false; }
+    let ch = match surface.chars().next() {
+        Some(c) if c.is_uppercase() && c.is_alphabetic() => c,
+        _ => return false,
+    };
+    let _ = ch;
+    let dot = match nb.next.clone() {
+        Some(d) => d,
+        None => return false,
+    };
+    drop(nb);
+    let db = dot.borrow();
+    db.whitespaces_before_count(sofa) == 0 && db.length_char() == 1 && sofa.char_at(db.begin_char) == '.'
 }
 
 /// Returns true if the token appears to be in a person-name context:

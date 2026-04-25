@@ -3603,3 +3603,536 @@ fn test_dialoge3_jina_authors() {
     assert!(has_last(&persons, "Werk"),       "missing Werk: {:?}", persons);
     assert!(has_last(&persons, "Xiao"),       "missing Xiao: {:?}", persons);
 }
+
+// ── Tests from dialoge_5.txt: declined person names, geo/person conflicts ────
+
+/// Collect all surface texts for PERSON referent tokens in the result.
+fn collect_person_surfaces(result: &pullenti_ner::AnalysisResult, text: &str) -> Vec<String> {
+    let sofa = SourceOfAnalysis::new(text.to_string());
+    let mut surfaces = Vec::new();
+    let mut cur = result.first_token.clone();
+    while let Some(tok) = cur {
+        let next = tok.borrow().next.clone();
+        {
+            let tb = tok.borrow();
+            if let pullenti_ner::token::TokenKind::Referent(ref rd) = tb.kind {
+                if rd.referent.borrow().type_name == "PERSON" {
+                    surfaces.push(sofa.substring(tb.begin_char, tb.end_char).to_string());
+                }
+            }
+        }
+        cur = next;
+    }
+    surfaces
+}
+
+/// "Николаев К.Л." — a city name (Николаев) followed by initials must be
+/// recognized as PERSON, not GEO. The geo guard must check following initials.
+#[test]
+fn test_person_geo_city_surname_with_initials() {
+    let text = "Николаев К.Л. направил письмо.";
+    let proc = Processor::new(MorphLang::RU, vec![
+        Arc::new(GeoAnalyzer::new()),
+        Arc::new(PersonAnalyzer::new()),
+    ]);
+    let sofa = SourceOfAnalysis::new(text);
+    let result = proc.process(sofa, Some(MorphLang::RU));
+    let surfaces = collect_person_surfaces(&result, text);
+    assert!(surfaces.iter().any(|s| s.contains("Николаев")),
+        "Николаев К.Л. should be PERSON, got surfaces={:?}", surfaces);
+    let geos = collect_geos(&result);
+    assert!(!geos.iter().any(|g| g.contains("НИКОЛАЕВ")),
+        "Николаев should NOT be GEO when followed by initials, geos={:?}", geos);
+}
+
+/// "Пестов Д.И." — surname not flagged as is_proper_surname by morph,
+/// but capitalized word + initials should still be detected as PERSON.
+#[test]
+fn test_person_unknown_surname_with_initials() {
+    let text = "и Пестов Д.И. подписали документы.";
+    let proc = Processor::new(MorphLang::RU, vec![Arc::new(PersonAnalyzer::new())]);
+    let sofa = SourceOfAnalysis::new(text);
+    let result = proc.process(sofa, Some(MorphLang::RU));
+    let surfaces = collect_person_surfaces(&result, text);
+    assert!(surfaces.iter().any(|s| s.contains("Пестов")),
+        "Пестов Д.И. should be PERSON even without morph surname flag: {:?}", surfaces);
+}
+
+/// "Согласие Н.М. Доронина" — common noun at sentence start must NOT steal
+/// initials from the real surname. "Н.М. Доронина" should be PERSON, not
+/// "Согласие Н.М.".
+#[test]
+fn test_person_common_word_does_not_steal_initials() {
+    let text = "Согласие Н.М. Доронина получено.";
+    let proc = Processor::new(MorphLang::RU, vec![Arc::new(PersonAnalyzer::new())]);
+    let sofa = SourceOfAnalysis::new(text);
+    let result = proc.process(sofa, Some(MorphLang::RU));
+    let surfaces = collect_person_surfaces(&result, text);
+    assert!(surfaces.iter().any(|s| s.contains("Доронин")),
+        "Н.М. Доронина should be PERSON: {:?}", surfaces);
+    // "Согласие" must NOT appear as a person surface
+    assert!(!surfaces.iter().any(|s| s.contains("Согласие")),
+        "Согласие should NOT be extracted as PERSON: {:?}", surfaces);
+}
+
+/// Full dialoge_5 paragraph: all person mentions must be extracted, with
+/// every declined case form present as an occurrence on some PERSON entity.
+#[test]
+fn test_person_all_case_forms_dialoge5() {
+    let proc = Processor::new(MorphLang::RU, vec![
+        Arc::new(GeoAnalyzer::new()),
+        Arc::new(PersonAnalyzer::new()),
+    ]);
+    let text = concat!(
+        "В отчете Р.О. Романова указано, что К.И. Лобанов и Пестов Д.И. подписали документы.\n",
+        "Согласие Н.М. Доронина и Фрола Тихоновича Полякова получено.\n",
+        "Николаев К.Л. направил письмо Николаеву К.Л.\n",
+        "Фокина Ангелина Евгеньевна заполнила данные Фокиной Ангелины Евгеньевны.\n",
+        "А.Б. Гущин подтвердил данные А.Б. Гущина.\n",
+        "Связь с Р.О. Романовым установлена.\n",
+        "Отчет для Р.О. Романова готов.\n",
+        "Встреча с К.И. Лобановым прошла успешно.\n",
+        "Письмо Пестову Д.И. отправлено.\n",
+        "Справка Н.М. Доронину выдана.\n",
+        "Заявление Фролу Тихоновичу Полякову принято.\n",
+        "Фокиной Ангелиной Евгеньевной подписано.\n",
+        "Опрос Николаева К.Л. завершён.\n",
+        "Обсуждение с А.Б. Гущиным завершено.",
+    );
+    let sofa = SourceOfAnalysis::new(text);
+    let result = proc.process(sofa, Some(MorphLang::RU));
+
+    let person_surfaces = collect_person_surfaces(&result, text);
+
+    let expected = [
+        "Р.О. Романова",
+        "К.И. Лобанов",
+        "Пестов Д.И.",
+        "Н.М. Доронина",
+        "Фрола Тихоновича Полякова",
+        "Николаев К.Л.",
+        "Николаеву К.Л.",
+        "Фокина Ангелина Евгеньевна",
+        "Фокиной Ангелины Евгеньевны",
+        "А.Б. Гущин",
+        "А.Б. Гущина",
+        "Р.О. Романовым",
+        "Р.О. Романова",
+        "К.И. Лобановым",
+        "Пестову Д.И.",
+        "Н.М. Доронину",
+        "Фролу Тихоновичу Полякову",
+        "Фокиной Ангелиной Евгеньевной",
+        "Николаева К.Л.",
+        "А.Б. Гущиным",
+    ];
+
+    for name in &expected {
+        assert!(
+            person_surfaces.iter().any(|s| s.trim() == *name),
+            "Missing person surface form {:?} in {:?}", name, person_surfaces,
+        );
+    }
+
+    // No GEO for "Николаев"
+    let geos = collect_geos(&result);
+    assert!(!geos.iter().any(|g| g.contains("НИКОЛАЕВ")),
+        "Николаев should not be GEO in person context, got geos={:?}", geos);
+}
+
+/// Collect surface texts for referent tokens of a given type name.
+fn collect_surfaces_by_type(result: &pullenti_ner::AnalysisResult, text: &str, type_name: &str) -> Vec<String> {
+    let sofa = SourceOfAnalysis::new(text.to_string());
+    let mut surfaces = Vec::new();
+    let mut cur = result.first_token.clone();
+    while let Some(tok) = cur {
+        let next = tok.borrow().next.clone();
+        {
+            let tb = tok.borrow();
+            if let pullenti_ner::token::TokenKind::Referent(ref rd) = tb.kind {
+                if rd.referent.borrow().type_name == type_name {
+                    surfaces.push(sofa.substring(tb.begin_char, tb.end_char).to_string());
+                }
+            }
+        }
+        cur = next;
+    }
+    surfaces
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Tests from test_6.py session (2026-04-25)
+// ══════════════════════════════════════════════════════════════════════════════
+
+/// "И.И. Ивановым" — initials before a declined surname that also matches a
+/// GEO entry (Иваново). The GEO guard must check preceding initials.
+#[test]
+fn test_person_preceded_by_initials_not_geo() {
+    let text = "Договор заключен с И.И. Ивановым.";
+    let proc = Processor::new(MorphLang::RU, vec![
+        Arc::new(GeoAnalyzer::new()),
+        Arc::new(PersonAnalyzer::new()),
+    ]);
+    let sofa = SourceOfAnalysis::new(text);
+    let result = proc.process(sofa, Some(MorphLang::RU));
+    let persons = collect_person_surfaces(&result, text);
+    assert!(persons.iter().any(|s| s.contains("Ивановым")),
+        "И.И. Ивановым should be PERSON, got {:?}", persons);
+    let geos = collect_geos(&result);
+    assert!(!geos.iter().any(|g| g.contains("ИВАНОВ")),
+        "Ивановым should NOT be GEO when preceded by initials, geos={:?}", geos);
+}
+
+/// "А. С. Пушкин" — spaced initials (space between first dot and second initial)
+/// must be parsed correctly.
+#[test]
+fn test_person_spaced_initials() {
+    let text = "Контактное лицо: А. С. Пушкин.";
+    let proc = Processor::new(MorphLang::RU, vec![Arc::new(PersonAnalyzer::new())]);
+    let sofa = SourceOfAnalysis::new(text);
+    let result = proc.process(sofa, Some(MorphLang::RU));
+    let persons = collect_person_surfaces(&result, text);
+    assert!(persons.iter().any(|s| s.contains("Пушкин")),
+        "А. С. Пушкин should be PERSON: {:?}", persons);
+}
+
+/// Standalone surname after a declined title/role word:
+/// "клиента Полякова", "директором Смирновой", "юристу Петрова", "врача Сидорова"
+#[test]
+fn test_person_standalone_surname_after_title() {
+    let texts = [
+        ("клиента Полякова.", "Полякова"),
+        ("директором Смирновой.", "Смирновой"),
+        ("юристу Петрова.", "Петрова"),
+        ("врача Сидорова.", "Сидорова"),
+        ("господина Кузнецова.", "Кузнецова"),
+    ];
+    let proc = Processor::new(MorphLang::RU, vec![Arc::new(PersonAnalyzer::new())]);
+    for (text, expected) in &texts {
+        let sofa = SourceOfAnalysis::new(*text);
+        let result = proc.process(sofa, Some(MorphLang::RU));
+        let persons = collect_person_surfaces(&result, text);
+        assert!(persons.iter().any(|s| s.contains(expected)),
+            "{:?} should contain PERSON {:?}, got {:?}", text, expected, persons);
+    }
+}
+
+/// "команды Ивановых" — family/plural surname after group noun.
+#[test]
+fn test_person_family_surname_after_group_noun() {
+    let text = "Это решение команды Ивановых.";
+    let proc = Processor::new(MorphLang::RU, vec![Arc::new(PersonAnalyzer::new())]);
+    let sofa = SourceOfAnalysis::new(text);
+    let result = proc.process(sofa, Some(MorphLang::RU));
+    let persons = collect_person_surfaces(&result, text);
+    assert!(persons.iter().any(|s| s.contains("Ивановых")),
+        "Ивановых should be PERSON: {:?}", persons);
+}
+
+/// "Римский-Корсаков", "Хан-Магомедов" — hyphenated compound Russian surnames.
+#[test]
+fn test_person_hyphenated_surname() {
+    let texts = [
+        ("На встрече присутствовал Римский-Корсаков.", "Римский-Корсаков"),
+        ("Клиент Хан-Магомедов отказался.", "Хан-Магомедов"),
+    ];
+    let proc = Processor::new(MorphLang::RU, vec![Arc::new(PersonAnalyzer::new())]);
+    for (text, expected) in &texts {
+        let sofa = SourceOfAnalysis::new(*text);
+        let result = proc.process(sofa, Some(MorphLang::RU));
+        let persons = collect_person_surfaces(&result, text);
+        assert!(persons.iter().any(|s| s.contains(expected)),
+            "{:?} should contain PERSON {:?}, got {:?}", text, expected, persons);
+    }
+}
+
+/// "Мария-Луиза фон Штраус" — compound firstname + nobiliary particle + surname.
+#[test]
+fn test_person_compound_firstname_with_particle() {
+    let text = "Заявление подала Мария-Луиза фон Штраус.";
+    let proc = Processor::new(MorphLang::RU, vec![Arc::new(PersonAnalyzer::new())]);
+    let sofa = SourceOfAnalysis::new(text);
+    let result = proc.process(sofa, Some(MorphLang::RU));
+    let persons = collect_person_surfaces(&result, text);
+    assert!(persons.iter().any(|s| s.contains("Мария-Луиза") && s.contains("Штраус")),
+        "Мария-Луиза фон Штраус should be a single PERSON: {:?}", persons);
+}
+
+/// "Жан-Полем Бельмондо" — compound firstname (declined) + surname.
+#[test]
+fn test_person_compound_firstname_declined() {
+    let text = "Переписка с Жан-Полем Бельмондо.";
+    let proc = Processor::new(MorphLang::RU, vec![Arc::new(PersonAnalyzer::new())]);
+    let sofa = SourceOfAnalysis::new(text);
+    let result = proc.process(sofa, Some(MorphLang::RU));
+    let persons = collect_person_surfaces(&result, text);
+    assert!(persons.iter().any(|s| s.contains("Жан-Полем") && s.contains("Бельмондо")),
+        "Жан-Полем Бельмондо should be a single PERSON: {:?}", persons);
+}
+
+/// "г-жа Иванова" — tokenized abbreviation "г-жа" should be recognized as
+/// person prefix, and "Иванова" should be PERSON, not GEO (Иваново).
+#[test]
+fn test_person_g_zha_prefix() {
+    let text = "Клиент г-жа Иванова задолжала.";
+    let proc = Processor::new(MorphLang::RU, vec![
+        Arc::new(GeoAnalyzer::new()),
+        Arc::new(PersonAnalyzer::new()),
+    ]);
+    let sofa = SourceOfAnalysis::new(text);
+    let result = proc.process(sofa, Some(MorphLang::RU));
+    let persons = collect_person_surfaces(&result, text);
+    assert!(persons.iter().any(|s| s.contains("Иванова")),
+        "г-жа Иванова should be PERSON: {:?}", persons);
+    let geos = collect_geos(&result);
+    assert!(!geos.iter().any(|g| g.contains("ИВАНОВ")),
+        "Иванова should NOT be GEO after г-жа prefix, geos={:?}", geos);
+}
+
+/// "какой-то Иванов" — standalone surname after indefinite pronoun.
+#[test]
+fn test_person_standalone_surname_after_pronoun() {
+    let text = "Звонил какой-то Иванов, представился юристом.";
+    let proc = Processor::new(MorphLang::RU, vec![Arc::new(PersonAnalyzer::new())]);
+    let sofa = SourceOfAnalysis::new(text);
+    let result = proc.process(sofa, Some(MorphLang::RU));
+    let persons = collect_person_surfaces(&result, text);
+    assert!(persons.iter().any(|s| s.contains("Иванов")),
+        "какой-то Иванов should be PERSON: {:?}", persons);
+}
+
+/// ООО "Ромашка" must be detected as ORGANIZATION, not "Клиент ООО".
+#[test]
+fn test_org_ooo_with_quotes() {
+    let text = "Клиент ООО \"Ромашка\" в лице Дмитрия Волкова потребовал возврат.";
+    let proc = Processor::new(MorphLang::RU, vec![
+        Arc::new(OrgAnalyzer::new()),
+        Arc::new(PersonAnalyzer::new()),
+    ]);
+    let sofa = SourceOfAnalysis::new(text);
+    let result = proc.process(sofa, Some(MorphLang::RU));
+    let org_surfaces = collect_surfaces_by_type(&result, text, "ORGANIZATION");
+    assert!(org_surfaces.iter().any(|s| s.contains("ООО") && s.contains("Ромашка")),
+        "ООО \"Ромашка\" should be ORGANIZATION: {:?}", org_surfaces);
+    assert!(!org_surfaces.iter().any(|s| s.contains("Клиент")),
+        "\"Клиент\" should NOT be part of the org name: {:?}", org_surfaces);
+}
+
+/// "Театр имени Чехова" — "Чехова" after "имени" should NOT be extracted
+/// as a standalone PERSON (it's part of an institution name context).
+#[test]
+fn test_person_no_false_positive_imeni() {
+    let text = "Театр имени Чехова.";
+    let proc = Processor::new(MorphLang::RU, vec![Arc::new(PersonAnalyzer::new())]);
+    let sofa = SourceOfAnalysis::new(text);
+    let result = proc.process(sofa, Some(MorphLang::RU));
+    let persons = collect_person_surfaces(&result, text);
+    assert!(persons.is_empty(),
+        "Чехова in 'Театр имени Чехова' should NOT be PERSON: {:?}", persons);
+}
+
+/// Full dialoge_6 integration: all expected entities must be detected with
+/// correct types and no false positives.
+#[test]
+fn test_dialoge6_full() {
+    let proc = Processor::new(MorphLang::RU, vec![
+        Arc::new(GeoAnalyzer::new()),
+        Arc::new(OrgAnalyzer::new()),
+        Arc::new(PersonAnalyzer::new()),
+    ]);
+    let text = concat!(
+        "Проблема возникает на всех устройствах клиента Полякова.\n",
+        "«Отчет был подписан директором Смирновой.»\n",
+        "«Мы отправили документы юристу Петрова.»\n",
+        "«Это решение команды Ивановых.»\n",
+        "«В кабинете врача Сидорова никого не было.»\n",
+        "«Письмо от господина Кузнецова осталось без ответа.»\n",
+        "«Завтра Анна Каренина придет на собеседование.»\n",
+        "«Проект ведет Игорь Петрович Семенов, так что вопросы к нему.»\n",
+        "«Клиент ООО \"Ромашка\" в лице Дмитрия Волкова потребовал возврат.»\n",
+        "«Договор заключен с И.И. Ивановым.»\n",
+        "«Контактное лицо: А. С. Пушкин.»\n",
+        "«Звонок от г-на В.В. Соловьева.»\n",
+        "«Ответственный за проект — д-р мед. наук Ковалев А.П.»\n",
+        "«На встрече присутствовал Римский-Корсаков.»\n",
+        "«Заявление подала Мария-Луиза фон Штраус.»\n",
+        "«Клиент Хан-Магомедов отказался от услуг.»\n",
+        "«Переписка с Жан-Полем Бельмондо.»\n",
+        "«Клиент John Doe из США.»\n",
+        "«Партнер из Китая: Li Wei.»\n",
+        "«ФИО: Иванов Иван Иванович, дата рождения...»\n",
+        "«Звонил какой-то Иванов, представился юристом.»\n",
+        "«Клиент г-жа Иванова (ИНН 1234567890) задолжала.»\n",
+    );
+    let sofa = SourceOfAnalysis::new(text);
+    let result = proc.process(sofa, Some(MorphLang::RU));
+
+    let persons = collect_person_surfaces(&result, text);
+    let expected_persons = [
+        "Полякова", "Смирновой", "Петрова", "Ивановых",
+        "Сидорова", "Кузнецова",
+        "Анна Каренина", "Игорь Петрович Семенов",
+        "Дмитрия Волкова",
+        "И.И. Ивановым", "А. С. Пушкин",
+        "В.В. Соловьева", "Ковалев А.П.",
+        "Римский-Корсаков", "Хан-Магомедов",
+        "John Doe", "Li Wei",
+        "Иванов Иван Иванович", "Иванов", "Иванова",
+    ];
+    for name in &expected_persons {
+        assert!(
+            persons.iter().any(|s| s.contains(name)),
+            "Missing PERSON {:?} in {:?}", name, persons,
+        );
+    }
+
+    // Compound names should include both parts
+    assert!(persons.iter().any(|s| s.contains("Мария-Луиза") && s.contains("Штраус")),
+        "Мария-Луиза фон Штраус should be single PERSON: {:?}", persons);
+    assert!(persons.iter().any(|s| s.contains("Жан-Полем") && s.contains("Бельмондо")),
+        "Жан-Полем Бельмондо should be single PERSON: {:?}", persons);
+
+    // GEO: США (stored as "US"), Китай (stored as "КНР") should be detected
+    let geos = collect_geos(&result);
+    assert!(geos.iter().any(|g| g.contains("US")), "США should be GEO: {:?}", geos);
+
+    // ORG: ООО "Ромашка", Компания Яндекс
+    let orgs = collect_surfaces_by_type(&result, text, "ORGANIZATION");
+    assert!(orgs.iter().any(|s| s.contains("ООО") && s.contains("Ромашка")),
+        "ООО Ромашка should be ORG: {:?}", orgs);
+
+    // No GEO for Ивановым / Иванова (should be PERSON, not Иваново city)
+    assert!(!geos.iter().any(|g| g.contains("ИВАНОВ")),
+        "Иванов/Иванова/Ивановым should NOT be GEO: {:?}", geos);
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Tests from test_7.py session (2026-04-25) — Address suffix patterns, GEO guard
+// ══════════════════════════════════════════════════════════════════════════════
+
+/// "Невский проспект, д. 100, офис 305" — suffix street type pattern.
+/// The STREET referent is embedded inside the ADDRESS token, so we check ADDRESS surfaces.
+#[test]
+fn test_address_suffix_street_type() {
+    let proc = Processor::new(MorphLang::RU, vec![
+        Arc::new(GeoAnalyzer::new()),
+        Arc::new(AddressAnalyzer::new()),
+    ]);
+    let texts = [
+        ("Невский проспект, д. 100, офис 305", "проспект"),
+        ("Красный проспект, д. 50, кв. 201", "проспект"),
+        ("Московское шоссе, д. 120, кв. 15", "шоссе"),
+    ];
+    for (text, expected_type) in &texts {
+        let sofa = SourceOfAnalysis::new(*text);
+        let result = proc.process(sofa, Some(MorphLang::RU));
+        let addresses = collect_surfaces_by_type(&result, text, "ADDRESS");
+        assert!(!addresses.is_empty(),
+            "{:?}: expected ADDRESS with street type={}, got none", text, expected_type);
+        assert!(addresses.iter().any(|s| s.contains(expected_type)),
+            "{:?}: ADDRESS should contain {:?}, got {:?}", text, expected_type, addresses);
+    }
+}
+
+/// "проспект Салавата Юлаева, д. 45, кв. 67" — multi-word street name after
+/// type keyword; "Салавата" must NOT be detected as GEO.
+#[test]
+fn test_address_multiword_street_name_not_geo() {
+    let proc = Processor::new(MorphLang::RU, vec![
+        Arc::new(GeoAnalyzer::new()),
+        Arc::new(AddressAnalyzer::new()),
+    ]);
+    let text = "проспект Салавата Юлаева, д. 45, кв. 67";
+    let sofa = SourceOfAnalysis::new(text);
+    let result = proc.process(sofa, Some(MorphLang::RU));
+    let addresses = collect_surfaces_by_type(&result, text, "ADDRESS");
+    assert!(!addresses.is_empty(),
+        "Should detect ADDRESS for {:?}, got none", text);
+    let geos = collect_geos(&result);
+    assert!(!geos.iter().any(|g| g.contains("САЛАВАТ")),
+        "Салавата should NOT be GEO in street name context, geos={:?}", geos);
+}
+
+/// Full dialoge_4 / test_7 integration: all persons, GEOs, and addresses
+/// must be detected with correct types.
+#[test]
+fn test_dialoge4_full() {
+    let proc = Processor::new(MorphLang::RU, vec![
+        Arc::new(GeoAnalyzer::new()),
+        Arc::new(OrgAnalyzer::new()),
+        Arc::new(PersonAnalyzer::new()),
+        Arc::new(AddressAnalyzer::new()),
+    ]);
+    let text = concat!(
+        "Маслов Остап Леонидович\n",
+        "Забурева Кристина Александровна\n",
+        "Шурупкина Кристина Александровна\n",
+        "Полякова Пелагея Львовна\n",
+        "Дождикова Кристина Александровна\n\n\n",
+        "Иванов Петр Сергеевич проживает по адресу: г. Москва, ул. Ленина, д. 25, кв. 12\n",
+        "Сидорова Анна Михайловна зарегистрирована: г. Санкт-Петербург, Невский проспект, д. 100, офис 305\n",
+        "Петров Дмитрий Александрович\nАдрес доставки: г. Казань, ул. Баумана, д. 15, кв. 88\n",
+        "Козлова Елена Владимировна проживает: г. Новосибирск, Красный проспект, д. 50, кв. 201\n",
+        "Запасной контакт: г. Екатеринбург, ул. Малышева, д. 33, офис 12\n",
+        "Смирнов Алексей Игоревич\n",
+        "Постоянная регистрация: г. Нижний Новгород, ул. Большая Покровская, д. 7, кв. 45\n",
+        "Временный адрес: г. Самара, Московское шоссе, д. 120, кв. 15\n",
+        "Васильева Ольга Петровна\n",
+        "Домашний адрес: г. Ростов-на-Дону, ул. Пушкина, д. 88, кв. 302\n",
+        "Рабочий адрес: г. Краснодар, ул. Красная, д. 150, офис 405\n",
+        "Новиков Сергей Владимирович проживает: г. Уфа, проспект Салавата Юлаева, д. 45, кв. 67\n",
+    );
+    let sofa = SourceOfAnalysis::new(text);
+    let result = proc.process(sofa, Some(MorphLang::RU));
+
+    // ── Persons ──
+    let persons = collect_person_surfaces(&result, text);
+    let expected_persons = [
+        "Маслов Остап Леонидович",
+        "Забурева Кристина Александровна",
+        "Шурупкина Кристина Александровна",
+        "Полякова Пелагея Львовна",
+        "Дождикова Кристина Александровна",
+        "Иванов Петр Сергеевич",
+        "Сидорова Анна Михайловна",
+        "Петров Дмитрий Александрович",
+        "Козлова Елена Владимировна",
+        "Смирнов Алексей Игоревич",
+        "Васильева Ольга Петровна",
+        "Новиков Сергей Владимирович",
+    ];
+    for name in &expected_persons {
+        assert!(persons.iter().any(|s| s.contains(name)),
+            "Missing PERSON {:?} in {:?}", name, persons);
+    }
+
+    // ── Addresses ──
+    let addresses = collect_surfaces_by_type(&result, text, "ADDRESS");
+    let expected_addresses = [
+        "ул. Ленина, д. 25, кв. 12",
+        "ул. Баумана, д. 15, кв. 88",
+        "ул. Малышева, д. 33, офис 12",
+        "ул. Большая Покровская, д. 7, кв. 45",
+        "ул. Пушкина, д. 88, кв. 302",
+        "ул. Красная, д. 150, офис 405",
+    ];
+    for addr in &expected_addresses {
+        assert!(addresses.iter().any(|s| s.contains(addr)),
+            "Missing ADDRESS {:?} in {:?}", addr, addresses);
+    }
+    // Suffix-form addresses
+    assert!(addresses.iter().any(|s| s.contains("проспект") && s.contains("100")),
+        "Missing Невский проспект address in {:?}", addresses);
+    assert!(addresses.iter().any(|s| s.contains("шоссе") && s.contains("120")),
+        "Missing Московское шоссе address in {:?}", addresses);
+    assert!(addresses.iter().any(|s| s.contains("проспект") && s.contains("45")),
+        "Missing проспект Салавата Юлаева address in {:?}", addresses);
+    assert!(addresses.iter().any(|s| s.contains("проспект") && s.contains("50")),
+        "Missing Красный проспект address in {:?}", addresses);
+
+    // ── GEO ──
+    let geos = collect_geos(&result);
+    // Салавата should NOT be detected as GEO
+    assert!(!geos.iter().any(|g| g.contains("САЛАВАТ")),
+        "Салавата should NOT be GEO in street name context: {:?}", geos);
+}
