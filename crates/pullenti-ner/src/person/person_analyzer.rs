@@ -22,6 +22,7 @@ use crate::person::person_referent as pr;
 use crate::person::person_property_referent as ppr;
 use crate::person::person_attr_table as pat;
 use crate::person::person_id_token;
+use crate::person::person_item_token::{self, PersonItemToken};
 
 pub struct PersonAnalyzer;
 
@@ -78,6 +79,31 @@ impl Analyzer for PersonAnalyzer {
                     }
                 }
                 let tok = Rc::new(RefCell::new(Token::new_referent(begin, end, r_rc)));
+                kit.embed_token(tok.clone());
+                cur = tok.borrow().next.clone();
+                continue;
+            }
+            // Prefer strong Russian full-FIO forms before prefix handling.
+            // This prevents names like "Королева Галина Леоновна" and
+            // "Аким Арсеньевич Федотов" from being treated as property phrases.
+            if let Some((referent, end)) = try_surname_name_secname(&t, &sofa) {
+                if is_strong_surname_token(&t, &sofa) || is_proper_surname_token(&t) {
+                    let r_rc = Rc::new(RefCell::new(referent));
+                    let r_rc = kit.add_entity(r_rc);
+                    let tok = Rc::new(RefCell::new(
+                        Token::new_referent(t.clone(), end, r_rc)
+                    ));
+                    kit.embed_token(tok.clone());
+                    cur = tok.borrow().next.clone();
+                    continue;
+                }
+            }
+            if let Some((referent, end)) = try_name_secname_surname_by_form(&t, &sofa) {
+                let r_rc = Rc::new(RefCell::new(referent));
+                let r_rc = kit.add_entity(r_rc);
+                let tok = Rc::new(RefCell::new(
+                    Token::new_referent(t.clone(), end, r_rc)
+                ));
                 kit.embed_token(tok.clone());
                 cur = tok.borrow().next.clone();
                 continue;
@@ -162,6 +188,19 @@ fn try_parse(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Referent, TokenRe
         if let Some(r) = try_surname_initials(t, sofa) { return Some(r); }
         // B4: Surname alone (only if after a title keyword in previous token)
         if let Some(r) = try_surname_alone(t, sofa) { return Some(r); }
+    }
+
+    // Some valid Russian surnames are not present in the morphology dictionary
+    // but have a standard surname ending. Accept them only in the strong
+    // Surname + FirstName + Patronymic pattern to avoid broad false positives.
+    if !is_surname && is_strong_surname_token(t, sofa) {
+        if let Some(r) = try_surname_name_secname(t, sofa) { return Some(r); }
+    }
+
+    // Strong full-FIO fallback for generated or uncommon names missing from the
+    // morphology dictionary: Capitalized + Patronymic + Surname.
+    if !is_name {
+        if let Some(r) = try_name_secname_surname_by_form(t, sofa) { return Some(r); }
     }
 
     // --- Pattern C: FirstName [Patronymic | Surname] ---
@@ -310,11 +349,12 @@ fn try_surname_name_secname(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Re
     let surname = normal_form_of(t);
     let n1 = t.borrow().next.clone()?;
     if n1.borrow().whitespaces_before_count(sofa) == 0 { return None; }
-    if !is_proper_name_token(&n1) { return None; }
+    if !token_can_be_firstname(&n1, sofa) { return None; }
     let firstname = normal_form_of(&n1);
     let n2 = n1.borrow().next.clone()?;
     if n2.borrow().whitespaces_before_count(sofa) == 0 { return None; }
-    if !is_proper_secname_token(&n2) { return None; }
+    let n2_item = person_item_token::try_attach(&n2, sofa)?;
+    if !item_can_be_patronymic(&n2_item) { return None; }
     let midname = normal_form_of(&n2);
     let sex = infer_sex_from_secname(&midname);
 
@@ -326,12 +366,37 @@ fn try_surname_name_secname(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Re
     Some((r, n2.clone()))
 }
 
+fn try_name_secname_surname_by_form(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Referent, TokenRef)> {
+    if !token_can_be_firstname(t, sofa) { return None; }
+    let firstname = normal_form_of(t);
+    let n1 = t.borrow().next.clone()?;
+    if n1.borrow().whitespaces_before_count(sofa) == 0 { return None; }
+    let n1_item = person_item_token::try_attach(&n1, sofa)?;
+    if !item_can_be_patronymic(&n1_item) { return None; }
+    let midname = normal_form_of(&n1);
+    let n2 = n1.borrow().next.clone()?;
+    if n2.borrow().whitespaces_before_count(sofa) == 0 { return None; }
+    let n2_item = person_item_token::try_attach(&n2, sofa)?;
+    if !item_is_strong_surname(&n2_item) && !is_proper_surname_token_ctx(&n2, sofa) { return None; }
+    let surname = normal_form_of(&n2);
+    let sex = infer_sex_from_secname(&midname);
+
+    let mut r = pr::new_person_referent();
+    pr::set_firstname(&mut r, &firstname);
+    pr::set_middlename(&mut r, &midname);
+    pr::set_lastname(&mut r, &surname);
+    if let Some(s) = sex { pr::set_sex(&mut r, s); }
+    Some((r, n2.clone()))
+}
+
 // ── Pattern B2: Surname FirstName ────────────────────────────────────────────
 
 fn try_surname_name(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Referent, TokenRef)> {
     let surname = normal_form_of(t);
     let n1 = t.borrow().next.clone()?;
     if n1.borrow().whitespaces_before_count(sofa) == 0 { return None; }
+    let n1_item = person_item_token::try_attach(&n1, sofa)?;
+    if item_can_be_patronymic(&n1_item) { return None; }
     if !is_proper_name_token(&n1) { return None; }
     let firstname = normal_form_of(&n1);
 
@@ -444,14 +509,15 @@ fn try_name_secname(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Referent, 
     let firstname = normal_form_of(t);
     let n1 = t.borrow().next.clone()?;
     if n1.borrow().whitespaces_before_count(sofa) == 0 { return None; }
-    if !is_proper_secname_token(&n1) { return None; }
+    let n1_item = person_item_token::try_attach(&n1, sofa)?;
+    if !item_can_be_patronymic(&n1_item) { return None; }
     let midname = normal_form_of(&n1);
     let sex = infer_sex_from_secname(&midname);
 
     // C3 extension: FirstName + Patronymic + Surname ("Мария Петровна Иванова")
     if let Some(n2) = n1.borrow().next.clone() {
         if n2.borrow().whitespaces_before_count(sofa) <= 1
-            && is_proper_surname_token_ctx(&n2, sofa)
+            && (is_proper_surname_token_ctx(&n2, sofa) || is_strong_surname_token(&n2, sofa))
         {
             let surname = normal_form_of(&n2);
             let mut r = pr::new_person_referent();
@@ -657,8 +723,30 @@ fn is_proper_name_token(t: &TokenRef) -> bool {
     t.borrow().morph.items().iter().any(|wf| wf.base.class.is_proper_name())
 }
 
-fn is_proper_secname_token(t: &TokenRef) -> bool {
-    t.borrow().morph.items().iter().any(|wf| wf.base.class.is_proper_secname())
+fn is_strong_surname_token(t: &TokenRef, sofa: &SourceOfAnalysis) -> bool {
+    person_item_token::try_attach(t, sofa)
+        .map(|pit| item_is_strong_surname(&pit))
+        .unwrap_or(false)
+}
+
+fn item_is_strong_surname(pit: &PersonItemToken) -> bool {
+    pit.lastname.as_ref()
+        .map(|ln| ln.is_in_dictionary || ln.is_lastname_has_std_tail)
+        .unwrap_or(false)
+}
+
+fn item_can_be_firstname(pit: &PersonItemToken, t: &TokenRef, sofa: &SourceOfAnalysis) -> bool {
+    pit.firstname.is_some() || person_item_token::is_capitalized_cyrillic_token(t, sofa)
+}
+
+fn token_can_be_firstname(t: &TokenRef, sofa: &SourceOfAnalysis) -> bool {
+    person_item_token::try_attach(t, sofa)
+        .map(|pit| item_can_be_firstname(&pit, t, sofa))
+        .unwrap_or_else(|| person_item_token::is_capitalized_cyrillic_token(t, sofa))
+}
+
+fn item_can_be_patronymic(pit: &PersonItemToken) -> bool {
+    pit.middlename.is_some()
 }
 
 /// Get the canonical (nominative) form of a name token.

@@ -643,6 +643,43 @@ fn test_geo_city_prefix() {
     );
 }
 
+/// "г. Нижний Новгород" → GEO, whole two-word city (not just "г. Нижний")
+#[test]
+fn test_geo_city_prefix_two_word() {
+    let proc = geo_proc();
+    let text = "Постоянная регистрация: г. Нижний Новгород, ул. Большая Покровская";
+    let sofa = SourceOfAnalysis::new(text);
+    let result = proc.process(sofa, Some(MorphLang::RU));
+    let geos: Vec<_> = result.entities.iter()
+        .filter(|e| e.borrow().type_name == "GEO")
+        .collect();
+    assert!(!geos.is_empty(), "Should extract GEO entity for 'г. Нижний Новгород'");
+    // Walk the token chain to find the referent token span — this is how Python
+    // bindings compute occurrence text. The span must cover "Новгород".
+    let mut spans_both_words = false;
+    let mut cur = result.first_token.clone();
+    while let Some(tok) = cur {
+        let next = tok.borrow().next.clone();
+        {
+            let tb = tok.borrow();
+            if let pullenti_ner::token::TokenKind::Referent(ref rd) = tb.kind {
+                let is_geo = rd.referent.borrow().type_name == "GEO";
+                if is_geo {
+                    let occ_text = result.sofa.substring(tb.begin_char, tb.end_char);
+                    if occ_text.contains("Новгород") {
+                        spans_both_words = true;
+                    }
+                }
+            }
+        }
+        cur = next;
+    }
+    assert!(spans_both_words,
+        "Token span should cover 'г. Нижний Новгород', not just 'г. Нижний'. GEO names: {:?}",
+        geos.iter().map(|e| get_geo_name(&e.borrow())).collect::<Vec<_>>()
+    );
+}
+
 /// "деревню. Я" → should NOT produce a GEO (sentence-ending "." followed by pronoun)
 #[test]
 fn test_geo_no_false_positive_sentence_period() {
@@ -658,6 +695,42 @@ fn test_geo_no_false_positive_sentence_period() {
         get_geo_name(&rb).as_deref() == Some("Я")
     });
     assert!(!has_ya, "Should NOT extract 'Я' (pronoun) as a city name");
+}
+
+/// "г. Ростов-на-Дону" → GEO, occurrence must include "г." prefix
+/// ("Ростов" is tagged is_proper_surname so the prefix must not be dropped)
+#[test]
+fn test_geo_city_prefix_hyphenated() {
+    let proc = geo_proc();
+    let text = "Домашний адрес: г. Ростов-на-Дону, ул. Пушкина";
+    let sofa = SourceOfAnalysis::new(text);
+    let result = proc.process(sofa, Some(MorphLang::RU));
+    let geos: Vec<_> = result.entities.iter()
+        .filter(|e| e.borrow().type_name == "GEO")
+        .collect();
+    assert!(!geos.is_empty(), "Should extract GEO for 'г. Ростов-на-Дону'");
+    // Walk the token chain: the referent span must start before "Ростов" (i.e. cover "г.")
+    let mut span_includes_prefix = false;
+    let mut cur = result.first_token.clone();
+    while let Some(tok) = cur {
+        let next = tok.borrow().next.clone();
+        {
+            let tb = tok.borrow();
+            if let pullenti_ner::token::TokenKind::Referent(ref rd) = tb.kind {
+                let is_geo = rd.referent.borrow().type_name == "GEO";
+                if is_geo {
+                    let occ_text = result.sofa.substring(tb.begin_char, tb.end_char);
+                    if occ_text.contains("Ростов-на-Дону") && occ_text.starts_with('г') {
+                        span_includes_prefix = true;
+                    }
+                }
+            }
+        }
+        cur = next;
+    }
+    assert!(span_includes_prefix,
+        "Occurrence should be 'г. Ростов-на-Дону' (including prefix), not just 'Ростов-на-Дону'"
+    );
 }
 
 /// "Сел Максим" → should NOT produce a GEO (verb + person name)
@@ -770,6 +843,50 @@ fn test_person_surname_initials() {
     let rb = persons[0].borrow();
     let last = get_lastname(&rb);
     assert!(last.is_some(), "lastname should be set, got {:?}", last);
+}
+
+/// "Останков Дмитрий Александрович" → PERSON, including surname not tagged by morph dictionary.
+#[test]
+fn test_person_std_tail_surname_full_fio() {
+    let proc = person_proc();
+    let text = "Останков Д.А. и Останков Дмитрий Александрович подписали документы.";
+    let sofa = SourceOfAnalysis::new(text);
+    let result = proc.process(sofa, Some(MorphLang::RU));
+    let surfaces = collect_person_surfaces(&result, text);
+    assert!(surfaces.iter().any(|s| s == "Останков Д.А."),
+        "Should extract initials form, got {:?}", surfaces);
+    assert!(surfaces.iter().any(|s| s == "Останков Дмитрий Александрович"),
+        "Should extract full FIO with surname-like prefix, got {:?}", surfaces);
+}
+
+/// Generated names can contain first names, patronymics, and surnames absent from the morph dictionary.
+#[test]
+fn test_person_generated_full_fio_by_form() {
+    let proc = person_proc();
+    let text = concat!(
+        "София Евгеньевна Корнилова.\n",
+        "Виктория Владимировна Дьячкова.\n",
+        "Орлов Велимир Ааронович.\n",
+        "Алевтина Васильевна Афанасьева.\n",
+        "Кузнецов Януарий Фокич.\n",
+        "Всемил Андреевич Нестеров.\n",
+        "Аким Арсеньевич Федотов."
+    );
+    let sofa = SourceOfAnalysis::new(text);
+    let result = proc.process(sofa, Some(MorphLang::RU));
+    let surfaces = collect_person_surfaces(&result, text);
+    for expected in [
+        "София Евгеньевна Корнилова",
+        "Виктория Владимировна Дьячкова",
+        "Орлов Велимир Ааронович",
+        "Алевтина Васильевна Афанасьева",
+        "Кузнецов Януарий Фокич",
+        "Всемил Андреевич Нестеров",
+        "Аким Арсеньевич Федотов",
+    ] {
+        assert!(surfaces.iter().any(|s| s == expected),
+            "Should extract {}, got {:?}", expected, surfaces);
+    }
 }
 
 // ── Org analyzer tests ────────────────────────────────────────────────────────

@@ -1,7 +1,7 @@
 /// Simplified port of `PersonItemToken.cs` (2524 lines → ~420 lines).
 ///
 /// Covers the EmptyProcessor path used by `PersonNormalData::analyze()`:
-///  - Standard surname tail detection (`ends_with_std_surname`)
+///  - Standard surname/patronymic tail detection
 ///  - Morph-class-based role assignment (firstname / middlename / lastname)
 ///  - Short-name expansion via `ShortNameHelper` (Вася→Василий)
 ///  - Arab postfix recognition (ОГЛЫ, КЫЗЫ, ЗАДЕ, …)
@@ -53,6 +53,40 @@ pub fn ends_with_std_surname(s: &str) -> Option<i32> {
         }
     }
     None
+}
+
+/// `(suffix_uppercase, gender)` where gender: 1=masculine, 2=feminine.
+const PATRONYMIC_TAILS: &[(&str, i32)] = &[
+    ("ОВИЧ", 1), ("ЕВИЧ", 1), ("ИЧ", 1),
+    ("ОВНА", 2), ("ЕВНА", 2), ("ИЧНА", 2),
+];
+
+/// Check whether `s` ends with a standard Russian patronymic tail.
+/// Returns `Some(gender)` (1=masculine, 2=feminine) on match.
+/// NOTE: `s` is expected to be uppercase (morph terms are always uppercase).
+pub fn ends_with_std_patronymic(s: &str) -> Option<i32> {
+    for &(tail, gender) in PATRONYMIC_TAILS {
+        if s.ends_with(tail) && s.len() > tail.len() {
+            return Some(gender);
+        }
+    }
+    None
+}
+
+pub fn is_capitalized_cyrillic_token(t: &TokenRef, sofa: &SourceOfAnalysis) -> bool {
+    let tb = t.borrow();
+    if !matches!(tb.kind, TokenKind::Text(_)) {
+        return false;
+    }
+    let surface = sofa.substring(tb.begin_char, tb.end_char);
+    if surface.chars().count() < 3 {
+        return false;
+    }
+    let mut chars = surface.chars();
+    if !chars.next().map(|c| c.is_uppercase() && ('А'..='Я').contains(&c)).unwrap_or(false) {
+        return false;
+    }
+    chars.all(|c| c.is_lowercase() && ('а'..='я').contains(&c))
 }
 
 // ── Arab postfix lists ─────────────────────────────────────────────────────────
@@ -198,7 +232,7 @@ pub fn try_attach(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<PersonItemTok
         let tb2 = t.borrow();
         if tb2.chars.is_all_lower() { return None; }
         // ALL-CAPS abbreviations (≥3 chars) without morph proper-name flags → reject
-        let is_all_upper = term.chars().all(|c| c.is_uppercase());
+        let is_all_upper = tb2.chars.is_all_upper();
         if is_all_upper && term.chars().count() >= 3 {
             let has_proper = tb2.morph.items().iter().any(|wf| {
                 wf.base.class.is_proper_surname()
@@ -231,6 +265,7 @@ pub fn try_attach(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<PersonItemTok
         }
 
         let std_tail = ends_with_std_surname(&term);
+        let patronymic_tail = ends_with_std_patronymic(&term);
 
         // Build MorphPersonItem for firstname, expanding short names if possible
         let fn_item = if fn_dict {
@@ -247,7 +282,10 @@ pub fn try_attach(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<PersonItemTok
             Some(m)
         } else { None };
 
-        let mn_item = if mn_dict { Some(MorphPersonItem::new(mn_gender, true, false)) } else { None };
+        let mn_item = if mn_dict || patronymic_tail.is_some() {
+            let mn_g = if mn_dict { mn_gender } else { patronymic_tail.unwrap_or(0) };
+            Some(MorphPersonItem::new(mn_g, mn_dict, false))
+        } else { None };
         let ln_item = if ln_dict || std_tail.is_some() {
             let has_tail = std_tail.is_some();
             let ln_g = if ln_dict { ln_gender } else { std_tail.unwrap_or(0) };

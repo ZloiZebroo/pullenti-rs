@@ -171,6 +171,20 @@ fn try_city_from_name(
     }
     // Try the token and following tokens as a multi-word city name
     let candidates = collect_candidates(name_tok, sofa);
+
+    // Try two-word city name first (e.g. "Нижний Новгород") before accepting a
+    // single-word match — prevents "г. Нижний" when "г. Нижний Новгород" is intended.
+    if let Some(result) = try_two_word_name(name_tok, &candidates, sofa) {
+        return Some(result);
+    }
+
+    // Try hyphenated table lookup before single-word (e.g. "Ростов-на-Дону").
+    // A definitive table match takes priority over the is_proper_surname morph tag —
+    // "Ростов" is tagged as a surname but "Ростов-на-Дону" is unambiguously a city.
+    if let Some(result) = try_hyphenated_name(name_tok, &candidates, sofa) {
+        return Some(result);
+    }
+
     for c in &candidates {
         if let Some(entry) = geo_table::lookup_name(c) {
             if matches!(entry.kind, GeoEntryKind::City) {
