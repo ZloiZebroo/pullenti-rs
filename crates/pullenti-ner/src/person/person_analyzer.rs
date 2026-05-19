@@ -48,40 +48,44 @@ impl Analyzer for PersonAnalyzer {
                     continue;
                 }
             }
-            // Try: identity document (паспорт серия/номер) — before person patterns
-            if let Some((referent, begin, end)) = person_id_token::try_attach(&t, &sofa) {
-                let r_rc = Rc::new(RefCell::new(referent));
-                let r_rc = kit.add_entity(r_rc);
-                // Check if the immediately preceding token is a PERSON → link via IDDOC
-                {
-                    let prev = t.borrow().prev.as_ref().and_then(|w| w.upgrade());
-                    if let Some(prev_tok) = prev {
-                        let pb = prev_tok.borrow();
-                        // Check if it's a comma/colon before checking further back
-                        let check = if pb.is_char(',', &sofa) || pb.is_char(':', &sofa) {
-                            pb.prev.as_ref().and_then(|w| w.upgrade())
-                        } else {
-                            Some(prev_tok.clone())
-                        };
-                        drop(pb);
-                        if let Some(pers_tok) = check {
-                            let ptb = pers_tok.borrow();
-                            if let TokenKind::Referent(ref rd) = ptb.kind {
-                                if rd.referent.borrow().type_name == pr::OBJ_TYPENAME {
-                                    rd.referent.borrow_mut().add_slot(
-                                        pr::ATTR_IDDOC,
-                                        crate::referent::SlotValue::Referent(r_rc.clone()),
-                                        false,
-                                    );
+            // Try: identity document (паспорт серия/номер) — before person patterns.
+            // The ontology parser is relatively expensive, so only call it for
+            // tokens that can actually start an identity-document phrase.
+            if may_start_person_id(&t) {
+                if let Some((referent, begin, end)) = person_id_token::try_attach(&t, &sofa) {
+                    let r_rc = Rc::new(RefCell::new(referent));
+                    let r_rc = kit.add_entity(r_rc);
+                    // Check if the immediately preceding token is a PERSON → link via IDDOC
+                    {
+                        let prev = t.borrow().prev.as_ref().and_then(|w| w.upgrade());
+                        if let Some(prev_tok) = prev {
+                            let pb = prev_tok.borrow();
+                            // Check if it's a comma/colon before checking further back
+                            let check = if pb.is_char(',', &sofa) || pb.is_char(':', &sofa) {
+                                pb.prev.as_ref().and_then(|w| w.upgrade())
+                            } else {
+                                Some(prev_tok.clone())
+                            };
+                            drop(pb);
+                            if let Some(pers_tok) = check {
+                                let ptb = pers_tok.borrow();
+                                if let TokenKind::Referent(ref rd) = ptb.kind {
+                                    if rd.referent.borrow().type_name == pr::OBJ_TYPENAME {
+                                        rd.referent.borrow_mut().add_slot(
+                                            pr::ATTR_IDDOC,
+                                            crate::referent::SlotValue::Referent(r_rc.clone()),
+                                            false,
+                                        );
+                                    }
                                 }
                             }
                         }
                     }
+                    let tok = Rc::new(RefCell::new(Token::new_referent(begin, end, r_rc)));
+                    kit.embed_token(tok.clone());
+                    cur = tok.borrow().next.clone();
+                    continue;
                 }
-                let tok = Rc::new(RefCell::new(Token::new_referent(begin, end, r_rc)));
-                kit.embed_token(tok.clone());
-                cur = tok.borrow().next.clone();
-                continue;
             }
             // Prefer strong Russian full-FIO forms before prefix handling.
             // This prevents names like "Королева Галина Леоновна" and
@@ -137,6 +141,16 @@ impl Analyzer for PersonAnalyzer {
             }
         }
     }
+}
+
+fn may_start_person_id(t: &TokenRef) -> bool {
+    let tb = t.borrow();
+    let TokenKind::Text(txt) = &tb.kind else { return false; };
+    matches!(txt.term.as_str(),
+        "ПАСПОРТ" | "ПАССПОРТ" | "ЗАГРАНПАСПОРТ" |
+        "СВИДЕТЕЛЬСТВО" | "СПРАВКА" | "УДОСТОВЕРЕНИЕ" |
+        "ВОДИТЕЛЬСКОЕ" | "ВНУТРЕННИЙ"
+    )
 }
 
 // ── Entry point ───────────────────────────────────────────────────────────────

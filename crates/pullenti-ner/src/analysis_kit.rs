@@ -251,7 +251,7 @@ impl AnalysisKit {
 
         let mut t = self.first_token.clone();
         while let Some(tok) = t {
-            let lang = tok.borrow().morph.clone_collection().language();
+            let lang = tok.borrow().morph.language_no_recalc_mut();
             if lang.is_ru() { ru += 1; }
             if lang.is_ua() { ua += 1; }
             if lang.is_en() { en += 1; }

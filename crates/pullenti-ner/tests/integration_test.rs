@@ -733,6 +733,119 @@ fn test_geo_city_prefix_hyphenated() {
     );
 }
 
+/// Non-"г." locality abbreviations should identify the city but keep the
+/// occurrence span on the actual name for masking fixtures.
+#[test]
+fn test_geo_locality_abbrev_occurrence_without_prefix() {
+    let proc = geo_proc();
+    let text = "Адреса: к. Оса, д. Алексин, ст. Шуя, клх Ангарск.";
+    let sofa = SourceOfAnalysis::new(text);
+    let result = proc.process(sofa, Some(MorphLang::RU));
+    let mut surfaces = Vec::new();
+    let mut cur = result.first_token.clone();
+    while let Some(tok) = cur {
+        let next = tok.borrow().next.clone();
+        {
+            let tb = tok.borrow();
+            if let pullenti_ner::token::TokenKind::Referent(ref rd) = tb.kind {
+                if rd.referent.borrow().type_name == "GEO" {
+                    surfaces.push(result.sofa.substring(tb.begin_char, tb.end_char).to_string());
+                }
+            }
+        }
+        cur = next;
+    }
+    for expected in ["Оса", "Алексин", "Шуя", "Ангарск"] {
+        assert!(surfaces.iter().any(|s| s == expected),
+            "GEO occurrence should contain {expected:?} without prefix, got {surfaces:?}");
+    }
+}
+
+#[test]
+fn test_geo_selo_and_poselok_abbrev_with_split_dot() {
+    let proc = geo_proc();
+    let text = "Доставка: с. Партизанск, п. Завьялиха.";
+    let sofa = SourceOfAnalysis::new(text);
+    let result = proc.process(sofa, Some(MorphLang::RU));
+    let mut surfaces = Vec::new();
+    let mut cur = result.first_token.clone();
+    while let Some(tok) = cur {
+        let next = tok.borrow().next.clone();
+        {
+            let tb = tok.borrow();
+            if let pullenti_ner::token::TokenKind::Referent(ref rd) = tb.kind {
+                if rd.referent.borrow().type_name == "GEO" {
+                    surfaces.push(result.sofa.substring(tb.begin_char, tb.end_char).to_string());
+                }
+            }
+        }
+        cur = next;
+    }
+    assert!(surfaces.iter().any(|s| s == "Партизанск"), "got {surfaces:?}");
+    assert!(surfaces.iter().any(|s| s == "Завьялиха"), "got {surfaces:?}");
+}
+
+#[test]
+fn test_geo_dictionary_city_names_in_address_context() {
+    let proc = geo_proc();
+    let text = "Доставка по адресу Киренск, ул. Украинская, д. 5. Доставка по адресу Петропавловск-Камчатский, пер. Кооперативный, д. 1. Доставка по адресу Новая Игирма, пр. Таманский, д. 8.";
+    let sofa = SourceOfAnalysis::new(text);
+    let result = proc.process(sofa, Some(MorphLang::RU));
+    let mut surfaces = Vec::new();
+    let mut cur = result.first_token.clone();
+    while let Some(tok) = cur {
+        let next = tok.borrow().next.clone();
+        {
+            let tb = tok.borrow();
+            if let pullenti_ner::token::TokenKind::Referent(ref rd) = tb.kind {
+                if rd.referent.borrow().type_name == "GEO" {
+                    surfaces.push(result.sofa.substring(tb.begin_char, tb.end_char).to_string());
+                }
+            }
+        }
+        cur = next;
+    }
+    for expected in ["Киренск", "Петропавловск-Камчатский", "Новая Игирма"] {
+        assert!(surfaces.iter().any(|s| s == expected), "missing {expected:?}, got {surfaces:?}");
+    }
+}
+
+#[test]
+fn test_geo_dictionary_city_names_from_test_9_2() {
+    let proc = geo_proc();
+    let expected = [
+        "Киренск", "Ведено", "Асбест", "Печенга", "Палана", "Камень-на-Оби",
+        "Каргополь", "Инта", "Петропавловск-Камчатский", "Чегем", "Клин",
+        "Хоста", "Старая Русса", "Истра", "Красноселькуп", "Юровск", "Дудинка",
+        "Терскол", "Новомосковск", "Серов", "Анива", "Апрелевка", "Билибино",
+        "Шуя", "Ершов", "Северо-Курильск", "Арсеньев", "Усть-Камчатск",
+        "Каменномостский", "Верхотурье", "Киржач", "Игарка", "Фатеж", "Быково",
+        "Тимашевск", "Ноябрьск", "Калачинск", "Нарткала", "Бугульма", "Данков",
+        "Валдай", "Миллерово", "Славгород", "Внуково", "Кущевская", "Бомнак",
+        "Кырен", "Раменское", "Тутаев", "Обоянь", "Кажим", "Новая Игирма",
+    ];
+    let text = format!("Маршрут: {}.", expected.join(", "));
+    let sofa = SourceOfAnalysis::new(text);
+    let result = proc.process(sofa, Some(MorphLang::RU));
+    let mut surfaces = Vec::new();
+    let mut cur = result.first_token.clone();
+    while let Some(tok) = cur {
+        let next = tok.borrow().next.clone();
+        {
+            let tb = tok.borrow();
+            if let pullenti_ner::token::TokenKind::Referent(ref rd) = tb.kind {
+                if rd.referent.borrow().type_name == "GEO" {
+                    surfaces.push(result.sofa.substring(tb.begin_char, tb.end_char).to_string());
+                }
+            }
+        }
+        cur = next;
+    }
+    for name in expected {
+        assert!(surfaces.iter().any(|s| s == name), "missing {name:?}, got {surfaces:?}");
+    }
+}
+
 /// "Сел Максим" → should NOT produce a GEO (verb + person name)
 #[test]
 fn test_geo_no_false_positive_verb_personname() {
@@ -3322,6 +3435,81 @@ fn test_address_with_corpus() {
     assert_eq!(corpus.as_deref(), Some("2"), "corpus should be 2, got {:?}", corpus);
 }
 
+#[test]
+fn test_address_fractional_house_and_corpus_span() {
+    let proc = address_proc();
+    let text = "Адрес: пер. Учительский, д. 7/5 к. 2.";
+    let sofa = SourceOfAnalysis::new(text);
+    let result = proc.process(sofa, Some(MorphLang::RU));
+    let addresses: Vec<_> = result.entities.iter()
+        .filter(|e| e.borrow().type_name == "ADDRESS")
+        .collect();
+    assert!(!addresses.is_empty(), "Should find ADDRESS with fractional house and corpus");
+    let rb = addresses[0].borrow();
+    assert_eq!(get_house(&rb).as_deref(), Some("7/5"));
+    assert_eq!(get_corpus(&rb).as_deref(), Some("2"));
+
+    let mut has_full_span = false;
+    let mut cur = result.first_token.clone();
+    while let Some(tok) = cur {
+        let next = tok.borrow().next.clone();
+        {
+            let tb = tok.borrow();
+            if let pullenti_ner::token::TokenKind::Referent(ref rd) = tb.kind {
+                if rd.referent.borrow().type_name == "ADDRESS" {
+                    let occ_text = result.sofa.substring(tb.begin_char, tb.end_char);
+                    if occ_text == "пер. Учительский, д. 7/5 к. 2" {
+                        has_full_span = true;
+                    }
+                }
+            }
+        }
+        cur = next;
+    }
+    assert!(has_full_span, "ADDRESS occurrence should span the full fixture address");
+}
+
+#[test]
+fn test_address_street_initial_and_building_fraction() {
+    let proc = address_proc();
+    let text = "Адрес: пр. О.Кошевого, д. 2/9 стр. 8/1.";
+    let sofa = SourceOfAnalysis::new(text);
+    let result = proc.process(sofa, Some(MorphLang::RU));
+    let addresses: Vec<_> = result.entities.iter()
+        .filter(|e| e.borrow().type_name == "ADDRESS")
+        .collect();
+    assert!(!addresses.is_empty(), "Should find ADDRESS with initial street name and building");
+    let rb = addresses[0].borrow();
+    assert_eq!(get_house(&rb).as_deref(), Some("2/9"));
+    assert_eq!(get_corpus(&rb).as_deref(), Some("8/1"));
+}
+
+#[test]
+fn test_address_numeric_street_names() {
+    let proc = address_proc();
+    let text = "Адреса: пр. 1 Мая, д. 3/6; пр. 50 лет ВЛКСМ, д. 9 к. 747.";
+    let sofa = SourceOfAnalysis::new(text);
+    let result = proc.process(sofa, Some(MorphLang::RU));
+    let mut surfaces = Vec::new();
+    let mut cur = result.first_token.clone();
+    while let Some(tok) = cur {
+        let next = tok.borrow().next.clone();
+        {
+            let tb = tok.borrow();
+            if let pullenti_ner::token::TokenKind::Referent(ref rd) = tb.kind {
+                if rd.referent.borrow().type_name == "ADDRESS" {
+                    surfaces.push(result.sofa.substring(tb.begin_char, tb.end_char).to_string());
+                }
+            }
+        }
+        cur = next;
+    }
+    assert!(surfaces.iter().any(|s| s == "пр. 1 Мая, д. 3/6"),
+        "Should parse numeric May street address, got {surfaces:?}");
+    assert!(surfaces.iter().any(|s| s == "пр. 50 лет ВЛКСМ, д. 9 к. 747"),
+        "Should parse numeric VLKSM street address, got {surfaces:?}");
+}
+
 /// "ул. Гагарина, д. 5, кв. 12, эт. 3" → ADDRESS with flat=12 and floor=3.
 #[test]
 fn test_address_with_flat_and_floor() {
@@ -3857,6 +4045,24 @@ fn test_person_all_case_forms_dialoge5() {
         "Николаев should not be GEO in person context, got geos={:?}", geos);
 }
 
+/// City dictionary hits after a patronymic should remain available to PERSON.
+#[test]
+fn test_person_city_surname_after_patronymic() {
+    let proc = Processor::new(MorphLang::RU, vec![
+        Arc::new(GeoAnalyzer::new()),
+        Arc::new(PersonAnalyzer::new()),
+    ]);
+    let text = "Варлаам Фокич Николаев с доставкой.";
+    let sofa = SourceOfAnalysis::new(text);
+    let result = proc.process(sofa, Some(MorphLang::RU));
+    let persons = collect_person_surfaces(&result, text);
+    assert!(persons.iter().any(|s| s == "Варлаам Фокич Николаев"),
+        "expected full PERSON, got {persons:?}");
+    let geos = collect_geos(&result);
+    assert!(!geos.iter().any(|g| g.contains("НИКОЛАЕВ")),
+        "Николаев should not be GEO in FIO context: {geos:?}");
+}
+
 /// Collect surface texts for referent tokens of a given type name.
 fn collect_surfaces_by_type(result: &pullenti_ner::AnalysisResult, text: &str, type_name: &str) -> Vec<String> {
     let sofa = SourceOfAnalysis::new(text.to_string());
@@ -4168,6 +4374,42 @@ fn test_address_multiword_street_name_not_geo() {
     let geos = collect_geos(&result);
     assert!(!geos.iter().any(|g| g.contains("САЛАВАТ")),
         "Салавата should NOT be GEO in street name context, geos={:?}", geos);
+}
+
+/// Address names can contain GEO-looking words and numeric/initial patterns.
+/// GEO runs before ADDRESS here, so ADDRESS must consume existing GEO tokens.
+#[test]
+fn test_address_street_names_from_test_9_3() {
+    let proc = Processor::new(MorphLang::RU, vec![
+        Arc::new(GeoAnalyzer::new()),
+        Arc::new(AddressAnalyzer::new()),
+    ]);
+    let text = concat!(
+        "ул. Николаева, д. 9/7\n",
+        "пер. Иванова, д. 3 стр. 6/7\n",
+        "ш. 8-е Марта, д. 438 стр. 432\n",
+        "бул. 9 мая, д. 2/5\n",
+        "пр. 60 лет СССР, д. 123 стр. 9\n",
+        "ш. К.Маркса, д. 200 к. 21\n",
+        "бул. Розы Люксембург, д. 25 к. 5/4\n",
+        "ул. Р.Люксембург, д. 571 к. 9"
+    );
+    let sofa = SourceOfAnalysis::new(text);
+    let result = proc.process(sofa, Some(MorphLang::RU));
+    let addresses = collect_surfaces_by_type(&result, text, "ADDRESS");
+    for expected in [
+        "ул. Николаева, д. 9/7",
+        "пер. Иванова, д. 3 стр. 6/7",
+        "ш. 8-е Марта, д. 438 стр. 432",
+        "бул. 9 мая, д. 2/5",
+        "пр. 60 лет СССР, д. 123 стр. 9",
+        "ш. К.Маркса, д. 200 к. 21",
+        "бул. Розы Люксембург, д. 25 к. 5/4",
+        "ул. Р.Люксембург, д. 571 к. 9",
+    ] {
+        assert!(addresses.iter().any(|s| s == expected),
+            "missing ADDRESS {expected:?}, got {addresses:?}");
+    }
 }
 
 /// Full dialoge_4 / test_7 integration: all persons, GEOs, and addresses

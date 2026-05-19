@@ -139,10 +139,11 @@ impl Token {
     }
 
     pub fn new_referent(begin_token: TokenRef, end_token: TokenRef, referent: Rc<RefCell<Referent>>) -> Self {
-        let begin_char = begin_token.borrow().begin_char;
+        let (begin_char, morph, chars) = {
+            let begin = begin_token.borrow();
+            (begin.begin_char, begin.morph.clone_collection(), begin.chars)
+        };
         let end_char = end_token.borrow().end_char;
-        let morph = begin_token.borrow().morph.clone_collection();
-        let chars = begin_token.borrow().chars;
         Token {
             begin_char,
             end_char,

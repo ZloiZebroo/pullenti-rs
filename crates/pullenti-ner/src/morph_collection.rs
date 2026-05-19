@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use pullenti_morph::{MorphBaseInfo, MorphWordForm, MorphLang, MorphClass, MorphCase, MorphGenderFlags, MorphNumber};
 
 /// Voice of a verb form
@@ -23,7 +25,7 @@ impl std::ops::BitOrAssign for MorphVoice {
 /// Aggregate morphological information for a token — a collection of MorphWordForm variants
 #[derive(Debug, Clone)]
 pub struct MorphCollection {
-    items: Vec<MorphWordForm>,
+    items: Arc<[MorphWordForm]>,
     // Cached aggregate values (recalculated lazily)
     cached_class: MorphClass,
     cached_case: MorphCase,
@@ -37,7 +39,7 @@ pub struct MorphCollection {
 impl Default for MorphCollection {
     fn default() -> Self {
         MorphCollection {
-            items: Vec::new(),
+            items: Vec::new().into(),
             cached_class: MorphClass::new(),
             cached_case: MorphCase::new(),
             cached_gender: MorphGenderFlags::UNDEFINED,
@@ -56,14 +58,14 @@ impl MorphCollection {
 
     pub fn from_word_forms(forms: Vec<MorphWordForm>) -> Self {
         let mut mc = MorphCollection::new();
-        mc.items = forms;
+        mc.items = forms.into();
         mc.need_recalc = true;
         mc
     }
 
     pub fn clone_collection(&self) -> Self {
         MorphCollection {
-            items: self.items.clone(),
+            items: Arc::clone(&self.items),
             cached_class: self.cached_class,
             cached_case: self.cached_case,
             cached_gender: self.cached_gender,
@@ -84,7 +86,7 @@ impl MorphCollection {
         self.cached_voice = MorphVoice::Undefined;
 
         let mut verb_has_undef = false;
-        for it in &self.items {
+        for it in self.items.iter() {
             self.cached_class.value |= it.base.class.value;
             self.cached_gender.0 |= it.base.gender.0;
             self.cached_case.value |= it.base.case.value;
@@ -122,13 +124,17 @@ impl MorphCollection {
     }
 
     pub fn add_item(&mut self, item: MorphWordForm) {
-        self.items.push(item);
+        let mut items = self.items.to_vec();
+        items.push(item);
+        self.items = items.into();
         self.need_recalc = true;
     }
 
     pub fn remove_item(&mut self, index: usize) {
         if index < self.items.len() {
-            self.items.remove(index);
+            let mut items = self.items.to_vec();
+            items.remove(index);
+            self.items = items.into();
             self.need_recalc = true;
         }
     }
@@ -158,6 +164,19 @@ impl MorphCollection {
         self.cached_lang
     }
 
+    /// Read language without cloning the collection. If aggregate values are
+    /// stale, compute only the language bits needed by hot language detection.
+    pub fn language_no_recalc_mut(&self) -> MorphLang {
+        if !self.need_recalc {
+            return self.cached_lang;
+        }
+        let mut lang = MorphLang::UNKNOWN;
+        for it in self.items.iter() {
+            lang.value |= it.base.language.value;
+        }
+        lang
+    }
+
     pub fn voice(&mut self) -> MorphVoice {
         if self.need_recalc { self.recalc(); }
         self.cached_voice
@@ -167,7 +186,7 @@ impl MorphCollection {
     pub fn set_language(&mut self, lang: MorphLang) {
         self.cached_lang = lang;
         self.need_recalc = false; // mark as explicitly set
-        for it in &mut self.items {
+        for it in Arc::make_mut(&mut self.items) {
             it.base.language = lang;
         }
     }
@@ -187,7 +206,7 @@ impl MorphCollection {
 
     /// Find item matching case/number/gender constraints
     pub fn find_item(&self, case: MorphCase, number: MorphNumber, gender: MorphGenderFlags) -> Option<&MorphWordForm> {
-        for it in &self.items {
+        for it in self.items.iter() {
             if !case.is_undefined() {
                 if (it.base.case.value & case.value) == 0 { continue; }
             }
@@ -203,7 +222,7 @@ impl MorphCollection {
             return Some(it);
         }
         // Fallback: return first undef match
-        for it in &self.items {
+        for it in self.items.iter() {
             if !case.is_undefined() {
                 if (it.base.case.value & case.value) == 0 { continue; }
             }
@@ -220,16 +239,20 @@ impl MorphCollection {
 
     /// Remove items not matching the given case
     pub fn remove_items_by_case(&mut self, case: MorphCase) {
-        self.items.retain(|it| {
+        let mut items = self.items.to_vec();
+        items.retain(|it| {
             if it.base.case.is_undefined() { return true; }
             (it.base.case.value & case.value) != 0
         });
+        self.items = items.into();
         self.need_recalc = true;
     }
 
     /// Remove items not matching the given class
     pub fn remove_items_by_class(&mut self, class: MorphClass) {
-        self.items.retain(|it| (it.base.class.value & class.value) != 0);
+        let mut items = self.items.to_vec();
+        items.retain(|it| (it.base.class.value & class.value) != 0);
+        self.items = items.into();
         self.need_recalc = true;
     }
 
@@ -237,14 +260,16 @@ impl MorphCollection {
     pub fn remove_not_in_dictionary_items(&mut self) {
         let has_in_dict = self.items.iter().any(|wf| wf.is_in_dictionary());
         if has_in_dict {
-            self.items.retain(|wf| wf.is_in_dictionary());
+            let mut items = self.items.to_vec();
+            items.retain(|wf| wf.is_in_dictionary());
+            self.items = items.into();
             self.need_recalc = true;
         }
     }
 
     /// Check agreement with another MorphBaseInfo
     pub fn check_accord(&self, other: &MorphBaseInfo, ignore_gender: bool, ignore_number: bool) -> bool {
-        for it in &self.items {
+        for it in self.items.iter() {
             if it.base.check_accord(other, ignore_gender, ignore_number) {
                 return true;
             }

@@ -87,15 +87,14 @@ pub fn type_keyword(s: &str) -> Option<(&'static str, bool)> {
 
 /// Returns true if `s` is a city type prefix abbreviation (e.g. "Г", "Г.", "ГОР.").
 pub fn is_city_prefix(s: &str) -> bool {
-    // Note: standalone "С" and "П" are intentionally excluded — they are
-    // far more commonly the Russian prepositions "с" (with/from) and "п"
-    // than the settlement-type abbreviations "с." (село) and "п." (посёлок).
-    // Only the forms that include a period ("С.", "П.") or full words
-    // ("СЕЛО", "ПОС.") are safe to treat as city prefix abbreviations.
+    // Standalone "С" and "П" are accepted only as abbreviations; the parser
+    // validates the following dot before consuming them as locality prefixes.
     matches!(s, "Г" | "Г." | "ГОР." | "ГОРОД" |
-        "П." | "ПОС." | "ПГТ" | "ПГТ." |
-        "С." | "СЕЛ." | "СЕЛО" |
-        "ДЕР." | "ДЕРЕВНЯ" | "СТ." | "СТАНИЦА")
+        "П" | "П." | "ПОС." | "ПГТ" | "ПГТ." |
+        "С" | "С." | "СЕЛ." | "СЕЛО" |
+        "Д" | "Д." | "ДЕР." | "ДЕРЕВНЯ" |
+        "К" | "К." | "КЛХ" | "КЛХ." |
+        "СТ" | "СТ." | "СТАНИЦА")
 }
 
 /// Returns true if `s` is an ABBREVIATED city prefix (not a full word).
@@ -104,8 +103,9 @@ pub fn is_city_prefix(s: &str) -> bool {
 /// must NOT skip a trailing period — it is sentence-ending punctuation.
 pub fn is_city_prefix_abbrev(s: &str) -> bool {
     matches!(s, "Г" | "Г." | "ГОР." |
-        "П." | "ПОС." | "ПГТ" | "ПГТ." |
-        "С." | "СЕЛ." | "ДЕР." | "СТ.")
+        "П" | "П." | "ПОС." | "ПГТ" | "ПГТ." |
+        "С" | "С." | "СЕЛ." | "Д" | "Д." | "ДЕР." |
+        "К" | "К." | "КЛХ" | "КЛХ." | "СТ" | "СТ.")
 }
 
 // ── Territory type keywords ───────────────────────────────────────────────────
