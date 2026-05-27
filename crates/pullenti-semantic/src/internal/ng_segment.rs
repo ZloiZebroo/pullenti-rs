@@ -3,6 +3,7 @@
 
 use super::sent_item::{SentItem, SentItemType};
 use super::ng_link::{NGLink, NGLinkType};
+use crate::score_order::cmp_f64_asc;
 
 // ── NGItem ────────────────────────────────────────────────────────────────
 
@@ -381,9 +382,45 @@ impl NGSegment {
         let mut result = vec![None; self.items.len()];
         for (i, ng_it) in self.items.iter().enumerate() {
             let best = ng_it.links.iter()
-                .max_by(|a, b| a.coef.partial_cmp(&b.coef).unwrap_or(std::cmp::Ordering::Equal));
+                .max_by(|a, b| cmp_f64_asc(a.coef, b.coef));
             result[i] = best.cloned();
         }
         result
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{NGItem, NGSegment};
+    use crate::internal::ng_link::NGLink;
+
+    #[test]
+    fn test_best_links_ignores_nan_score() {
+        let mut nan_link = NGLink::default();
+        nan_link.coef = f64::NAN;
+        let mut best_link = NGLink::default();
+        best_link.coef = 2.0;
+        let mut low_link = NGLink::default();
+        low_link.coef = -1.0;
+
+        let seg = NGSegment {
+            before_verb_idx: None,
+            after_verb_idx: None,
+            items: vec![NGItem {
+                sent_item_idx: 0,
+                order: 0,
+                comma_before: false,
+                and_before: false,
+                or_before: false,
+                comma_after: false,
+                and_after: false,
+                or_after: false,
+                links: vec![nan_link, best_link, low_link],
+                ind: 0,
+            }],
+        };
+
+        let best = seg.best_links(&[]);
+        assert_eq!(best[0].as_ref().map(|l| l.coef), Some(2.0));
     }
 }

@@ -4,6 +4,7 @@
 use super::sent_item::{SentItem, SentItemType};
 use super::ng_link::{NGLink, NGLinkType};
 use super::ng_segment::NGSegment;
+use crate::score_order::cmp_f64_desc;
 
 // AlgoParams defaults (mirroring AlgoParams.cs)
 const LIST_BONUS: f64    = 2.0;
@@ -224,7 +225,7 @@ pub fn create_variants(seg: &mut NGSegment, sent_items: &[SentItem], max_count: 
     // This is critical for large segments where the 1000-iteration cap would otherwise
     // cut off before reaching the best combinations.
     for item in &mut seg.items {
-        item.links.sort_by(|a, b| b.coef.partial_cmp(&a.coef).unwrap_or(std::cmp::Ordering::Equal));
+        item.links.sort_by(|a, b| cmp_f64_desc(a.coef, b.coef));
         item.ind = 0;
     }
 
@@ -246,7 +247,7 @@ pub fn create_variants(seg: &mut NGSegment, sent_items: &[SentItem], max_count: 
         if coef >= 0.0 {
             variants.push(var);
             if variants.len() > max_count * 5 {
-                variants.sort_by(|a, b| b.coef.partial_cmp(&a.coef).unwrap_or(std::cmp::Ordering::Equal));
+                variants.sort_by(|a, b| cmp_f64_desc(a.coef, b.coef));
                 variants.truncate(max_count);
             }
         }
@@ -268,7 +269,7 @@ pub fn create_variants(seg: &mut NGSegment, sent_items: &[SentItem], max_count: 
         if j < 0 { break; }
     }
 
-    variants.sort_by(|a, b| b.coef.partial_cmp(&a.coef).unwrap_or(std::cmp::Ordering::Equal));
+    variants.sort_by(|a, b| cmp_f64_desc(a.coef, b.coef));
     variants.truncate(max_count);
     variants
 }

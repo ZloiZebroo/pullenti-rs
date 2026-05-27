@@ -14,6 +14,7 @@ use pullenti_ner::deriv::deriv_group::DerivateGroup;
 
 use crate::core::semantic_link::SemanticLink;
 use crate::internal::sent_item::{SentItem, SentItemSource, SentItemType, VerbMorphInfo, NounMorph};
+use crate::score_order::cmp_f64_desc;
 
 // ── GetKeyword ────────────────────────────────────────────────────────────────
 
@@ -592,6 +593,6 @@ fn sort_and_finalize(mut res: Vec<SemanticLink>) -> Vec<SemanticLink> {
         }
     }
     // Sort descending by rank (best first, as per C# CompareTo which returns -1 for rank > other)
-    res.sort_by(|a, b| b.rank.partial_cmp(&a.rank).unwrap_or(std::cmp::Ordering::Equal));
+    res.sort_by(|a, b| cmp_f64_desc(a.rank, b.rank));
     res
 }

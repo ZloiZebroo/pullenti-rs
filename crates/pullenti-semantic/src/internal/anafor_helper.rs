@@ -5,6 +5,7 @@ use std::rc::Rc;
 use pullenti_morph::{MorphGenderFlags, MorphNumber};
 use crate::sem_graph::{SemGraph, SemObject, SemObjectRef, SemLinkRef};
 use crate::types::{SemObjectType, SemLinkType};
+use crate::score_order::cmp_f64_desc;
 
 pub fn process_anafors(objs: &[SemObjectRef]) {
     // Iterate in reverse: pronouns look back for antecedents
@@ -30,14 +31,14 @@ pub fn process_anafors(objs: &[SemObjectRef]) {
         if vars.is_empty() { continue; }
 
         // Sort descending by coef
-        vars.sort_by(|a, b| b.coef.partial_cmp(&a.coef).unwrap_or(std::cmp::Ordering::Equal));
+        vars.sort_by(|a, b| cmp_f64_desc(a.coef, b.coef));
 
         // Apply corrections
         for v in &mut vars {
             v.correct();
         }
         // Re-sort after corrections
-        vars.sort_by(|a, b| b.coef.partial_cmp(&a.coef).unwrap_or(std::cmp::Ordering::Equal));
+        vars.sort_by(|a, b| cmp_f64_desc(a.coef, b.coef));
 
         if vars[0].coef <= 0.1 { continue; }
 

@@ -39,3 +39,11 @@ fn test_process_english() {
     let tokens = tokens.unwrap();
     assert_eq!(tokens.len(), 2);
 }
+
+#[test]
+fn test_process_unknown_ru_word_has_total_sort_order() {
+    MorphologyService::initialize(Some(MorphLang::RU));
+    let tokens = MorphologyService::process("маржируемым", None);
+    assert!(tokens.is_some());
+    assert_eq!(tokens.unwrap().len(), 1);
+}

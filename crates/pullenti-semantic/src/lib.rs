@@ -8,6 +8,7 @@ pub mod sem_document;
 pub mod semantic_service;
 pub mod analyze_helper;
 pub mod internal;
+mod score_order;
 
 pub use types::{
     SemObjectType, SemFragmentType, SemLinkType, SemFraglinkType,

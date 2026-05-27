@@ -428,32 +428,52 @@ impl MorphEngine {
         }
     }
 
-    fn compare(&self, x: &MorphWordForm, y: &MorphWordForm) -> i32 {
-        if x.is_in_dictionary() && !y.is_in_dictionary() { return -1; }
-        if !x.is_in_dictionary() && y.is_in_dictionary() { return 1; }
-        if x.undef_coef > 0 {
-            if x.undef_coef > y.undef_coef * 2 { return -1; }
-            if x.undef_coef * 2 < y.undef_coef { return 1; }
+    fn compare(&self, x: &MorphWordForm, y: &MorphWordForm) -> std::cmp::Ordering {
+        use std::cmp::Ordering;
+
+        if x.is_in_dictionary() && !y.is_in_dictionary() { return Ordering::Less; }
+        if !x.is_in_dictionary() && y.is_in_dictionary() { return Ordering::Greater; }
+
+        let xu = i32::from(x.undef_coef);
+        let yu = i32::from(y.undef_coef);
+        if xu != yu {
+            if xu > yu * 2 { return Ordering::Less; }
+            if xu * 2 < yu { return Ordering::Greater; }
         }
+
         if x.base.class != y.base.class {
-            if x.base.class.is_preposition() || x.base.class.is_conjunction() || x.base.class.is_pronoun() || x.base.class.is_personal_pronoun() {
-                return -1;
+            match Self::class_sort_rank(x.base.class).cmp(&Self::class_sort_rank(y.base.class)) {
+                Ordering::Equal => {}
+                ord => return ord,
             }
-            if y.base.class.is_preposition() || y.base.class.is_conjunction() || y.base.class.is_pronoun() || y.base.class.is_personal_pronoun() {
-                return 1;
-            }
-            if x.base.class.is_verb() { return 1; }
-            if y.base.class.is_verb() { return -1; }
-            if x.base.class.is_noun() { return -1; }
-            if y.base.class.is_noun() { return 1; }
         }
         let cx = self.calc_coef(x);
         let cy = self.calc_coef(y);
-        if cx > cy { return -1; }
-        if cx < cy { return 1; }
-        if x.base.number == MorphNumber::PLURAL && y.base.number != MorphNumber::PLURAL { return 1; }
-        if y.base.number == MorphNumber::PLURAL && x.base.number != MorphNumber::PLURAL { return -1; }
-        0
+        if cx > cy { return Ordering::Less; }
+        if cx < cy { return Ordering::Greater; }
+        if x.base.number == MorphNumber::PLURAL && y.base.number != MorphNumber::PLURAL { return Ordering::Greater; }
+        if y.base.number == MorphNumber::PLURAL && x.base.number != MorphNumber::PLURAL { return Ordering::Less; }
+
+        x.base.class.value.cmp(&y.base.class.value)
+            .then(x.base.case.value.cmp(&y.base.case.value))
+            .then(x.base.gender.0.cmp(&y.base.gender.0))
+            .then(x.base.number.0.cmp(&y.base.number.0))
+            .then(x.base.language.value.cmp(&y.base.language.value))
+            .then(x.normal_case.cmp(&y.normal_case))
+            .then(x.normal_full.cmp(&y.normal_full))
+            .then(x.undef_coef.cmp(&y.undef_coef))
+    }
+
+    fn class_sort_rank(class: crate::MorphClass) -> i32 {
+        if class.is_preposition() || class.is_conjunction() || class.is_pronoun() || class.is_personal_pronoun() {
+            0
+        } else if class.is_noun() {
+            1
+        } else if class.is_verb() {
+            3
+        } else {
+            2
+        }
     }
 
     fn calc_coef(&self, wf: &MorphWordForm) -> i32 {
@@ -502,12 +522,7 @@ impl MorphEngine {
     fn sort(&self, res: &mut Vec<MorphWordForm>, _word: &str) {
         if res.len() < 2 { return; }
 
-        res.sort_by(|a, b| {
-            let c = self.compare(a, b);
-            if c < 0 { std::cmp::Ordering::Less }
-            else if c > 0 { std::cmp::Ordering::Greater }
-            else { std::cmp::Ordering::Equal }
-        });
+        res.sort_by(|a, b| self.compare(a, b));
 
         // Remove duplicates
         let mut i = 0;
