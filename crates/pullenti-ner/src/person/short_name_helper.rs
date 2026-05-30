@@ -6,7 +6,6 @@
 /// Provides:
 /// - `get_names_for_shortname(short)` → full-name variants with gender
 /// - `get_shortnames_for_name(full)`  → short-name list (reverse lookup)
-
 use std::collections::HashMap;
 use std::sync::OnceLock;
 
@@ -20,11 +19,23 @@ fn build_map() -> HashMap<String, Vec<(String, i32)>> {
     let mut map: HashMap<String, Vec<(String, i32)>> = HashMap::new();
     for line in SHORT_NAMES_TXT.lines() {
         let line = line.trim();
-        if line.is_empty() { continue; }
+        if line.is_empty() {
+            continue;
+        }
         let mut parts = line.split_whitespace();
-        let gender_str = match parts.next() { Some(s) => s, None => continue };
-        let gender: i32 = if gender_str.eq_ignore_ascii_case("f") { 2 } else { 1 };
-        let full_name = match parts.next() { Some(s) => s.to_uppercase(), None => continue };
+        let gender_str = match parts.next() {
+            Some(s) => s,
+            None => continue,
+        };
+        let gender: i32 = if gender_str.eq_ignore_ascii_case("f") {
+            2
+        } else {
+            1
+        };
+        let full_name = match parts.next() {
+            Some(s) => s.to_uppercase(),
+            None => continue,
+        };
         for short in parts {
             let short = short.to_uppercase();
             let entry = map.entry(short).or_default();
@@ -41,10 +52,15 @@ fn build_names_map() -> HashMap<String, Vec<String>> {
     let mut map: HashMap<String, Vec<String>> = HashMap::new();
     for line in SHORT_NAMES_TXT.lines() {
         let line = line.trim();
-        if line.is_empty() { continue; }
+        if line.is_empty() {
+            continue;
+        }
         let mut parts = line.split_whitespace();
         let _gender = parts.next();
-        let full_name = match parts.next() { Some(s) => s.to_uppercase(), None => continue };
+        let full_name = match parts.next() {
+            Some(s) => s.to_uppercase(),
+            None => continue,
+        };
         for short in parts {
             let short = short.to_uppercase();
             map.entry(full_name.clone()).or_default().push(short);

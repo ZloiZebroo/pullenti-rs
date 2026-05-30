@@ -1,20 +1,19 @@
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
-use std::cell::RefCell;
 
-use crate::analyzer::Analyzer;
 use crate::analysis_kit::AnalysisKit;
-use crate::token::{Token, TokenRef, TokenKind};
+use crate::analyzer::Analyzer;
 use crate::referent::{Referent, SlotValue};
 use crate::source_of_analysis::SourceOfAnalysis;
+use crate::token::{Token, TokenKind, TokenRef};
 
-use super::phone_kind::PhoneKind;
-use super::phone_item_token::{
-    PhoneItemToken, PhoneItemType,
-    try_attach_all, try_attach_alternate, try_attach_additional,
-};
-use super::phone_referent::{self as ph_ref, OBJ_TYPENAME};
 use super::phone_helper;
+use super::phone_item_token::{
+    try_attach_additional, try_attach_all, try_attach_alternate, PhoneItemToken, PhoneItemType,
+};
+use super::phone_kind::PhoneKind;
+use super::phone_referent::{self as ph_ref, OBJ_TYPENAME};
 
 /// Result of a successful phone number parse (before embedding)
 struct PhoneMatch {
@@ -30,14 +29,20 @@ struct PhoneAnalyzerData {
 
 impl PhoneAnalyzerData {
     fn new() -> Self {
-        PhoneAnalyzerData { phones_hash: HashMap::new() }
+        PhoneAnalyzerData {
+            phones_hash: HashMap::new(),
+        }
     }
 
     fn register_referent(&mut self, referent: Rc<RefCell<Referent>>) -> Rc<RefCell<Referent>> {
         let key = {
             let rb = referent.borrow();
             let num = ph_ref::get_number(&rb).unwrap_or_default();
-            if num.len() >= 10 { num[3..].to_string() } else { num }
+            if num.len() >= 10 {
+                num[3..].to_string()
+            } else {
+                num
+            }
         };
         let entry = self.phones_hash.entry(key).or_default();
         for existing in entry.iter() {
@@ -55,9 +60,15 @@ impl PhoneAnalyzerData {
 pub struct PhoneAnalyzer;
 
 impl Analyzer for PhoneAnalyzer {
-    fn name(&self) -> &'static str { "PHONE" }
-    fn caption(&self) -> &'static str { "Телефоны" }
-    fn progress_weight(&self) -> i32 { 2 }
+    fn name(&self) -> &'static str {
+        "PHONE"
+    }
+    fn caption(&self) -> &'static str {
+        "Телефоны"
+    }
+    fn progress_weight(&self) -> i32 {
+        2
+    }
 
     fn process(&self, kit: &mut AnalysisKit) {
         let sofa = kit.sofa.clone();
@@ -68,7 +79,9 @@ impl Analyzer for PhoneAnalyzer {
             // Advance cursor regardless (will be overridden on match)
             cur = t.borrow().next.clone();
 
-            if t.borrow().is_ignored(&sofa) { continue; }
+            if t.borrow().is_ignored(&sofa) {
+                continue;
+            }
 
             let pli_opt = try_attach_all(&t, &sofa, 15);
             let pli = match pli_opt {
@@ -82,9 +95,13 @@ impl Analyzer for PhoneAnalyzer {
             let mut not_phone = false;
             let mut kkk = 0i32;
             {
-                let mut tt_cur: Option<TokenRef> = t.borrow().prev.as_ref().and_then(|w| w.upgrade());
+                let mut tt_cur: Option<TokenRef> =
+                    t.borrow().prev.as_ref().and_then(|w| w.upgrade());
                 loop {
-                    let tt = match tt_cur.take() { None => break, Some(x) => x };
+                    let tt = match tt_cur.take() {
+                        None => break,
+                        Some(x) => x,
+                    };
 
                     // Extract all flags from the borrowed token
                     let ref_r = tt.borrow().get_referent();
@@ -106,30 +123,42 @@ impl Analyzer for PhoneAnalyzer {
                         let mut found_prev: Option<TokenRef> = None;
                         while let Some(inner_tok) = inner.take() {
                             count += 1;
-                            if count > 100 { break; }
+                            if count > 100 {
+                                break;
+                            }
                             if inner_tok.borrow().is_char('(', &sofa) {
-                                found_prev = inner_tok.borrow().prev.as_ref().and_then(|w| w.upgrade());
+                                found_prev =
+                                    inner_tok.borrow().prev.as_ref().and_then(|w| w.upgrade());
                                 break;
                             }
                             inner = inner_tok.borrow().prev.as_ref().and_then(|w| w.upgrade());
                         }
-                        if found_prev.is_none() && count > 0 { break; }
+                        if found_prev.is_none() && count > 0 {
+                            break;
+                        }
                         tt_cur = found_prev;
                         continue;
                     }
 
-                    let is_gost = tt.borrow().is_value("ГОСТ", None) || tt.borrow().is_value("ОСТ", None);
+                    let is_gost =
+                        tt.borrow().is_value("ГОСТ", None) || tt.borrow().is_value("ОСТ", None);
                     if is_gost {
                         not_phone = true;
                         break;
                     }
 
-                    let is_separator = tt.borrow().is_char_of(",;/\\", &sofa) || tt.borrow().is_and(&sofa);
+                    let is_separator =
+                        tt.borrow().is_char_of(",;/\\", &sofa) || tt.borrow().is_and(&sofa);
                     if !is_separator {
                         kkk += 1;
-                        if kkk > 5 { break; }
-                        let nl = tt.borrow().is_newline_before(&sofa) || tt.borrow().is_newline_after(&sofa);
-                        if nl { break; }
+                        if kkk > 5 {
+                            break;
+                        }
+                        let nl = tt.borrow().is_newline_before(&sofa)
+                            || tt.borrow().is_newline_after(&sofa);
+                        if nl {
+                            break;
+                        }
                     }
 
                     tt_cur = tt.borrow().prev.as_ref().and_then(|w| w.upgrade());
@@ -151,16 +180,26 @@ impl Analyzer for PhoneAnalyzer {
 
             while j < pli.len() {
                 if pli[j].item_type == PhoneItemType::Prefix {
-                    if ki == PhoneKind::Undefined { ki = pli[j].kind; }
+                    if ki == PhoneKind::Undefined {
+                        ki = pli[j].kind;
+                    }
                     is_pref = true;
-                    if ki2 == PhoneKind::Undefined { ki2 = pli[j].kind2; }
+                    if ki2 == PhoneKind::Undefined {
+                        ki2 = pli[j].kind2;
+                    }
                     is_phone_before = true;
                     j += 1;
-                    if j < pli.len() && pli[j].item_type == PhoneItemType::Delim { j += 1; }
+                    if j < pli.len() && pli[j].item_type == PhoneItemType::Delim {
+                        j += 1;
+                    }
                 } else if j == 0 && pli.len() > 1 && pli[1].item_type == PhoneItemType::Prefix {
-                    if ki == PhoneKind::Undefined { ki = pli[0].kind; }
+                    if ki == PhoneKind::Undefined {
+                        ki = pli[0].kind;
+                    }
                     is_pref = true;
-                    if ki2 == PhoneKind::Undefined { ki2 = pli[0].kind2; }
+                    if ki2 == PhoneKind::Undefined {
+                        ki2 = pli[0].kind2;
+                    }
                     pli.remove(0);
                 } else {
                     break;
@@ -177,7 +216,13 @@ impl Analyzer for PhoneAnalyzer {
                 }
             }
 
-            let rts_opt = self.try_attach_list(&pli, j, is_phone_before, prev_phone.as_ref().map(|r| r.borrow()).as_deref(), &sofa);
+            let rts_opt = self.try_attach_list(
+                &pli,
+                j,
+                is_phone_before,
+                prev_phone.as_ref().map(|r| r.borrow()).as_deref(),
+                &sofa,
+            );
 
             let rts = match rts_opt {
                 None => {
@@ -186,7 +231,13 @@ impl Analyzer for PhoneAnalyzer {
                     for jj in 1..pli.len() {
                         if pli[jj].item_type == PhoneItemType::Prefix {
                             let sub = pli[jj..].to_vec();
-                            found = self.try_attach_list(&sub, 1, true, prev_phone.as_ref().map(|r| r.borrow()).as_deref(), &sofa);
+                            found = self.try_attach_list(
+                                &sub,
+                                1,
+                                true,
+                                prev_phone.as_ref().map(|r| r.borrow()).as_deref(),
+                                &sofa,
+                            );
                             break;
                         }
                     }
@@ -219,7 +270,10 @@ impl Analyzer for PhoneAnalyzer {
                         if let Some(pt) = prev_t {
                             let ptb = pt.borrow();
                             if ptb.is_newline_before(&sofa)
-                                || ptb.prev.as_ref().and_then(|w| w.upgrade())
+                                || ptb
+                                    .prev
+                                    .as_ref()
+                                    .and_then(|w| w.upgrade())
                                     .map_or(false, |pp| pp.borrow().is_table_control_char(&sofa))
                             {
                                 let term = match &ptb.kind {
@@ -236,7 +290,9 @@ impl Analyzer for PhoneAnalyzer {
                                             drop(ptb);
                                             ph_ref::set_kind(&mut rb, PhoneKind::Mobile);
                                         }
-                                        _ => { drop(ptb); }
+                                        _ => {
+                                            drop(ptb);
+                                        }
                                     }
                                 }
                             }
@@ -256,9 +312,11 @@ impl Analyzer for PhoneAnalyzer {
                 if Rc::ptr_eq(&registered, &new_ref) {
                     kit.add_entity(registered.clone());
                 }
-                let tok = Rc::new(RefCell::new(
-                    Token::new_referent(m.begin.clone(), m.end.clone(), registered)
-                ));
+                let tok = Rc::new(RefCell::new(Token::new_referent(
+                    m.begin.clone(),
+                    m.end.clone(),
+                    registered,
+                )));
                 kit.embed_token(tok.clone());
                 cur = tok.borrow().next.clone();
             }
@@ -270,7 +328,9 @@ impl Analyzer for PhoneAnalyzer {
 }
 
 impl PhoneAnalyzer {
-    pub fn new() -> Self { PhoneAnalyzer }
+    pub fn new() -> Self {
+        PhoneAnalyzer
+    }
 
     fn try_attach_list(
         &self,
@@ -289,7 +349,9 @@ impl PhoneAnalyzer {
         // Try alternate digit variants
         for _ in 0..5 {
             let last = res.last().unwrap();
-            if ph_ref::get_add_number(&last.referent.borrow()).is_some() { break; }
+            if ph_ref::get_add_number(&last.referent.borrow()).is_some() {
+                break;
+            }
 
             let ph0_template = {
                 let rb = last.referent.borrow();
@@ -301,7 +363,10 @@ impl PhoneAnalyzer {
                 &pli,
                 sofa,
             );
-            let alt = match alt_opt { None => break, Some(a) => a };
+            let alt = match alt_opt {
+                None => break,
+                Some(a) => a,
+            };
 
             // Clone slots and modify number
             let new_ref = ph_ref::new_phone_referent();
@@ -309,7 +374,11 @@ impl PhoneAnalyzer {
                 let last_rb = last.referent.borrow();
                 let mut new_rb = new_ref.borrow_mut();
                 for slot in &last_rb.slots {
-                    new_rb.add_slot(slot.type_name.clone(), slot.value.clone().unwrap_or(SlotValue::Str(String::new())), false);
+                    new_rb.add_slot(
+                        slot.type_name.clone(),
+                        slot.value.clone().unwrap_or(SlotValue::Str(String::new())),
+                        false,
+                    );
                 }
                 let num = ph_ref::get_number(&last_rb).unwrap_or_default();
                 if !num.is_empty() && num.len() > alt.value.len() {
@@ -351,7 +420,9 @@ impl PhoneAnalyzer {
         lev: i32,
         sofa: &SourceOfAnalysis,
     ) -> Option<PhoneMatch> {
-        if ind >= pli.len() || lev > 4 { return None; }
+        if ind >= pli.len() || lev > 4 {
+            return None;
+        }
 
         let mut country_code: Option<String> = None;
         let mut city_code: Option<String> = None;
@@ -370,7 +441,9 @@ impl PhoneAnalyzer {
                             tmp.push_str(&pli[jj].value.len().to_string());
                         }
                         PhoneItemType::Delim => {
-                            if pli[jj].value == " " { break; }
+                            if pli[jj].value == " " {
+                                break;
+                            }
                             tmp.push_str(&pli[jj].value);
                             jj += 1;
                             continue;
@@ -380,7 +453,9 @@ impl PhoneAnalyzer {
                     let templ0 = tmp.clone();
                     if templ0 == tmpl {
                         if jj + 1 < pli.len() {
-                            if !(pli[jj + 1].item_type == PhoneItemType::Prefix && jj + 2 == pli.len()) {
+                            if !(pli[jj + 1].item_type == PhoneItemType::Prefix
+                                && jj + 2 == pli.len())
+                            {
                                 pli.drain(jj + 1..);
                             }
                         }
@@ -390,7 +465,9 @@ impl PhoneAnalyzer {
                 }
                 // Reject common false patterns
                 let vv = tmp.clone();
-                if vv == "4-2-2" || vv == "2-2-4" { return None; }
+                if vv == "4-2-2" || vv == "2-2-4" {
+                    return None;
+                }
             }
         }
 
@@ -408,7 +485,11 @@ impl PhoneAnalyzer {
             }
             j += 1;
         } else if j < pli.len() && pli[j].can_be_country_prefix(sofa) {
-            let k = if j + 1 < pli.len() && pli[j + 1].item_type == PhoneItemType::Delim { j + 2 } else { j + 1 };
+            let k = if j + 1 < pli.len() && pli[j + 1].item_type == PhoneItemType::Delim {
+                j + 2
+            } else {
+                j + 1
+            };
             let sub_rt = self._try_attach_(pli, k, is_phone_before, None, lev + 1, sofa);
             if sub_rt.is_some() {
                 let is_false_pattern = j + 1 < pli.len()
@@ -447,7 +528,10 @@ impl PhoneAnalyzer {
                         if first != '8' {
                             ph_ref::set_country_code(&mut rb, &pli[j].value[..1]);
                         }
-                        ph_ref::set_number(&mut rb, &format!("{}{}", &pli[j].value[1..4], &pli[j].value[4..]));
+                        ph_ref::set_number(
+                            &mut rb,
+                            &format!("{}{}", &pli[j].value[1..4], &pli[j].value[4..]),
+                        );
                     }
                     return Some(PhoneMatch {
                         referent: ph,
@@ -455,7 +539,8 @@ impl PhoneAnalyzer {
                         end: pli[j].end.clone(),
                     });
                 } else if city_code.is_none() && len > 3 && j + 1 < pli.len() {
-                    let sum: i32 = pli.iter()
+                    let sum: i32 = pli
+                        .iter()
                         .filter(|it| it.item_type == PhoneItemType::Number)
                         .map(|it| it.value.len() as i32)
                         .sum();
@@ -475,21 +560,31 @@ impl PhoneAnalyzer {
         }
 
         // Skip delimiter
-        if j < pli.len() && pli[j].item_type == PhoneItemType::Delim { j += 1; }
+        if j < pli.len() && pli[j].item_type == PhoneItemType::Delim {
+            j += 1;
+        }
 
         // Pull city code from "8 + 3/4 digit" when country code is "8"
-        if country_code.as_deref() == Some("8") && city_code.is_none() && j + 3 < pli.len()
+        if country_code.as_deref() == Some("8")
+            && city_code.is_none()
+            && j + 3 < pli.len()
             && pli[j].item_type == PhoneItemType::Number
         {
             let len = pli[j].value.len();
             if len == 3 || len == 4 {
                 city_code = Some(pli[j].value.clone());
                 j += 1;
-                if j < pli.len() && pli[j].item_type == PhoneItemType::Delim { j += 1; }
+                if j < pli.len() && pli[j].item_type == PhoneItemType::Delim {
+                    j += 1;
+                }
             }
         }
 
-        let normal_num_len: usize = if country_code.as_deref() == Some("421") { 9 } else { 0 };
+        let normal_num_len: usize = if country_code.as_deref() == Some("421") {
+            9
+        } else {
+            0
+        };
         let mut num = String::new();
         let mut templ = String::new();
         let mut part_length: Vec<usize> = Vec::new();
@@ -501,8 +596,7 @@ impl PhoneAnalyzer {
         // Try standard format: cc-NNN-NN-NN or similar
         if country_code.is_some() && j + 4 < pli.len() && j > 0 {
             let prev_is_cc_or_dash =
-                pli[j - 1].value == "-"
-                || pli[j - 1].item_type == PhoneItemType::CountryCode;
+                pli[j - 1].value == "-" || pli[j - 1].item_type == PhoneItemType::CountryCode;
             if prev_is_cc_or_dash
                 && pli[j].item_type == PhoneItemType::Number
                 && pli[j + 1].item_type == PhoneItemType::Delim
@@ -529,9 +623,17 @@ impl PhoneAnalyzer {
         while j < pli.len() && !is_std {
             match pli[j].item_type {
                 PhoneItemType::Delim => {
-                    if pli[j].is_in_brackets { j += 1; continue; }
-                    if j > 0 && pli[j - 1].is_in_brackets { j += 1; continue; }
-                    if !templ.is_empty() { templ.push_str(&pli[j].value); }
+                    if pli[j].is_in_brackets {
+                        j += 1;
+                        continue;
+                    }
+                    if j > 0 && pli[j - 1].is_in_brackets {
+                        j += 1;
+                        continue;
+                    }
+                    if !templ.is_empty() {
+                        templ.push_str(&pli[j].value);
+                    }
                     if delim.is_none() {
                         delim = Some(pli[j].value.clone());
                     } else if pli[j].value != *delim.as_ref().unwrap() {
@@ -548,12 +650,17 @@ impl PhoneAnalyzer {
                             j += 1;
                             continue;
                         }
-                        if is_phone_before && j + 1 < pli.len() && pli[j + 1].item_type == PhoneItemType::Number {
+                        if is_phone_before
+                            && j + 1 < pli.len()
+                            && pli[j + 1].item_type == PhoneItemType::Number
+                        {
                             if num.len() < 6 {
                                 j += 1;
                                 continue;
                             }
-                            if normal_num_len > 0 && num.len() + pli[j + 1].value.len() == normal_num_len {
+                            if normal_num_len > 0
+                                && num.len() + pli[j + 1].value.len() == normal_num_len
+                            {
                                 j += 1;
                                 continue;
                             }
@@ -569,17 +676,28 @@ impl PhoneAnalyzer {
                 PhoneItemType::Number => {
                     if num.is_empty() {
                         // Check: if previous token is table control and followed by another number → not phone
-                        let begin_prev = pli[j].begin.borrow().prev.as_ref().and_then(|w| w.upgrade());
+                        let begin_prev = pli[j]
+                            .begin
+                            .borrow()
+                            .prev
+                            .as_ref()
+                            .and_then(|w| w.upgrade());
                         if begin_prev.map_or(false, |p| p.borrow().is_table_control_char(sofa)) {
                             let last_end = pli.last().unwrap().end.clone();
                             let last_next = last_end.borrow().next.clone();
                             if let Some(ln) = last_next {
                                 let lnb = ln.borrow();
                                 let is_comma = lnb.is_char_of(",.", sofa);
-                                let nxt = if is_comma { lnb.next.clone() } else { Some(ln.clone()) };
+                                let nxt = if is_comma {
+                                    lnb.next.clone()
+                                } else {
+                                    Some(ln.clone())
+                                };
                                 drop(lnb);
                                 if let Some(nn) = nxt {
-                                    if nn.borrow().is_number_token() { return None; }
+                                    if nn.borrow().is_number_token() {
+                                        return None;
+                                    }
                                 }
                             }
                         }
@@ -681,7 +799,9 @@ impl PhoneAnalyzer {
             }
         }
 
-        if num.len() < 4 { ok = false; }
+        if num.len() < 4 {
+            ok = false;
+        }
 
         // Validate number length
         if num.len() < 7 {
@@ -689,7 +809,10 @@ impl PhoneAnalyzer {
                 if cc.len() + num.len() > 7 {
                     if !is_phone_before && cc.len() == 3 {
                         let all_3 = part_length.iter().all(|&l| l == 3)
-                            || part_length.iter().enumerate().all(|(i, &l)| l == 3 || (i == part_length.len() - 1 && l >= 2));
+                            || part_length
+                                .iter()
+                                .enumerate()
+                                .all(|(i, &l)| l == 3 || (i == part_length.len() - 1 && l >= 2));
                         if !all_3 || country_code.as_deref() != Some("61") {
                             ok = false;
                         }
@@ -701,7 +824,11 @@ impl PhoneAnalyzer {
                 {
                     if pli[0].item_type == PhoneItemType::Prefix && pli[0].kind == PhoneKind::Home {
                         ok = false;
-                    } else if part_length.len() == 1 && num.len() < 7 && pli[0].kind != PhoneKind::Undefined && pli[0].length_char() < 3 {
+                    } else if part_length.len() == 1
+                        && num.len() < 7
+                        && pli[0].kind != PhoneKind::Undefined
+                        && pli[0].length_char() < 3
+                    {
                         ok = false;
                     }
                 } else if let Some(pp) = prev_phone {
@@ -709,7 +836,9 @@ impl PhoneAnalyzer {
                     let pp_len = pp_num.len();
                     if pp_len == num.len() || pp_len == num.len() + 3 || pp_len == num.len() + 4 {
                         // ok remains
-                    } else if num.len() > 4 && ph_ref::get_template(pp).map_or(false, |t| t == templ) {
+                    } else if num.len() > 4
+                        && ph_ref::get_template(pp).map_or(false, |t| t == templ)
+                    {
                         ok = true;
                     } else {
                         ok = false;
@@ -738,14 +867,29 @@ impl PhoneAnalyzer {
 
         if ok {
             // Structural validation
-            let is_valid_pattern = part_length.len() == 3 && part_length[0] == 3 && part_length[1] == 2 && part_length[2] == 2
+            let is_valid_pattern = part_length.len() == 3
+                && part_length[0] == 3
+                && part_length[1] == 2
+                && part_length[2] == 2
                 || part_length.len() == 3 && is_phone_before
-                || part_length.len() == 4 && (part_length[0] + part_length[1] == 3) && part_length[2] == 2 && part_length[3] == 2
-                || part_length.len() == 4 && part_length[0] == 3 && part_length[1] == 3 && part_length[2] == 2 && part_length[3] == 2
-                || part_length.len() == 5 && (part_length[1] + part_length[2] == 4) && (part_length[3] + part_length[4] == 4)
+                || part_length.len() == 4
+                    && (part_length[0] + part_length[1] == 3)
+                    && part_length[2] == 2
+                    && part_length[3] == 2
+                || part_length.len() == 4
+                    && part_length[0] == 3
+                    && part_length[1] == 3
+                    && part_length[2] == 2
+                    && part_length[3] == 2
+                || part_length.len() == 5
+                    && (part_length[1] + part_length[2] == 4)
+                    && (part_length[3] + part_length[4] == 4)
                 || is_std;
 
-            let has_context = is_phone_before || city_code.is_some() || country_code.is_some() || additional.is_some();
+            let has_context = is_phone_before
+                || city_code.is_some()
+                || country_code.is_some()
+                || additional.is_some();
 
             if !is_valid_pattern {
                 if part_length.len() > 4 {
@@ -757,7 +901,9 @@ impl PhoneAnalyzer {
                 } else if let Some(pp) = prev_phone {
                     let pp_num = ph_ref::get_number(pp).unwrap_or_default();
                     let pp_len = pp_num.len();
-                    if !(pp_len == num.len() || pp_len == num.len() + 3 || pp_len == num.len() + 4
+                    if !(pp_len == num.len()
+                        || pp_len == num.len() + 3
+                        || pp_len == num.len() + 4
                         || ph_ref::get_template(pp).map_or(false, |t| t == templ))
                     {
                         ok = false;
@@ -766,11 +912,17 @@ impl PhoneAnalyzer {
                     ok = false;
                     // Lookahead: check next phone
                     if (num.len() == 6 || num.len() == 7) && part_length.len() < 4 && j > 0 {
-                        let after = pli.get(j.saturating_sub(1)).map(|it| it.end.borrow().next.clone()).flatten();
+                        let after = pli
+                            .get(j.saturating_sub(1))
+                            .map(|it| it.end.borrow().next.clone())
+                            .flatten();
                         if let Some(next_ph) = self.get_next_phone(after, lev + 1, sofa) {
-                            let next_num = ph_ref::get_number(&next_ph.borrow()).unwrap_or_default();
+                            let next_num =
+                                ph_ref::get_number(&next_ph.borrow()).unwrap_or_default();
                             let d = next_num.len() as i32 - num.len() as i32;
-                            if d == 0 || d == 3 || d == 4 { ok = true; }
+                            if d == 0 || d == 3 || d == 4 {
+                                ok = true;
+                            }
                         }
                     }
                 }
@@ -778,17 +930,32 @@ impl PhoneAnalyzer {
         }
 
         // Find end token
-        let end_tok = if j > 0 { pli[j - 1].end.clone() } else { return None; };
-        if !ok { return None; }
+        let end_tok = if j > 0 {
+            pli[j - 1].end.clone()
+        } else {
+            return None;
+        };
+        if !ok {
+            return None;
+        }
 
         // Reject "4 3.4" or similar IP-address-like patterns
         let stempl = templ.trim().to_string();
-        if (stempl == "4 3.4" || stempl == "2.4" || stempl == "3.4") {
+        if stempl == "4 3.4" || stempl == "2.4" || stempl == "3.4" {
             if pli[0].length_char() == 4 {
-                let begin_prev = pli[0].begin.borrow().prev.as_ref().and_then(|w| w.upgrade());
+                let begin_prev = pli[0]
+                    .begin
+                    .borrow()
+                    .prev
+                    .as_ref()
+                    .and_then(|w| w.upgrade());
                 if let Some(bp) = begin_prev {
                     if bp.borrow().is_char('.', sofa)
-                        && bp.borrow().prev.as_ref().and_then(|w| w.upgrade())
+                        && bp
+                            .borrow()
+                            .prev
+                            .as_ref()
+                            .and_then(|w| w.upgrade())
                             .map_or(false, |pp| pp.borrow().is_number_token())
                     {
                         return None;
@@ -819,7 +986,12 @@ impl PhoneAnalyzer {
 
         // Reject ГОСТ/ТУ patterns
         {
-            let begin_prev = pli[0].begin.borrow().prev.as_ref().and_then(|w| w.upgrade());
+            let begin_prev = pli[0]
+                .begin
+                .borrow()
+                .prev
+                .as_ref()
+                .and_then(|w| w.upgrade());
             if let Some(bp) = begin_prev {
                 if bp.borrow().is_value("ГОСТ", None) || bp.borrow().is_value("ТУ", None) {
                     return None;
@@ -829,7 +1001,8 @@ impl PhoneAnalyzer {
 
         // Build the final number string
         let mut number = num.clone();
-        if city_code.is_none() && number.len() > 7 && !part_length.is_empty() && part_length[0] < 5 {
+        if city_code.is_none() && number.len() > 7 && !part_length.is_empty() && part_length[0] < 5
+        {
             let cou = part_length[0];
             city_code = Some(number[..cou].to_string());
             number = number[cou..].to_string();
@@ -848,7 +1021,8 @@ impl PhoneAnalyzer {
             if let Some(pp) = prev_phone {
                 let pp_num = ph_ref::get_number(pp).unwrap_or_default();
                 let ok1 = pp_num.len() >= number.len() + 2
-                    || (templ.len() > 0 && ph_ref::get_template(pp).map_or(false, |t| t.ends_with(&templ)));
+                    || (templ.len() > 0
+                        && ph_ref::get_template(pp).map_or(false, |t| t.ends_with(&templ)));
                 if ok1 && pp_num.len() > number.len() {
                     number = format!("{}{}", &pp_num[..pp_num.len() - number.len()], number);
                 }
@@ -867,12 +1041,18 @@ impl PhoneAnalyzer {
         }
 
         // Validate: at least one non-zero digit
-        if !number.chars().any(|c| c != '0') { return None; }
+        if !number.chars().any(|c| c != '0') {
+            return None;
+        }
 
         // Validate length
         if let Some(ref cc) = country_code {
-            if number.len() < 7 { return None; }
-            if cc == "7" && number.len() != 10 { return None; }
+            if number.len() < 7 {
+                return None;
+            }
+            if cc == "7" && number.len() != 10 {
+                return None;
+            }
         } else {
             // Try to strip embedded country code
             if let Some(prefix) = phone_helper::get_country_prefix(&number) {
@@ -884,12 +1064,17 @@ impl PhoneAnalyzer {
                     }
                 }
             }
-            if number.len() == 8 && prev_phone.is_none() { return None; }
+            if number.len() == 8 && prev_phone.is_none() {
+                return None;
+            }
         }
 
         if number.len() > 11 {
-            let is_long_ok = matches!(country_code.as_deref(), Some("1") | Some("43")) && number.len() < 14;
-            if !is_long_ok { return None; }
+            let is_long_ok =
+                matches!(country_code.as_deref(), Some("1") | Some("43")) && number.len() < 14;
+            if !is_long_ok {
+                return None;
+            }
         }
 
         let ph = ph_ref::new_phone_referent();
@@ -911,9 +1096,15 @@ impl PhoneAnalyzer {
             if let Some(ref en) = end_next {
                 let enb = en.borrow();
                 if !end_tok.borrow().is_newline_after(sofa) {
-                    if enb.is_char_of("+=", sofa) { return None; }
+                    if enb.is_char_of("+=", sofa) {
+                        return None;
+                    }
                     if enb.is_hiphen(sofa) {
-                        if enb.next.as_ref().map_or(false, |n| n.borrow().is_number_token()) {
+                        if enb
+                            .next
+                            .as_ref()
+                            .map_or(false, |n| n.borrow().is_number_token())
+                        {
                             return None;
                         }
                     }
@@ -922,7 +1113,10 @@ impl PhoneAnalyzer {
         }
 
         // Extend end if last item is Prefix
-        let end_final = if j < pli.len() && pli[j].item_type == PhoneItemType::Prefix && !pli[j].is_newline_before(sofa) {
+        let end_final = if j < pli.len()
+            && pli[j].item_type == PhoneItemType::Prefix
+            && !pli[j].is_newline_before(sofa)
+        {
             if pli[j].kind != PhoneKind::Undefined {
                 ph_ref::set_kind(&mut ph.borrow_mut(), pli[j].kind);
             }
@@ -958,11 +1152,22 @@ impl PhoneAnalyzer {
             }
         };
 
-        Some(PhoneMatch { referent: ph, begin, end: end_final })
+        Some(PhoneMatch {
+            referent: ph,
+            begin,
+            end: end_final,
+        })
     }
 
-    fn get_next_phone(&self, t_opt: Option<TokenRef>, lev: i32, sofa: &SourceOfAnalysis) -> Option<Rc<RefCell<Referent>>> {
-        if lev > 3 { return None; }
+    fn get_next_phone(
+        &self,
+        t_opt: Option<TokenRef>,
+        lev: i32,
+        sofa: &SourceOfAnalysis,
+    ) -> Option<Rc<RefCell<Referent>>> {
+        if lev > 3 {
+            return None;
+        }
         let t_init = t_opt?;
         let t = if t_init.borrow().is_char(',', sofa) {
             let next = t_init.borrow().next.clone()?;

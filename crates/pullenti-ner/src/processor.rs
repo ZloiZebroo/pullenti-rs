@@ -1,47 +1,66 @@
-use std::sync::Arc;
-use pullenti_morph::{MorphologyService, MorphLang};
-use crate::analyzer::Analyzer;
 use crate::analysis_kit::AnalysisKit;
 use crate::analysis_result::AnalysisResult;
+use crate::analyzer::Analyzer;
 use crate::source_of_analysis::SourceOfAnalysis;
+use pullenti_morph::{MorphLang, MorphologyService};
+use std::sync::Arc;
 
-use crate::phone::PhoneAnalyzer;
-use crate::uri::UriAnalyzer;
-use crate::date::DateAnalyzer;
-use crate::money::MoneyAnalyzer;
-use crate::measure::MeasureAnalyzer;
-use crate::geo::GeoAnalyzer;
-use crate::person::PersonAnalyzer;
-use crate::org::OrgAnalyzer;
-use crate::named::NamedEntityAnalyzer;
 use crate::address::AddressAnalyzer;
-use crate::transport::TransportAnalyzer;
-use crate::decree::DecreeAnalyzer;
 use crate::bank::BankAnalyzer;
-use crate::weapon::WeaponAnalyzer;
-use crate::chemical::ChemicalAnalyzer;
-use crate::vacance::VacanceAnalyzer;
-use crate::denomination::DenominationAnalyzer;
-use crate::mail::MailAnalyzer;
-use crate::keyword::KeywordAnalyzer;
-use crate::definition::DefinitionAnalyzer;
-use crate::resume::ResumeAnalyzer;
-use crate::instrument::InstrumentAnalyzer;
-use crate::titlepage::TitlePageAnalyzer;
 use crate::booklink::BookLinkAnalyzer;
+use crate::chemical::ChemicalAnalyzer;
+use crate::date::DateAnalyzer;
+use crate::decree::DecreeAnalyzer;
+use crate::definition::DefinitionAnalyzer;
+use crate::denomination::DenominationAnalyzer;
+use crate::geo::GeoAnalyzer;
 use crate::goods::GoodsAnalyzer;
+use crate::instrument::InstrumentAnalyzer;
+use crate::keyword::KeywordAnalyzer;
 use crate::link::LinkAnalyzer;
+use crate::mail::MailAnalyzer;
+use crate::measure::MeasureAnalyzer;
+use crate::money::MoneyAnalyzer;
+use crate::named::NamedEntityAnalyzer;
+use crate::org::OrgAnalyzer;
+use crate::person::PersonAnalyzer;
+use crate::phone::PhoneAnalyzer;
+use crate::resume::ResumeAnalyzer;
+use crate::titlepage::TitlePageAnalyzer;
+use crate::transport::TransportAnalyzer;
+use crate::uri::UriAnalyzer;
+use crate::vacance::VacanceAnalyzer;
+use crate::weapon::WeaponAnalyzer;
 
 /// Canonical NER pipeline order.
 /// Org must run before Person; GEO before PERSON; MONEY before MEASURE; etc.
 pub(crate) static ORDER: &[&str] = &[
-    "PHONE", "URI", "DATE", "MONEY", "MEASURE",
-    "GEO", "ADDRESS", "ORGANIZATION", "PERSON",
-    "NAMEDENTITY", "TRANSPORT", "DECREE", "BANKDATA",
-    "WEAPON", "CHEMICALFORMULA",
-    "VACANCY", "DENOMINATION", "MAIL", "KEYWORD",
-    "DEFINITION", "RESUME", "INSTRUMENT",
-    "TITLEPAGE", "BOOKLINK", "GOOD", "LINK",
+    "PHONE",
+    "URI",
+    "DATE",
+    "MONEY",
+    "MEASURE",
+    "GEO",
+    "ADDRESS",
+    "ORGANIZATION",
+    "PERSON",
+    "NAMEDENTITY",
+    "TRANSPORT",
+    "DECREE",
+    "BANKDATA",
+    "WEAPON",
+    "CHEMICALFORMULA",
+    "VACANCY",
+    "DENOMINATION",
+    "MAIL",
+    "KEYWORD",
+    "DEFINITION",
+    "RESUME",
+    "INSTRUMENT",
+    "TITLEPAGE",
+    "BOOKLINK",
+    "GOOD",
+    "LINK",
 ];
 
 /// Orchestrates text analysis — runs all registered analyzers sequentially
@@ -58,7 +77,12 @@ impl Processor {
     pub fn new(lang: MorphLang, analyzers: Vec<Arc<dyn Analyzer>>) -> Self {
         MorphologyService::initialize(Some(lang));
         let mut sorted = analyzers;
-        sorted.sort_by_key(|a| ORDER.iter().position(|&n| n == a.name()).unwrap_or(usize::MAX));
+        sorted.sort_by_key(|a| {
+            ORDER
+                .iter()
+                .position(|&n| n == a.name())
+                .unwrap_or(usize::MAX)
+        });
         Processor {
             analyzers: sorted,
             timeout_seconds: 0,
@@ -67,34 +91,37 @@ impl Processor {
 
     /// Create a processor with all built-in analyzers for the given language.
     pub fn all(lang: MorphLang) -> Self {
-        Processor::new(lang, vec![
-            Arc::new(PhoneAnalyzer::new()),
-            Arc::new(UriAnalyzer::new()),
-            Arc::new(DateAnalyzer::new()),
-            Arc::new(MoneyAnalyzer::new()),
-            Arc::new(MeasureAnalyzer::new()),
-            Arc::new(GeoAnalyzer::new()),
-            Arc::new(AddressAnalyzer::new()),
-            Arc::new(OrgAnalyzer::new()),
-            Arc::new(PersonAnalyzer::new()),
-            Arc::new(NamedEntityAnalyzer::new()),
-            Arc::new(TransportAnalyzer::new()),
-            Arc::new(DecreeAnalyzer::new()),
-            Arc::new(BankAnalyzer::new()),
-            Arc::new(WeaponAnalyzer::new()),
-            Arc::new(ChemicalAnalyzer::new()),
-            Arc::new(VacanceAnalyzer::new()),
-            Arc::new(DenominationAnalyzer::new()),
-            Arc::new(MailAnalyzer::new()),
-            Arc::new(KeywordAnalyzer::new()),
-            Arc::new(DefinitionAnalyzer::new()),
-            Arc::new(ResumeAnalyzer::new()),
-            Arc::new(InstrumentAnalyzer::new()),
-            Arc::new(TitlePageAnalyzer::new()),
-            Arc::new(BookLinkAnalyzer::new()),
-            Arc::new(GoodsAnalyzer::new()),
-            Arc::new(LinkAnalyzer::new()),
-        ])
+        Processor::new(
+            lang,
+            vec![
+                Arc::new(PhoneAnalyzer::new()),
+                Arc::new(UriAnalyzer::new()),
+                Arc::new(DateAnalyzer::new()),
+                Arc::new(MoneyAnalyzer::new()),
+                Arc::new(MeasureAnalyzer::new()),
+                Arc::new(GeoAnalyzer::new()),
+                Arc::new(AddressAnalyzer::new()),
+                Arc::new(OrgAnalyzer::new()),
+                Arc::new(PersonAnalyzer::new()),
+                Arc::new(NamedEntityAnalyzer::new()),
+                Arc::new(TransportAnalyzer::new()),
+                Arc::new(DecreeAnalyzer::new()),
+                Arc::new(BankAnalyzer::new()),
+                Arc::new(WeaponAnalyzer::new()),
+                Arc::new(ChemicalAnalyzer::new()),
+                Arc::new(VacanceAnalyzer::new()),
+                Arc::new(DenominationAnalyzer::new()),
+                Arc::new(MailAnalyzer::new()),
+                Arc::new(KeywordAnalyzer::new()),
+                Arc::new(DefinitionAnalyzer::new()),
+                Arc::new(ResumeAnalyzer::new()),
+                Arc::new(InstrumentAnalyzer::new()),
+                Arc::new(TitlePageAnalyzer::new()),
+                Arc::new(BookLinkAnalyzer::new()),
+                Arc::new(GoodsAnalyzer::new()),
+                Arc::new(LinkAnalyzer::new()),
+            ],
+        )
     }
 
     /// Create an empty processor (no analyzers, no morph init)
@@ -132,7 +159,10 @@ impl Processor {
 
     /// Names of registered analyzers
     pub fn analyzer_names(&self) -> Vec<String> {
-        self.analyzers.iter().map(|a| a.name().to_string()).collect()
+        self.analyzers
+            .iter()
+            .map(|a| a.name().to_string())
+            .collect()
     }
 
     /// Main analysis entry point
@@ -140,8 +170,7 @@ impl Processor {
         let lang = lang.unwrap_or(MorphLang::UNKNOWN);
 
         // Morphological tokenization
-        let morph_tokens = MorphologyService::process(&sofa.text, Some(lang))
-            .unwrap_or_default();
+        let morph_tokens = MorphologyService::process(&sofa.text, Some(lang)).unwrap_or_default();
 
         // Wrap in Arc to share between kit and result (avoids deep clone)
         let sofa = Arc::new(sofa);
@@ -186,5 +215,7 @@ impl Processor {
 }
 
 impl Default for Processor {
-    fn default() -> Self { Processor::empty() }
+    fn default() -> Self {
+        Processor::empty()
+    }
 }

@@ -1,6 +1,8 @@
 use std::sync::Arc;
 
-use pullenti_morph::{MorphBaseInfo, MorphWordForm, MorphLang, MorphClass, MorphCase, MorphGenderFlags, MorphNumber};
+use pullenti_morph::{
+    MorphBaseInfo, MorphCase, MorphClass, MorphGenderFlags, MorphLang, MorphNumber, MorphWordForm,
+};
 
 /// Voice of a verb form
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -140,27 +142,37 @@ impl MorphCollection {
     }
 
     pub fn class(&mut self) -> MorphClass {
-        if self.need_recalc { self.recalc(); }
+        if self.need_recalc {
+            self.recalc();
+        }
         self.cached_class
     }
 
     pub fn case(&mut self) -> MorphCase {
-        if self.need_recalc { self.recalc(); }
+        if self.need_recalc {
+            self.recalc();
+        }
         self.cached_case
     }
 
     pub fn gender(&mut self) -> MorphGenderFlags {
-        if self.need_recalc { self.recalc(); }
+        if self.need_recalc {
+            self.recalc();
+        }
         self.cached_gender
     }
 
     pub fn number(&mut self) -> MorphNumber {
-        if self.need_recalc { self.recalc(); }
+        if self.need_recalc {
+            self.recalc();
+        }
         self.cached_number
     }
 
     pub fn language(&mut self) -> MorphLang {
-        if self.need_recalc { self.recalc(); }
+        if self.need_recalc {
+            self.recalc();
+        }
         self.cached_lang
     }
 
@@ -178,7 +190,9 @@ impl MorphCollection {
     }
 
     pub fn voice(&mut self) -> MorphVoice {
-        if self.need_recalc { self.recalc(); }
+        if self.need_recalc {
+            self.recalc();
+        }
         self.cached_voice
     }
 
@@ -194,8 +208,7 @@ impl MorphCollection {
     /// Check if any morph variant is the given word value
     pub fn contains_term(&self, term: &str) -> bool {
         self.items.iter().any(|wf| {
-            wf.normal_case.as_deref() == Some(term)
-                || wf.normal_full.as_deref() == Some(term)
+            wf.normal_case.as_deref() == Some(term) || wf.normal_full.as_deref() == Some(term)
         })
     }
 
@@ -205,16 +218,27 @@ impl MorphCollection {
     }
 
     /// Find item matching case/number/gender constraints
-    pub fn find_item(&self, case: MorphCase, number: MorphNumber, gender: MorphGenderFlags) -> Option<&MorphWordForm> {
+    pub fn find_item(
+        &self,
+        case: MorphCase,
+        number: MorphNumber,
+        gender: MorphGenderFlags,
+    ) -> Option<&MorphWordForm> {
         for it in self.items.iter() {
             if !case.is_undefined() {
-                if (it.base.case.value & case.value) == 0 { continue; }
+                if (it.base.case.value & case.value) == 0 {
+                    continue;
+                }
             }
             if number != MorphNumber::UNDEFINED {
-                if (it.base.number.0 & number.0) == 0 { continue; }
+                if (it.base.number.0 & number.0) == 0 {
+                    continue;
+                }
             }
             if gender != MorphGenderFlags::UNDEFINED {
-                if (it.base.gender.0 & gender.0) == 0 { continue; }
+                if (it.base.gender.0 & gender.0) == 0 {
+                    continue;
+                }
             }
             if it.undef_coef > 0 {
                 continue; // prefer non-undef
@@ -224,13 +248,19 @@ impl MorphCollection {
         // Fallback: return first undef match
         for it in self.items.iter() {
             if !case.is_undefined() {
-                if (it.base.case.value & case.value) == 0 { continue; }
+                if (it.base.case.value & case.value) == 0 {
+                    continue;
+                }
             }
             if number != MorphNumber::UNDEFINED {
-                if (it.base.number.0 & number.0) == 0 { continue; }
+                if (it.base.number.0 & number.0) == 0 {
+                    continue;
+                }
             }
             if gender != MorphGenderFlags::UNDEFINED {
-                if (it.base.gender.0 & gender.0) == 0 { continue; }
+                if (it.base.gender.0 & gender.0) == 0 {
+                    continue;
+                }
             }
             return Some(it);
         }
@@ -241,7 +271,9 @@ impl MorphCollection {
     pub fn remove_items_by_case(&mut self, case: MorphCase) {
         let mut items = self.items.to_vec();
         items.retain(|it| {
-            if it.base.case.is_undefined() { return true; }
+            if it.base.case.is_undefined() {
+                return true;
+            }
             (it.base.case.value & case.value) != 0
         });
         self.items = items.into();
@@ -268,13 +300,20 @@ impl MorphCollection {
     }
 
     /// Check agreement with another MorphBaseInfo
-    pub fn check_accord(&self, other: &MorphBaseInfo, ignore_gender: bool, ignore_number: bool) -> bool {
+    pub fn check_accord(
+        &self,
+        other: &MorphBaseInfo,
+        ignore_gender: bool,
+        ignore_number: bool,
+    ) -> bool {
         for it in self.items.iter() {
             if it.base.check_accord(other, ignore_gender, ignore_number) {
                 return true;
             }
         }
-        if !self.items.is_empty() { return false; }
+        if !self.items.is_empty() {
+            return false;
+        }
         // Empty items: check cached values
         let base = MorphBaseInfo {
             class: self.cached_class,
@@ -290,7 +329,9 @@ impl MorphCollection {
 impl std::fmt::Display for MorphCollection {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut mc = self.clone();
-        write!(f, "class={:?} case={} gender={:?} number={:?} lang={}",
+        write!(
+            f,
+            "class={:?} case={} gender={:?} number={:?} lang={}",
             mc.class(),
             mc.case(),
             mc.gender(),

@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 /// TitlePageAnalyzer — detects title-page information (title, authors, type, etc.)
 /// from the beginning of a document.
 /// Mirrors `TitlePageAnalyzer.cs` (simplified port).
@@ -16,21 +17,17 @@
 ///  - Type keywords (РЕФЕРАТ, ДИССЕРТАЦИЯ, ДИПЛОМ, АВТОРЕФЕРАТ, …)
 ///
 /// The result is a TITLEPAGE referent with NAME, TYPE, AUTHOR, SUPERVISOR, etc.
-
 use std::rc::Rc;
-use std::cell::RefCell;
 
-use crate::analyzer::Analyzer;
 use crate::analysis_kit::AnalysisKit;
-use crate::token::{Token, TokenRef, TokenKind};
+use crate::analyzer::Analyzer;
 use crate::referent::{Referent, SlotValue};
 use crate::source_of_analysis::SourceOfAnalysis;
+use crate::token::{Token, TokenKind, TokenRef};
 
 use super::titlepage_referent::{
-    self as tr,
-    ATTR_TYPE, ATTR_AUTHOR, ATTR_SUPERVISOR, ATTR_EDITOR,
-    ATTR_CONSULTANT, ATTR_OPPONENT, ATTR_TRANSLATOR, ATTR_AFFIRMANT,
-    ATTR_ORG, ATTR_DATE, ATTR_CITY,
+    self as tr, ATTR_AFFIRMANT, ATTR_AUTHOR, ATTR_CITY, ATTR_CONSULTANT, ATTR_DATE, ATTR_EDITOR,
+    ATTR_OPPONENT, ATTR_ORG, ATTR_SUPERVISOR, ATTR_TRANSLATOR, ATTR_TYPE,
 };
 
 // ── Role types matching TitleItemToken.Types ───────────────────────────────
@@ -38,9 +35,9 @@ use super::titlepage_referent::{
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum RoleType {
     Undefined,
-    Worker,    // author / исполнитель
-    Boss,      // scientific supervisor
-    Editor,    // editor / reviewer
+    Worker, // author / исполнитель
+    Boss,   // scientific supervisor
+    Editor, // editor / reviewer
     Consultant,
     Opponent,
     Translate, // translator
@@ -50,14 +47,14 @@ enum RoleType {
 impl RoleType {
     fn attr_name(self) -> Option<&'static str> {
         match self {
-            RoleType::Worker     => Some(ATTR_AUTHOR),
-            RoleType::Boss       => Some(ATTR_SUPERVISOR),
-            RoleType::Editor     => Some(ATTR_EDITOR),
+            RoleType::Worker => Some(ATTR_AUTHOR),
+            RoleType::Boss => Some(ATTR_SUPERVISOR),
+            RoleType::Editor => Some(ATTR_EDITOR),
             RoleType::Consultant => Some(ATTR_CONSULTANT),
-            RoleType::Opponent   => Some(ATTR_OPPONENT),
-            RoleType::Translate  => Some(ATTR_TRANSLATOR),
-            RoleType::Adopt      => Some(ATTR_AFFIRMANT),
-            RoleType::Undefined  => None,
+            RoleType::Opponent => Some(ATTR_OPPONENT),
+            RoleType::Translate => Some(ATTR_TRANSLATOR),
+            RoleType::Adopt => Some(ATTR_AFFIRMANT),
+            RoleType::Undefined => None,
         }
     }
 }
@@ -71,7 +68,10 @@ struct PersonRel {
 
 impl PersonRel {
     fn new(person: Rc<RefCell<Referent>>) -> Self {
-        PersonRel { person, coefs: Vec::new() }
+        PersonRel {
+            person,
+            coefs: Vec::new(),
+        }
     }
 
     fn add(&mut self, typ: RoleType, coef: f32) {
@@ -120,14 +120,25 @@ fn try_match_role(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(RoleType, To
         };
         let pair = format!("{} {}", term, nterm);
         let role = match pair.as_str() {
-            "НАУЧНЫЙ РУКОВОДИТЕЛЬ" | "НАУЧНЫЙ КОНСУЛЬТАНТ" |
-            "НАУКОВИЙ КЕРІВНИК"    | "НАУКОВИЙ КОНСУЛЬТАНТ" => {
-                if pair.contains("КОНСУЛЬТАНТ") { Some(RoleType::Consultant) }
-                else { Some(RoleType::Boss) }
+            "НАУЧНЫЙ РУКОВОДИТЕЛЬ"
+            | "НАУЧНЫЙ КОНСУЛЬТАНТ"
+            | "НАУКОВИЙ КЕРІВНИК"
+            | "НАУКОВИЙ КОНСУЛЬТАНТ" => {
+                if pair.contains("КОНСУЛЬТАНТ") {
+                    Some(RoleType::Consultant)
+                } else {
+                    Some(RoleType::Boss)
+                }
             }
-            "ОФИЦИАЛЬНЫЙ ОППОНЕНТ" | "ОФІЦІЙНИЙ ОПОНЕНТ" => Some(RoleType::Opponent),
-            "ОТВЕТСТВЕННЫЙ ИСПОЛНИТЕЛЬ" | "ВІДПОВІДАЛЬНИЙ ВИКОНАВЕЦЬ" => Some(RoleType::Worker),
-            "РЕДАКТОРСКАЯ ГРУППА" | "РЕДАКТОРСЬКА ГРУПА" => Some(RoleType::Editor),
+            "ОФИЦИАЛЬНЫЙ ОППОНЕНТ" | "ОФІЦІЙНИЙ ОПОНЕНТ" => {
+                Some(RoleType::Opponent)
+            }
+            "ОТВЕТСТВЕННЫЙ ИСПОЛНИТЕЛЬ" | "ВІДПОВІДАЛЬНИЙ ВИКОНАВЕЦЬ" => {
+                Some(RoleType::Worker)
+            }
+            "РЕДАКТОРСКАЯ ГРУППА" | "РЕДАКТОРСЬКА ГРУПА" => {
+                Some(RoleType::Editor)
+            }
             _ => None,
         };
         if let Some(r) = role {
@@ -147,7 +158,9 @@ fn try_match_role(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(RoleType, To
         "КОНСУЛЬТАНТ" => Some(RoleType::Consultant),
         "ОППОНЕНТ" | "ОПОНЕНТ" => Some(RoleType::Opponent),
         "ПЕРЕВОДЧИК" | "ПЕРЕКЛАДАЧ" => Some(RoleType::Translate),
-        "УТВЕРЖДАТЬ" | "СОГЛАСЕН" | "СТВЕРДЖУВАТИ" | "ЗГОДЕН" => Some(RoleType::Adopt),
+        "УТВЕРЖДАТЬ" | "СОГЛАСЕН" | "СТВЕРДЖУВАТИ" | "ЗГОДЕН" => {
+            Some(RoleType::Adopt)
+        }
         _ => None,
     };
 
@@ -168,21 +181,21 @@ fn try_match_type(t: &TokenRef) -> Option<String> {
         _ => return None,
     };
     let typ = match term {
-        "РЕФЕРАТ"      => Some("реферат"),
-        "АВТОРЕФЕРАТ"  => Some("автореферат"),
-        "ДИССЕРТАЦИЯ"  => Some("диссертация"),
-        "ДИСЕРТАЦІЯ"   => Some("дисертація"),
-        "ДИПЛОМ"       => Some("диплом"),
-        "РАБОТА"       => Some("работа"),
-        "РОБОТА"       => Some("робота"),
-        "ОТЧЕТ"        => Some("отчет"),
-        "ЗВІТ"         => Some("звіт"),
-        "ОБЗОР"        => Some("обзор"),
-        "ОГЛЯД"        => Some("огляд"),
-        "ПРОЕКТ"       => Some("проект"),
-        "СПРАВКА"      => Some("справка"),
-        "ДОВІДКА"      => Some("довідка"),
-        "УЧЕБНИК"      => Some("учебник"),
+        "РЕФЕРАТ" => Some("реферат"),
+        "АВТОРЕФЕРАТ" => Some("автореферат"),
+        "ДИССЕРТАЦИЯ" => Some("диссертация"),
+        "ДИСЕРТАЦІЯ" => Some("дисертація"),
+        "ДИПЛОМ" => Some("диплом"),
+        "РАБОТА" => Some("работа"),
+        "РОБОТА" => Some("робота"),
+        "ОТЧЕТ" => Some("отчет"),
+        "ЗВІТ" => Some("звіт"),
+        "ОБЗОР" => Some("обзор"),
+        "ОГЛЯД" => Some("огляд"),
+        "ПРОЕКТ" => Some("проект"),
+        "СПРАВКА" => Some("справка"),
+        "ДОВІДКА" => Some("довідка"),
+        "УЧЕБНИК" => Some("учебник"),
         _ => None,
     };
     typ.map(|s| s.to_string())
@@ -203,7 +216,9 @@ impl Line {
         let mut cur = Some(self.begin.clone());
         while let Some(t) = cur {
             n += t.borrow().length_char();
-            if t.borrow().end_char >= end_char { break; }
+            if t.borrow().end_char >= end_char {
+                break;
+            }
             cur = t.borrow().next.clone();
         }
         n
@@ -219,10 +234,15 @@ impl Line {
             {
                 let tb = t.borrow();
                 if tb.chars.is_letter() {
-                    if tb.chars.is_cyrillic_letter() { ru += 1; }
-                    else if tb.chars.is_latin_letter() { en += 1; }
+                    if tb.chars.is_cyrillic_letter() {
+                        ru += 1;
+                    } else if tb.chars.is_latin_letter() {
+                        en += 1;
+                    }
                 }
-                if tb.end_char >= end_char { break; }
+                if tb.end_char >= end_char {
+                    break;
+                }
             }
             cur = t.borrow().next.clone();
         }
@@ -239,10 +259,15 @@ impl Line {
             {
                 let tb = t.borrow();
                 if tb.chars.is_letter() {
-                    if tb.chars.is_cyrillic_letter() { ru += 1; }
-                    else if tb.chars.is_latin_letter() { en += 1; }
+                    if tb.chars.is_cyrillic_letter() {
+                        ru += 1;
+                    } else if tb.chars.is_latin_letter() {
+                        en += 1;
+                    }
                 }
-                if tb.end_char >= end_char { break; }
+                if tb.end_char >= end_char {
+                    break;
+                }
             }
             cur = t.borrow().next.clone();
         }
@@ -252,7 +277,13 @@ impl Line {
 
 /// Parse up to max_lines logical lines from `t0`, stopping at max_chars total
 /// characters or max_end_char position.
-fn parse_lines(t0: &TokenRef, max_lines: usize, max_chars: i32, max_end_char: i32, sofa: &SourceOfAnalysis) -> Vec<Line> {
+fn parse_lines(
+    t0: &TokenRef,
+    max_lines: usize,
+    max_chars: i32,
+    max_end_char: i32,
+    sofa: &SourceOfAnalysis,
+) -> Vec<Line> {
     let mut res: Vec<Line> = Vec::new();
     let mut total_chars = 0i32;
     let mut cur = Some(t0.clone());
@@ -260,7 +291,9 @@ fn parse_lines(t0: &TokenRef, max_lines: usize, max_chars: i32, max_end_char: i3
     while let Some(t) = cur.clone() {
         {
             let tb = t.borrow();
-            if max_end_char > 0 && tb.begin_char > max_end_char { break; }
+            if max_end_char > 0 && tb.begin_char > max_end_char {
+                break;
+            }
         }
 
         // Find end of this visual line: advance until newline-after or end of chain
@@ -282,17 +315,26 @@ fn parse_lines(t0: &TokenRef, max_lines: usize, max_chars: i32, max_end_char: i3
         }
 
         // Stop at "СОДЕРЖАНИЕ" / "ОГЛАВЛЕНИЕ" (start of table of contents)
-        if is_toc_start(&t, sofa) { break; }
+        if is_toc_start(&t, sofa) {
+            break;
+        }
 
         // Stop if this line begins with "КЛЮЧЕВЫЕ СЛОВА" / "KEYWORDS"
-        if is_keywords_line(&t) { break; }
+        if is_keywords_line(&t) {
+            break;
+        }
 
-        let line = Line { begin: t.clone(), end: t1.clone() };
+        let line = Line {
+            begin: t.clone(),
+            end: t1.clone(),
+        };
         let lc = line.chars_count();
         res.push(line);
         total_chars += lc;
 
-        if res.len() >= max_lines || total_chars >= max_chars { break; }
+        if res.len() >= max_lines || total_chars >= max_chars {
+            break;
+        }
 
         // Advance past the line
         let after = t1.borrow().next.clone();
@@ -302,10 +344,12 @@ fn parse_lines(t0: &TokenRef, max_lines: usize, max_chars: i32, max_end_char: i3
 }
 
 fn is_toc_start(t: &TokenRef, sofa: &SourceOfAnalysis) -> bool {
-    if !t.borrow().is_newline_before(sofa) { return false; }
-    t.borrow().is_value("СОДЕРЖАНИЕ", Some("ЗМІСТ")) ||
-    t.borrow().is_value("ОГЛАВЛЕНИЕ", None) ||
-    t.borrow().is_value("СОДЕРЖИМОЕ", None)
+    if !t.borrow().is_newline_before(sofa) {
+        return false;
+    }
+    t.borrow().is_value("СОДЕРЖАНИЕ", Some("ЗМІСТ"))
+        || t.borrow().is_value("ОГЛАВЛЕНИЕ", None)
+        || t.borrow().is_value("СОДЕРЖИМОЕ", None)
 }
 
 fn is_keywords_line(t: &TokenRef) -> bool {
@@ -320,9 +364,15 @@ fn is_keywords_line(t: &TokenRef) -> bool {
 
 /// Extract the best candidate title text from a span of tokens.
 /// Returns (name_text, type_value) or None if no good candidate found.
-fn try_extract_title(begin: &TokenRef, end: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(String, Option<String>)> {
+fn try_extract_title(
+    begin: &TokenRef,
+    end: &TokenRef,
+    sofa: &SourceOfAnalysis,
+) -> Option<(String, Option<String>)> {
     // Skip purely-lowercase start (not a title)
-    if begin.borrow().chars.is_all_lower() { return None; }
+    if begin.borrow().chars.is_all_lower() {
+        return None;
+    }
 
     let mut words = 0i32;
     let mut up_words = 0i32;
@@ -338,8 +388,11 @@ fn try_extract_title(begin: &TokenRef, end: &TokenRef, sofa: &SourceOfAnalysis) 
     // Check for leading type keyword on its own line
     if let Some(tv) = try_match_type(begin) {
         let nb = begin.borrow().next.clone();
-        if nb.as_ref().map_or(false, |nx| nx.borrow().is_newline_before(sofa)) ||
-           begin.borrow().is_newline_after(sofa) {
+        if nb
+            .as_ref()
+            .map_or(false, |nx| nx.borrow().is_newline_before(sofa))
+            || begin.borrow().is_newline_after(sofa)
+        {
             type_value = Some(tv);
             rank += 5;
             name_start = begin.borrow().next.clone();
@@ -352,7 +405,9 @@ fn try_extract_title(begin: &TokenRef, end: &TokenRef, sofa: &SourceOfAnalysis) 
     }
 
     while let Some(t) = cur.clone() {
-        if t.borrow().end_char > end_char { break; }
+        if t.borrow().end_char > end_char {
+            break;
+        }
 
         // Role keywords degrade rank
         if let Some((_, role_end)) = try_match_role(&t, sofa) {
@@ -363,7 +418,9 @@ fn try_extract_title(begin: &TokenRef, end: &TokenRef, sofa: &SourceOfAnalysis) 
             while let Some(sc) = skip_cur.clone() {
                 let sc_end = sc.borrow().end_char;
                 skip_cur = sc.borrow().next.clone();
-                if sc_end >= re_end_char { break; }
+                if sc_end >= re_end_char {
+                    break;
+                }
             }
             cur = skip_cur;
             continue;
@@ -384,9 +441,13 @@ fn try_extract_title(begin: &TokenRef, end: &TokenRef, sofa: &SourceOfAnalysis) 
 
         if is_newline {
             line_count += 1;
-            if line_count > 4 { break; }
+            if line_count > 4 {
+                break;
+            }
             // Continuation lines in lowercase are good (sentence wrapped)
-            if tb.chars.is_all_lower() { rank += 10; }
+            if tb.chars.is_all_lower() {
+                rank += 10;
+            }
         }
 
         // Referent tokens — penalize GEO/PERSON on their own lines
@@ -399,17 +460,23 @@ fn try_extract_title(begin: &TokenRef, end: &TokenRef, sofa: &SourceOfAnalysis) 
                 return None; // URI/phone → definitely not a title
             }
             words += 1;
-            if tb.chars.is_all_upper() { up_words += 1; }
+            if tb.chars.is_all_upper() {
+                up_words += 1;
+            }
             drop(tb);
             cur = t.borrow().next.clone();
             continue;
         }
 
         if let TokenKind::Text(ref txt) = tb.kind {
-            if txt.term == "©" { rank -= 10; }
+            if txt.term == "©" {
+                rank -= 10;
+            }
             if tb.chars.is_letter() && tb.length_char() > 2 {
                 words += 1;
-                if tb.chars.is_all_upper() { up_words += 1; }
+                if tb.chars.is_all_upper() {
+                    up_words += 1;
+                }
             } else if tb.is_char_of("._", sofa) {
                 rank -= 5;
             } else if !tb.is_char(',', sofa) {
@@ -430,12 +497,16 @@ fn try_extract_title(begin: &TokenRef, end: &TokenRef, sofa: &SourceOfAnalysis) 
     rank += words;
     rank -= notwords;
 
-    if rank < 1 || words < 1 { return None; }
+    if rank < 1 || words < 1 {
+        return None;
+    }
 
     // Build name text from name_start..end
     let ns = name_start?;
     let name_text = collect_text(&ns, end, sofa);
-    if name_text.trim().is_empty() { return None; }
+    if name_text.trim().is_empty() {
+        return None;
+    }
 
     Some((name_text, type_value))
 }
@@ -451,14 +522,18 @@ fn collect_text(begin: &TokenRef, end: &TokenRef, sofa: &SourceOfAnalysis) -> St
         let bc = tb.begin_char;
         let ec = tb.end_char;
 
-        if bc > end_char { break; }
+        if bc > end_char {
+            break;
+        }
 
         let text = sofa.substring(bc, ec);
         if !text.is_empty() {
             parts.push(text.to_string());
         }
 
-        if ec >= end_char { break; }
+        if ec >= end_char {
+            break;
+        }
         drop(tb);
         cur = t.borrow().next.clone();
     }
@@ -471,18 +546,30 @@ fn collect_text(begin: &TokenRef, end: &TokenRef, sofa: &SourceOfAnalysis) -> St
 pub struct TitlePageAnalyzer;
 
 impl TitlePageAnalyzer {
-    pub fn new() -> Self { TitlePageAnalyzer }
+    pub fn new() -> Self {
+        TitlePageAnalyzer
+    }
 }
 
 impl Default for TitlePageAnalyzer {
-    fn default() -> Self { TitlePageAnalyzer }
+    fn default() -> Self {
+        TitlePageAnalyzer
+    }
 }
 
 impl Analyzer for TitlePageAnalyzer {
-    fn name(&self)        -> &'static str { "TITLEPAGE" }
-    fn caption(&self)     -> &'static str { "Титульный лист" }
-    fn is_specific(&self) -> bool         { true }
-    fn progress_weight(&self) -> i32      { 1 }
+    fn name(&self) -> &'static str {
+        "TITLEPAGE"
+    }
+    fn caption(&self) -> &'static str {
+        "Титульный лист"
+    }
+    fn is_specific(&self) -> bool {
+        true
+    }
+    fn progress_weight(&self) -> i32 {
+        1
+    }
 
     fn process(&self, kit: &mut AnalysisKit) {
         let sofa = kit.sofa.clone();
@@ -494,7 +581,9 @@ impl Analyzer for TitlePageAnalyzer {
 
         // Parse up to 30 lines / 1500 chars from the document start
         let lines = parse_lines(&first, 30, 1500, 0, &sofa);
-        if lines.is_empty() { return; }
+        if lines.is_empty() {
+            return;
+        }
 
         // Find candidate line span for title (stop at long prose)
         let cou = lines.len();
@@ -509,11 +598,15 @@ impl Analyzer for TitlePageAnalyzer {
             // Check for pure language switches (EN→RU or RU→EN break span)
             for j in i..cou.min(i + 5) {
                 if j > i {
-                    if lines[j-1].is_pure_en() && lines[j].is_pure_ru() { break; }
-                    if lines[j-1].is_pure_ru() && lines[j].is_pure_en() { break; }
+                    if lines[j - 1].is_pure_en() && lines[j].is_pure_ru() {
+                        break;
+                    }
+                    if lines[j - 1].is_pure_ru() && lines[j].is_pure_en() {
+                        break;
+                    }
                 }
                 let span_begin = lines[i].begin.clone();
-                let span_end   = lines[j].end.clone();
+                let span_end = lines[j].end.clone();
                 if let Some((name, tv)) = try_extract_title(&span_begin, &span_end, &sofa) {
                     // Prefer longer name (more lines)
                     let better = match &best_name {
@@ -521,26 +614,34 @@ impl Analyzer for TitlePageAnalyzer {
                         Some(prev) => name.len() > prev.len() || (j > i && tv.is_some()),
                     };
                     if better {
-                        best_name  = Some(name);
-                        best_type  = tv;
+                        best_name = Some(name);
+                        best_type = tv;
                         best_begin = Some(span_begin);
-                        best_end   = Some(span_end);
+                        best_end = Some(span_end);
                     }
                     break;
                 }
             }
         }
 
-        let end_char = if cou > 0 { lines[cou - 1].end.borrow().end_char } else { 0 };
+        let end_char = if cou > 0 {
+            lines[cou - 1].end.borrow().end_char
+        } else {
+            0
+        };
 
         // Build referent
         let mut res = tr::new_titlepage_referent();
 
-        if let (Some(name), Some(nb), Some(ne)) = (best_name.clone(), best_begin.clone(), best_end.clone()) {
+        if let (Some(name), Some(nb), Some(ne)) =
+            (best_name.clone(), best_begin.clone(), best_end.clone())
+        {
             // Trim trailing period
             let name = if name.ends_with('.') && !name.ends_with("..") {
-                name[..name.len()-1].trim().to_string()
-            } else { name };
+                name[..name.len() - 1].trim().to_string()
+            } else {
+                name
+            };
             tr::add_name(&mut res, &name);
             if let Some(tv) = best_type.clone() {
                 tr::add_title_type(&mut res, &tv);
@@ -552,16 +653,19 @@ impl Analyzer for TitlePageAnalyzer {
         let mut cur_role = RoleType::Undefined;
         let mut found_date = false;
         let mut found_city = false;
-        let mut found_org  = false;
+        let mut found_org = false;
 
         // We also track the farthest end token we encounter
-        let mut end_token_tracker: Option<TokenRef> = best_end.clone().or_else(|| kit.first_token.clone());
+        let mut end_token_tracker: Option<TokenRef> =
+            best_end.clone().or_else(|| kit.first_token.clone());
 
         let mut cur = Some(first.clone());
         while let Some(t) = cur.clone() {
             {
                 let tb = t.borrow();
-                if tb.begin_char > end_char { break; }
+                if tb.begin_char > end_char {
+                    break;
+                }
             }
 
             // Role keyword detection
@@ -581,9 +685,7 @@ impl Analyzer for TitlePageAnalyzer {
                 // Skip to after role keyword (and optional ":-")
                 let after_role = role_end.borrow().next.clone();
                 let skip = match after_role {
-                    Some(ref s) if s.borrow().is_char_of(":-", &sofa) => {
-                        s.borrow().next.clone()
-                    }
+                    Some(ref s) if s.borrow().is_char_of(":-", &sofa) => s.borrow().next.clone(),
                     other => other,
                 };
                 cur = skip;
@@ -634,12 +736,23 @@ impl Analyzer for TitlePageAnalyzer {
                         };
 
                         // Find or create PersonRel entry
-                        let ptr_match = person_rels.iter().position(|pr| Rc::ptr_eq(&pr.person, &r_rc));
+                        let ptr_match = person_rels
+                            .iter()
+                            .position(|pr| Rc::ptr_eq(&pr.person, &r_rc));
                         match ptr_match {
-                            Some(idx) => { person_rels[idx].add(effective_role, 1.0); }
+                            Some(idx) => {
+                                person_rels[idx].add(effective_role, 1.0);
+                            }
                             None => {
                                 let mut pr = PersonRel::new(r_rc.clone());
-                                pr.add(effective_role, if effective_role == RoleType::Undefined { 0.5 } else { 1.0 });
+                                pr.add(
+                                    effective_role,
+                                    if effective_role == RoleType::Undefined {
+                                        0.5
+                                    } else {
+                                        1.0
+                                    },
+                                );
                                 person_rels.push(pr);
                             }
                         }
@@ -653,8 +766,13 @@ impl Analyzer for TitlePageAnalyzer {
                     }
                     "GEO" => {
                         // Only cities
-                        let is_city = r_rc.borrow().get_string_value("TYPE")
-                            .map(|v| v.to_lowercase().contains("city") || v.to_lowercase().contains("город"))
+                        let is_city = r_rc
+                            .borrow()
+                            .get_string_value("TYPE")
+                            .map(|v| {
+                                v.to_lowercase().contains("city")
+                                    || v.to_lowercase().contains("город")
+                            })
                             .unwrap_or(false);
                         // Heuristic: if GEO has no "TYPE" slot we still accept it as city candidate
                         let is_city2 = r_rc.borrow().find_slot("HIGHER", None).is_none();
@@ -682,8 +800,13 @@ impl Analyzer for TitlePageAnalyzer {
 
         // Assign persons to their best roles
         let role_order = [
-            RoleType::Worker, RoleType::Boss, RoleType::Editor,
-            RoleType::Consultant, RoleType::Opponent, RoleType::Translate, RoleType::Adopt,
+            RoleType::Worker,
+            RoleType::Boss,
+            RoleType::Editor,
+            RoleType::Consultant,
+            RoleType::Opponent,
+            RoleType::Translate,
+            RoleType::Adopt,
         ];
 
         for role in &role_order {
@@ -707,16 +830,16 @@ impl Analyzer for TitlePageAnalyzer {
         }
 
         // Only register if we have at least one slot
-        if res.slots.is_empty() { return; }
+        if res.slots.is_empty() {
+            return;
+        }
 
         let r_rc = Rc::new(RefCell::new(res));
         let r_rc = kit.add_entity(r_rc);
 
         // Embed as a referent token covering the best name span (if found)
         if let (Some(nb), Some(ne)) = (best_begin, best_end) {
-            let tok = Rc::new(RefCell::new(
-                Token::new_referent(nb, ne, r_rc.clone())
-            ));
+            let tok = Rc::new(RefCell::new(Token::new_referent(nb, ne, r_rc.clone())));
             kit.embed_token(tok);
         }
     }
@@ -730,11 +853,22 @@ fn infer_role_from_person_attrs(person: &Rc<RefCell<Referent>>) -> RoleType {
         if slot.type_name == "ATTR" {
             if let Some(ref v) = slot.value {
                 let s = v.to_string().to_lowercase();
-                if s.contains("руководител") || s.contains("керівник") { return RoleType::Boss; }
-                if s.contains("студент") || s.contains("слушател") || s.contains("студент") { return RoleType::Worker; }
-                if s.contains("редактор") || s.contains("рецензент") { return RoleType::Editor; }
-                if s.contains("консультант") { return RoleType::Consultant; }
-                if s.contains("исполнитель") || s.contains("виконавець") { return RoleType::Worker; }
+                if s.contains("руководител") || s.contains("керівник") {
+                    return RoleType::Boss;
+                }
+                if s.contains("студент") || s.contains("слушател") || s.contains("студент")
+                {
+                    return RoleType::Worker;
+                }
+                if s.contains("редактор") || s.contains("рецензент") {
+                    return RoleType::Editor;
+                }
+                if s.contains("консультант") {
+                    return RoleType::Consultant;
+                }
+                if s.contains("исполнитель") || s.contains("виконавець") {
+                    return RoleType::Worker;
+                }
             }
         }
     }

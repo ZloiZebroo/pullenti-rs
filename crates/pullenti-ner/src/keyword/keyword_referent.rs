@@ -1,15 +1,14 @@
 /// KeywordReferent — a keyword/key-combination entity.
 /// Mirrors `KeywordReferent.cs` and `KeywordType.cs`.
-
 use crate::referent::{Referent, SlotValue};
 
 // ── Constants ─────────────────────────────────────────────────────────────
 
 pub const OBJ_TYPENAME: &str = "KEYWORD";
-pub const ATTR_TYPE:    &str = "TYPE";
-pub const ATTR_VALUE:   &str = "VALUE";
-pub const ATTR_NORMAL:  &str = "NORMAL";
-pub const ATTR_REF:     &str = "REF";
+pub const ATTR_TYPE: &str = "TYPE";
+pub const ATTR_VALUE: &str = "VALUE";
+pub const ATTR_NORMAL: &str = "NORMAL";
+pub const ATTR_REF: &str = "REF";
 
 // ── KeywordType ────────────────────────────────────────────────────────────
 
@@ -32,21 +31,21 @@ pub enum KeywordType {
 impl KeywordType {
     pub fn as_str(self) -> &'static str {
         match self {
-            KeywordType::Undefined   => "Undefined",
-            KeywordType::Object      => "Object",
-            KeywordType::Referent    => "Referent",
-            KeywordType::Predicate   => "Predicate",
-            KeywordType::Annotation  => "Annotation",
+            KeywordType::Undefined => "Undefined",
+            KeywordType::Object => "Object",
+            KeywordType::Referent => "Referent",
+            KeywordType::Predicate => "Predicate",
+            KeywordType::Annotation => "Annotation",
         }
     }
 
     pub fn from_str(s: &str) -> Self {
         match s {
-            "Object"     => KeywordType::Object,
-            "Referent"   => KeywordType::Referent,
-            "Predicate"  => KeywordType::Predicate,
+            "Object" => KeywordType::Object,
+            "Referent" => KeywordType::Referent,
+            "Predicate" => KeywordType::Predicate,
             "Annotation" => KeywordType::Annotation,
-            _            => KeywordType::Undefined,
+            _ => KeywordType::Undefined,
         }
     }
 }

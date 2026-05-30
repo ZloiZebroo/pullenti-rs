@@ -2,7 +2,6 @@
 ///
 /// BOOKLINK — a bibliographic reference (book, article, etc.)
 /// BOOKLINKREF — an in-text citation pointing to a BOOKLINK
-
 use crate::referent::{Referent, Slot, SlotValue};
 
 // ── BOOKLINK ──────────────────────────────────────────────────────────────────
@@ -33,29 +32,39 @@ pub fn get_year(r: &Referent) -> i32 {
 
 pub fn set_name(r: &mut Referent, name: &str) {
     r.slots.retain(|s| s.type_name != ATTR_NAME);
-    r.slots.push(Slot::new(ATTR_NAME, Some(SlotValue::Str(name.to_string()))));
+    r.slots
+        .push(Slot::new(ATTR_NAME, Some(SlotValue::Str(name.to_string()))));
 }
 
 pub fn set_year(r: &mut Referent, year: i32) {
     r.slots.retain(|s| s.type_name != ATTR_YEAR);
-    r.slots.push(Slot::new(ATTR_YEAR, Some(SlotValue::Str(year.to_string()))));
+    r.slots
+        .push(Slot::new(ATTR_YEAR, Some(SlotValue::Str(year.to_string()))));
 }
 
 pub fn set_type(r: &mut Referent, typ: &str) {
     r.slots.retain(|s| s.type_name != ATTR_TYPE);
-    r.slots.push(Slot::new(ATTR_TYPE, Some(SlotValue::Str(typ.to_string()))));
+    r.slots
+        .push(Slot::new(ATTR_TYPE, Some(SlotValue::Str(typ.to_string()))));
 }
 
 pub fn add_author_str(r: &mut Referent, author: &str) {
-    r.slots.push(Slot::new(ATTR_AUTHOR, Some(SlotValue::Str(author.to_string()))));
+    r.slots.push(Slot::new(
+        ATTR_AUTHOR,
+        Some(SlotValue::Str(author.to_string())),
+    ));
 }
 
 pub fn add_author_ref(r: &mut Referent, author_ref: std::rc::Rc<std::cell::RefCell<Referent>>) {
-    r.slots.push(Slot::new(ATTR_AUTHOR, Some(SlotValue::Referent(author_ref))));
+    r.slots.push(Slot::new(
+        ATTR_AUTHOR,
+        Some(SlotValue::Referent(author_ref)),
+    ));
 }
 
 pub fn add_url_ref(r: &mut Referent, url_ref: std::rc::Rc<std::cell::RefCell<Referent>>) {
-    r.slots.push(Slot::new(ATTR_URL, Some(SlotValue::Referent(url_ref))));
+    r.slots
+        .push(Slot::new(ATTR_URL, Some(SlotValue::Referent(url_ref))));
 }
 
 // ── BOOKLINKREF ───────────────────────────────────────────────────────────────
@@ -88,22 +97,32 @@ pub fn new_booklinkref_referent() -> Referent {
 
 pub fn set_ref_number(r: &mut Referent, num: &str) {
     r.slots.retain(|s| s.type_name != REF_ATTR_NUMBER);
-    r.slots.push(Slot::new(REF_ATTR_NUMBER, Some(SlotValue::Str(num.to_string()))));
+    r.slots.push(Slot::new(
+        REF_ATTR_NUMBER,
+        Some(SlotValue::Str(num.to_string())),
+    ));
 }
 
 pub fn set_ref_pages(r: &mut Referent, pages: &str) {
     r.slots.retain(|s| s.type_name != REF_ATTR_PAGES);
-    r.slots.push(Slot::new(REF_ATTR_PAGES, Some(SlotValue::Str(pages.to_string()))));
+    r.slots.push(Slot::new(
+        REF_ATTR_PAGES,
+        Some(SlotValue::Str(pages.to_string())),
+    ));
 }
 
 pub fn set_ref_book(r: &mut Referent, book: std::rc::Rc<std::cell::RefCell<Referent>>) {
     r.slots.retain(|s| s.type_name != REF_ATTR_BOOK);
-    r.slots.push(Slot::new(REF_ATTR_BOOK, Some(SlotValue::Referent(book))));
+    r.slots
+        .push(Slot::new(REF_ATTR_BOOK, Some(SlotValue::Referent(book))));
 }
 
 pub fn set_ref_type(r: &mut Referent, typ: BookLinkRefType) {
     r.slots.retain(|s| s.type_name != REF_ATTR_TYPE);
-    r.slots.push(Slot::new(REF_ATTR_TYPE, Some(SlotValue::Str(typ.as_str().to_string()))));
+    r.slots.push(Slot::new(
+        REF_ATTR_TYPE,
+        Some(SlotValue::Str(typ.as_str().to_string())),
+    ));
 }
 
 pub fn get_ref_number(r: &Referent) -> Option<String> {

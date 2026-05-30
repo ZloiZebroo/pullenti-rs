@@ -15,7 +15,7 @@ use std::cell::RefCell;
 
 use crate::analyzer::Analyzer;
 use crate::analysis_kit::AnalysisKit;
-use crate::referent::Referent;
+use crate::referent::{Referent, SlotValue};
 use crate::token::{Token, TokenRef, TokenKind};
 use crate::source_of_analysis::SourceOfAnalysis;
 use crate::person::person_referent as pr;
@@ -115,9 +115,22 @@ impl Analyzer for PersonAnalyzer {
             // Try: prefix/title term → person name
             if let Some(pairs) = try_prefix_person(&t, &sofa) {
                 let mut last_tok = t.clone();
+                let mut last_property: Option<Rc<RefCell<Referent>>> = None;
                 for (referent, begin, end) in pairs {
                     let r_rc = Rc::new(RefCell::new(referent));
                     let r_rc = kit.add_entity(r_rc);
+                    let type_name = r_rc.borrow().type_name.clone();
+                    if type_name == ppr::OBJ_TYPENAME {
+                        last_property = Some(r_rc.clone());
+                    } else if type_name == pr::OBJ_TYPENAME {
+                        if let Some(prop) = last_property.take() {
+                            r_rc.borrow_mut().add_slot(
+                                pr::ATTR_ATTR,
+                                SlotValue::Referent(prop),
+                                false,
+                            );
+                        }
+                    }
                     let tok = Rc::new(RefCell::new(
                         Token::new_referent(begin, end, r_rc)
                     ));
@@ -1309,9 +1322,8 @@ fn try_prefix_person(
 
     let entry = entry?;
 
-    // Skip nationality / kin terms — they don't directly precede names
+    // Skip nationality terms — they don't directly precede names.
     if entry.kind == pat::PersonAttrKind::Nationality
-        || entry.kind == pat::PersonAttrKind::Kin
     {
         return None;
     }

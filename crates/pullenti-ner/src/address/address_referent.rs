@@ -21,12 +21,12 @@ pub fn new_street_referent() -> Referent {
 
 pub const ADDRESS_TYPENAME: &str = "ADDRESS";
 pub const ADDRESS_ATTR_STREET: &str = "STREET";
-pub const ADDRESS_ATTR_HOUSE:  &str = "HOUSE";
-pub const ADDRESS_ATTR_FLAT:   &str = "FLAT";
+pub const ADDRESS_ATTR_HOUSE: &str = "HOUSE";
+pub const ADDRESS_ATTR_FLAT: &str = "FLAT";
 pub const ADDRESS_ATTR_CORPUS: &str = "CORPUS";
-pub const ADDRESS_ATTR_FLOOR:  &str = "FLOOR";
+pub const ADDRESS_ATTR_FLOOR: &str = "FLOOR";
 pub const ADDRESS_ATTR_OFFICE: &str = "OFFICE";
-pub const ADDRESS_ATTR_POST:   &str = "ZIP";     // ZIP/postal code
+pub const ADDRESS_ATTR_POST: &str = "ZIP"; // ZIP/postal code
 
 pub fn new_address_referent() -> Referent {
     Referent {
@@ -57,17 +57,40 @@ pub fn set_slot_str(r: &mut Referent, attr: &str, val: &str) {
 }
 
 pub fn get_slot_str(r: &Referent, attr: &str) -> Option<String> {
-    r.slots.iter().find(|s| s.type_name == attr)
-        .and_then(|s| if let Some(SlotValue::Str(v)) = &s.value { Some(v.clone()) } else { None })
+    r.slots.iter().find(|s| s.type_name == attr).and_then(|s| {
+        if let Some(SlotValue::Str(v)) = &s.value {
+            Some(v.clone())
+        } else {
+            None
+        }
+    })
 }
 
-pub fn get_street_type(r: &Referent) -> Option<String> { get_slot_str(r, STREET_ATTR_TYPE) }
-pub fn get_street_name(r: &Referent) -> Option<String> { get_slot_str(r, STREET_ATTR_NAME) }
-pub fn get_street_number(r: &Referent) -> Option<String> { get_slot_str(r, STREET_ATTR_NUMBER) }
+pub fn get_street_type(r: &Referent) -> Option<String> {
+    get_slot_str(r, STREET_ATTR_TYPE)
+}
+pub fn get_street_name(r: &Referent) -> Option<String> {
+    get_slot_str(r, STREET_ATTR_NAME)
+}
+pub fn get_street_number(r: &Referent) -> Option<String> {
+    get_slot_str(r, STREET_ATTR_NUMBER)
+}
 
-pub fn get_house(r: &Referent) -> Option<String>  { get_slot_str(r, ADDRESS_ATTR_HOUSE) }
-pub fn get_flat(r: &Referent) -> Option<String>   { get_slot_str(r, ADDRESS_ATTR_FLAT) }
-pub fn get_corpus(r: &Referent) -> Option<String> { get_slot_str(r, ADDRESS_ATTR_CORPUS) }
-pub fn get_floor(r: &Referent) -> Option<String>  { get_slot_str(r, ADDRESS_ATTR_FLOOR) }
-pub fn get_office(r: &Referent) -> Option<String> { get_slot_str(r, ADDRESS_ATTR_OFFICE) }
-pub fn get_post(r: &Referent) -> Option<String>   { get_slot_str(r, ADDRESS_ATTR_POST) }
+pub fn get_house(r: &Referent) -> Option<String> {
+    get_slot_str(r, ADDRESS_ATTR_HOUSE)
+}
+pub fn get_flat(r: &Referent) -> Option<String> {
+    get_slot_str(r, ADDRESS_ATTR_FLAT)
+}
+pub fn get_corpus(r: &Referent) -> Option<String> {
+    get_slot_str(r, ADDRESS_ATTR_CORPUS)
+}
+pub fn get_floor(r: &Referent) -> Option<String> {
+    get_slot_str(r, ADDRESS_ATTR_FLOOR)
+}
+pub fn get_office(r: &Referent) -> Option<String> {
+    get_slot_str(r, ADDRESS_ATTR_OFFICE)
+}
+pub fn get_post(r: &Referent) -> Option<String> {
+    get_slot_str(r, ADDRESS_ATTR_POST)
+}

@@ -1,17 +1,16 @@
+use std::cell::RefCell;
 /// MailLine — a single line of an e-mail message with its detected type.
 ///
 /// Simplified port of `Pullenti.Ner.Mail.Internal.MailLine`.
 /// We skip the NounPhraseHelper BestRegards deep analysis and
 /// PersonItemToken hello-name analysis; we rely solely on termin matching.
-
 use std::rc::Rc;
-use std::cell::RefCell;
 use std::sync::OnceLock;
 
-use crate::referent::Referent;
-use crate::token::{TokenRef, TokenKind};
-use crate::source_of_analysis::SourceOfAnalysis;
 use crate::core::termin::{Termin, TerminCollection};
+use crate::referent::Referent;
+use crate::source_of_analysis::SourceOfAnalysis;
+use crate::token::{TokenKind, TokenRef};
 
 // ── MailLineType ───────────────────────────────────────────────────────────
 
@@ -56,7 +55,9 @@ impl MailLine {
         while let Some(tok) = t {
             {
                 let tb = tok.borrow();
-                if tb.end_char > end_char { break; }
+                if tb.end_char > end_char {
+                    break;
+                }
                 if matches!(&tb.kind, TokenKind::Text(_))
                     && tb.chars.is_letter()
                     && tb.length_char() > 2
@@ -86,7 +87,9 @@ impl MailLine {
         while let Some(tok) = t {
             {
                 let tb = tok.borrow();
-                if tb.end_char > end_char { break; }
+                if tb.end_char > end_char {
+                    break;
+                }
                 if let Some(r) = tb.get_referent() {
                     let rb = r.borrow();
                     if rb.type_name == "URI" {
@@ -106,8 +109,8 @@ impl MailLine {
 
 struct MailTermins {
     regard_words: TerminCollection,
-    from_words:   TerminCollection,
-    hello_words:  TerminCollection,
+    from_words: TerminCollection,
+    hello_words: TerminCollection,
 }
 
 static MAIL_TERMINS: OnceLock<MailTermins> = OnceLock::new();
@@ -116,42 +119,108 @@ fn get_termins() -> &'static MailTermins {
     MAIL_TERMINS.get_or_init(|| {
         let mut regard_words = TerminCollection::new();
         for s in &[
-            "УВАЖЕНИЕ", "ПОЧТЕНИЕ", "С УВАЖЕНИЕМ", "ПОЖЕЛАНИE", "ДЕНЬ",
-            "ХОРОШЕГО ДНЯ", "ИСКРЕННЕ ВАШ", "УДАЧА", "СПАСИБО", "ЦЕЛОВАТЬ",
-            "ПОВАГА", "З ПОВАГОЮ", "ПОБАЖАННЯ", "ЩИРО ВАШ", "ДЯКУЮ", "ЦІЛУВАТИ",
-            "BEST REGARDS", "REGARDS", "BEST WISHES", "KIND REGARDS",
-            "GOOD BYE", "BYE", "THANKS", "THANK YOU", "MANY THANKS",
-            "DAY", "VERY MUCH", "HAVE", "LUCK",
-            "YOURS SINCERELY", "SINCERELY YOURS", "LOOKING FORWARD", "AR CIEŅU",
+            "УВАЖЕНИЕ",
+            "ПОЧТЕНИЕ",
+            "С УВАЖЕНИЕМ",
+            "ПОЖЕЛАНИE",
+            "ДЕНЬ",
+            "ХОРОШЕГО ДНЯ",
+            "ИСКРЕННЕ ВАШ",
+            "УДАЧА",
+            "СПАСИБО",
+            "ЦЕЛОВАТЬ",
+            "ПОВАГА",
+            "З ПОВАГОЮ",
+            "ПОБАЖАННЯ",
+            "ЩИРО ВАШ",
+            "ДЯКУЮ",
+            "ЦІЛУВАТИ",
+            "BEST REGARDS",
+            "REGARDS",
+            "BEST WISHES",
+            "KIND REGARDS",
+            "GOOD BYE",
+            "BYE",
+            "THANKS",
+            "THANK YOU",
+            "MANY THANKS",
+            "DAY",
+            "VERY MUCH",
+            "HAVE",
+            "LUCK",
+            "YOURS SINCERELY",
+            "SINCERELY YOURS",
+            "LOOKING FORWARD",
+            "AR CIEŅU",
         ] {
             regard_words.add(Termin::new(s.to_uppercase()));
         }
 
         let mut from_words = TerminCollection::new();
         for s in &[
-            "FROM", "TO", "CC", "SENT", "SUBJECT", "SENDER", "TIME",
-            "ОТ КОГО", "КОМУ", "ДАТА", "ТЕМА", "КОПИЯ", "ОТ", "ОТПРАВЛЕНО",
-            "WHEN", "WHERE",
+            "FROM",
+            "TO",
+            "CC",
+            "SENT",
+            "SUBJECT",
+            "SENDER",
+            "TIME",
+            "ОТ КОГО",
+            "КОМУ",
+            "ДАТА",
+            "ТЕМА",
+            "КОПИЯ",
+            "ОТ",
+            "ОТПРАВЛЕНО",
+            "WHEN",
+            "WHERE",
         ] {
             from_words.add(Termin::new(*s));
         }
 
         let mut hello_words = TerminCollection::new();
         for s in &[
-            "HI", "HELLO", "DEAR",
-            "GOOD MORNING", "GOOD DAY", "GOOD EVENING", "GOOD NIGHT",
-            "ЗДРАВСТВУЙ", "ЗДРАВСТВУЙТЕ", "ПРИВЕТСТВУЮ", "ПРИВЕТ", "ПРИВЕТИК",
-            "УВАЖАЕМЫЙ", "ДОРОГОЙ", "ЛЮБЕЗНЫЙ",
-            "ГЛУБОКОУВАЖАЕМЫЙ", "ГЛУБОКО УВАЖАЕМЫЙ",
-            "ДОБРОЕ УТРО", "ДОБРЫЙ ДЕНЬ", "ДОБРЫЙ ВЕЧЕР", "ДОБРОЙ НОЧИ",
-            "ЗДРАСТУЙ", "ЗДРАСТУЙТЕ",
-            "ВІТАЮ", "ПРИВІТ", "ШАНОВНИЙ", "ДОРОГИЙ", "ЛЮБИЙ",
-            "ДОБРОГО РАНКУ", "ДОБРИЙ ДЕНЬ", "ДОБРИЙ ВЕЧІР", "ДОБРОЇ НОЧІ",
+            "HI",
+            "HELLO",
+            "DEAR",
+            "GOOD MORNING",
+            "GOOD DAY",
+            "GOOD EVENING",
+            "GOOD NIGHT",
+            "ЗДРАВСТВУЙ",
+            "ЗДРАВСТВУЙТЕ",
+            "ПРИВЕТСТВУЮ",
+            "ПРИВЕТ",
+            "ПРИВЕТИК",
+            "УВАЖАЕМЫЙ",
+            "ДОРОГОЙ",
+            "ЛЮБЕЗНЫЙ",
+            "ГЛУБОКОУВАЖАЕМЫЙ",
+            "ГЛУБОКО УВАЖАЕМЫЙ",
+            "ДОБРОЕ УТРО",
+            "ДОБРЫЙ ДЕНЬ",
+            "ДОБРЫЙ ВЕЧЕР",
+            "ДОБРОЙ НОЧИ",
+            "ЗДРАСТУЙ",
+            "ЗДРАСТУЙТЕ",
+            "ВІТАЮ",
+            "ПРИВІТ",
+            "ШАНОВНИЙ",
+            "ДОРОГИЙ",
+            "ЛЮБИЙ",
+            "ДОБРОГО РАНКУ",
+            "ДОБРИЙ ДЕНЬ",
+            "ДОБРИЙ ВЕЧІР",
+            "ДОБРОЇ НОЧІ",
         ] {
             hello_words.add(Termin::new(s.to_uppercase()));
         }
 
-        MailTermins { regard_words, from_words, hello_words }
+        MailTermins {
+            regard_words,
+            from_words,
+            hello_words,
+        }
     })
 }
 
@@ -201,9 +270,7 @@ pub fn parse(t0: &TokenRef, sofa: &SourceOfAnalysis) -> Option<MailLine> {
 
             if pr {
                 // Count quote-level markers
-                if matches!(&tb.kind, TokenKind::Text(_))
-                    && tb.is_char_of(">|", sofa)
-                {
+                if matches!(&tb.kind, TokenKind::Text(_)) && tb.is_char_of(">|", sofa) {
                     ml.lev += 1;
                 } else {
                     pr = false;
@@ -211,9 +278,12 @@ pub fn parse(t0: &TokenRef, sofa: &SourceOfAnalysis) -> Option<MailLine> {
                     drop(tb);
                     if let Some(tt) = tc.from_words.try_parse(&tok) {
                         // The next token after the match must be ':'
-                        let next_is_colon = tt.end_token.borrow().next.as_ref().map_or(false, |n| {
-                            n.borrow().is_char(':', sofa)
-                        });
+                        let next_is_colon = tt
+                            .end_token
+                            .borrow()
+                            .next
+                            .as_ref()
+                            .map_or(false, |n| n.borrow().is_char(':', sofa));
                         if next_is_colon {
                             ml.typ = MailLineType::From;
                             // Advance past "From:"
@@ -232,7 +302,8 @@ pub fn parse(t0: &TokenRef, sofa: &SourceOfAnalysis) -> Option<MailLine> {
             // Collect entity references
             if let Some(r) = tb.get_referent() {
                 let rtype = r.borrow().type_name.clone();
-                if matches!(rtype.as_str(),
+                if matches!(
+                    rtype.as_str(),
                     "PERSON" | "GEO" | "ADDRESS" | "PHONE" | "URI" | "ORGANIZATION"
                 ) {
                     // avoid double-borrow: drop tb first
@@ -255,8 +326,12 @@ pub fn parse(t0: &TokenRef, sofa: &SourceOfAnalysis) -> Option<MailLine> {
         // Skip leading non-letter tokens
         while let Some(tok) = t.clone() {
             let tb = tok.borrow();
-            if tb.end_char >= end_char { break; }
-            if !tb.is_hiphen(sofa) && tb.chars.is_letter() { break; }
+            if tb.end_char >= end_char {
+                break;
+            }
+            if !tb.is_hiphen(sofa) && tb.chars.is_letter() {
+                break;
+            }
             drop(tb);
             t = tok.borrow().next.clone();
         }
@@ -267,7 +342,9 @@ pub fn parse(t0: &TokenRef, sofa: &SourceOfAnalysis) -> Option<MailLine> {
 
         while let Some(tok) = t.clone() {
             let tb = tok.borrow();
-            if tb.end_char >= end_char { break; }
+            if tb.end_char >= end_char {
+                break;
+            }
 
             // Skip person referents
             if let Some(r) = tb.get_referent() {
@@ -330,7 +407,9 @@ pub fn parse(t0: &TokenRef, sofa: &SourceOfAnalysis) -> Option<MailLine> {
             }
 
             oth += 1;
-            if oth > 3 { break; }
+            if oth > 3 {
+                break;
+            }
             drop(tb);
             t = tok.borrow().next.clone();
         }
@@ -348,7 +427,9 @@ pub fn parse(t0: &TokenRef, sofa: &SourceOfAnalysis) -> Option<MailLine> {
 
         while let Some(tok) = t.clone() {
             let tb = tok.borrow();
-            if tb.end_char > end_char { break; }
+            if tb.end_char > end_char {
+                break;
+            }
 
             if !matches!(&tb.kind, TokenKind::Text(_)) {
                 drop(tb);
@@ -370,7 +451,9 @@ pub fn parse(t0: &TokenRef, sofa: &SourceOfAnalysis) -> Option<MailLine> {
                         t = inner.borrow().next.clone();
                         break;
                     }
-                    if ib.end_char > end_char { break; }
+                    if ib.end_char > end_char {
+                        break;
+                    }
                     drop(ib);
                     ti = inner.borrow().next.clone();
                 }
@@ -413,10 +496,16 @@ pub fn parse(t0: &TokenRef, sofa: &SourceOfAnalysis) -> Option<MailLine> {
             // Otherwise reset
             if ok_words > 0 {
                 // check if preceding comma + uppercase → trim
-                let prev_is_comma = tok.borrow().prev.as_ref()
+                let prev_is_comma = tok
+                    .borrow()
+                    .prev
+                    .as_ref()
                     .and_then(|w| w.upgrade())
                     .map_or(false, |p| p.borrow().is_char(',', sofa));
-                let prev_after_start = tok.borrow().prev.as_ref()
+                let prev_after_start = tok
+                    .borrow()
+                    .prev
+                    .as_ref()
                     .and_then(|w| w.upgrade())
                     .map_or(false, |p| p.borrow().begin_char > t0.borrow().begin_char);
                 let not_all_lower = {
@@ -449,8 +538,12 @@ pub fn parse(t0: &TokenRef, sofa: &SourceOfAnalysis) -> Option<MailLine> {
         // Skip non-letter prefix
         while let Some(tok) = t.clone() {
             let tb = tok.borrow();
-            if tb.end_char >= end_char { break; }
-            if !tb.is_hiphen(sofa) && tb.chars.is_letter() { break; }
+            if tb.end_char >= end_char {
+                break;
+            }
+            if !tb.is_hiphen(sofa) && tb.chars.is_letter() {
+                break;
+            }
             drop(tb);
             t = tok.borrow().next.clone();
         }
@@ -458,7 +551,10 @@ pub fn parse(t0: &TokenRef, sofa: &SourceOfAnalysis) -> Option<MailLine> {
         if let Some(tok) = t {
             let tb = tok.borrow();
             if (tb.is_value("ПЕРЕСЫЛАЕМОЕ", None) || tb.is_value("ПЕРЕАДРЕСОВАННОЕ", None))
-                && tb.next.as_ref().map_or(false, |n| n.borrow().is_value("СООБЩЕНИЕ", None))
+                && tb
+                    .next
+                    .as_ref()
+                    .map_or(false, |n| n.borrow().is_value("СООБЩЕНИЕ", None))
             {
                 ml.typ = MailLineType::From;
                 ml.must_be_first_line = true;
@@ -467,7 +563,9 @@ pub fn parse(t0: &TokenRef, sofa: &SourceOfAnalysis) -> Option<MailLine> {
                     let nb = n.borrow();
                     nb.is_value("ПЕРЕСЫЛАЕМОЕ", None) || nb.is_value("ПЕРЕАДРЕСОВАННОЕ", None)
                 });
-                let msg = tb.next.as_ref()
+                let msg = tb
+                    .next
+                    .as_ref()
                     .and_then(|n| n.borrow().next.clone())
                     .map_or(false, |nn| nn.borrow().is_value("СООБЩЕНИЕ", None));
                 if fwd && msg {
@@ -484,7 +582,10 @@ pub fn parse(t0: &TokenRef, sofa: &SourceOfAnalysis) -> Option<MailLine> {
                     ml.must_be_first_line = true;
                 }
             } else if tb.is_value("ПЕРЕСЛАНО", None)
-                && tb.next.as_ref().map_or(false, |n| n.borrow().is_value("ПОЛЬЗОВАТЕЛЕМ", None))
+                && tb
+                    .next
+                    .as_ref()
+                    .map_or(false, |n| n.borrow().is_value("ПОЛЬЗОВАТЕЛЕМ", None))
             {
                 ml.typ = MailLineType::From;
                 ml.must_be_first_line = true;

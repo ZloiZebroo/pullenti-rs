@@ -1,3 +1,4 @@
+use pullenti_morph::internal::morph_deserializer::MorphDeserializer;
 /// org_table.rs — Organization type keyword lookup tables.
 ///
 /// Sources:
@@ -8,11 +9,10 @@
 ///   5. Orgs_ru.dat (gzip XML) — specific known organization names
 use std::collections::{HashMap, HashSet};
 use std::sync::OnceLock;
-use pullenti_morph::internal::morph_deserializer::MorphDeserializer;
 
 #[derive(Debug, Clone)]
 pub struct OrgTypeEntry {
-    pub canonical: String,   // canonical uppercase form
+    pub canonical: String, // canonical uppercase form
     pub profile: Option<String>,
     pub is_legal_form: bool, // ООО/ОАО/etc legal entity type
     pub is_prefix: bool,     // comes before the name
@@ -20,7 +20,7 @@ pub struct OrgTypeEntry {
 
 #[derive(Debug, Clone)]
 pub struct KnownOrg {
-    pub names: Vec<String>,  // all names/acronyms
+    pub names: Vec<String>, // all names/acronyms
     pub typ: Option<String>,
 }
 
@@ -45,22 +45,51 @@ fn build_tables() -> OrgTables {
 
     // ── 1. Hard-coded legal form abbreviations ────────────────────────────────
     let legal_abbrs: &[(&str, &str)] = &[
-        ("ООО", "ООО"), ("ОАО", "ОАО"), ("ЗАО", "ЗАО"), ("ПАО", "ПАО"),
-        ("АО",  "АО"),  ("ТОО", "ТОО"), ("ОДО", "ОДО"), ("ОАТ", "ОАТ"),
-        ("ЗАТ", "ЗАТ"), ("ПАТ", "ПАТ"), ("АТ",  "АТ"),
-        ("ИП",  "ИП"),  ("ЧП",  "ЧП"),  ("ПП",  "ПП"),
-        ("ГП",  "ГП"),  ("ДП",  "ДП"),
-        ("ГУП", "ГУП"), ("МУП", "МУП"), ("КУП", "КУП"),
-        ("ФГУП","ФГУП"),("ФГУ", "ФГУ"), ("ФГБУ","ФГБУ"),("ФГКУ","ФГКУ"),
-        ("НПО", "НПО"), ("НПК", "НПК"),
-        ("ГК",  "ГК"),  ("ЧОП", "ЧОП"), ("ЧОО", "ЧОО"),
-        ("ПОК", "ПОК"), ("СНТ", "СНТ"), ("ДНТ", "ДНТ"),
-        ("ЧАО", "ЧАО"), ("ЧТУП","ЧТУП"),("ЧУП", "ЧУП"),
+        ("ООО", "ООО"),
+        ("ОАО", "ОАО"),
+        ("ЗАО", "ЗАО"),
+        ("ПАО", "ПАО"),
+        ("АО", "АО"),
+        ("ТОО", "ТОО"),
+        ("ОДО", "ОДО"),
+        ("ОАТ", "ОАТ"),
+        ("ЗАТ", "ЗАТ"),
+        ("ПАТ", "ПАТ"),
+        ("АТ", "АТ"),
+        ("ИП", "ИП"),
+        ("ЧП", "ЧП"),
+        ("ПП", "ПП"),
+        ("ГП", "ГП"),
+        ("ДП", "ДП"),
+        ("ГУП", "ГУП"),
+        ("МУП", "МУП"),
+        ("КУП", "КУП"),
+        ("ФГУП", "ФГУП"),
+        ("ФГУ", "ФГУ"),
+        ("ФГБУ", "ФГБУ"),
+        ("ФГКУ", "ФГКУ"),
+        ("НПО", "НПО"),
+        ("НПК", "НПК"),
+        ("ГК", "ГК"),
+        ("ЧОП", "ЧОП"),
+        ("ЧОО", "ЧОО"),
+        ("ПОК", "ПОК"),
+        ("СНТ", "СНТ"),
+        ("ДНТ", "ДНТ"),
+        ("ЧАО", "ЧАО"),
+        ("ЧТУП", "ЧТУП"),
+        ("ЧУП", "ЧУП"),
         ("КФХ", "КФХ"), // крестьянское фермерское хозяйство
         // English equivalents
-        ("LLC",  "LLC"), ("LTD",  "LTD"), ("INC",  "INC"),
-        ("CORP", "CORP"),("PLC",  "PLC"), ("JSC",  "JSC"),
-        ("PJSC", "PJSC"),("GmbH", "GmbH"),("AG",   "AG"),
+        ("LLC", "LLC"),
+        ("LTD", "LTD"),
+        ("INC", "INC"),
+        ("CORP", "CORP"),
+        ("PLC", "PLC"),
+        ("JSC", "JSC"),
+        ("PJSC", "PJSC"),
+        ("GmbH", "GmbH"),
+        ("AG", "AG"),
     ];
     for (abbr, canonical) in legal_abbrs {
         let key = abbr.to_uppercase();
@@ -104,27 +133,45 @@ fn build_tables() -> OrgTables {
 
     // ── 3. Common business/organization words ─────────────────────────────────
     let common: &[(&str, Option<&str>)] = &[
-        ("КОРПОРАЦИЯ", None), ("КОМПАНИЯ", None), ("ФИРМА", None),
-        ("ХОЛДИНГ", None), ("КОНЦЕРН", None), ("КОНСОРЦИУМ", None),
-        ("ТРЕСТ", None), ("СИНДИКАТ", None),
-        ("ГРУППА КОМПАНИЙ", None), ("МЕДИАГРУППА", None),
-        ("АГЕНТСТВО", None), ("БЮРО", None),
-        ("БАНК", Some("Finance")), ("СБЕРБАНК", Some("Finance")),
+        ("КОРПОРАЦИЯ", None),
+        ("КОМПАНИЯ", None),
+        ("ФИРМА", None),
+        ("ХОЛДИНГ", None),
+        ("КОНЦЕРН", None),
+        ("КОНСОРЦИУМ", None),
+        ("ТРЕСТ", None),
+        ("СИНДИКАТ", None),
+        ("ГРУППА КОМПАНИЙ", None),
+        ("МЕДИАГРУППА", None),
+        ("АГЕНТСТВО", None),
+        ("БЮРО", None),
+        ("БАНК", Some("Finance")),
+        ("СБЕРБАНК", Some("Finance")),
         ("СТРАХОВАЯ КОМПАНИЯ", Some("Finance")),
         ("СТРАХОВОЕ ОБЩЕСТВО", Some("Finance")),
-        ("АССОЦИАЦИЯ", Some("Union")), ("СОЮЗ", Some("Union")),
-        ("ФЕДЕРАЦИЯ", Some("Union")), ("ЛИГА", Some("Union")),
+        ("АССОЦИАЦИЯ", Some("Union")),
+        ("СОЮЗ", Some("Union")),
+        ("ФЕДЕРАЦИЯ", Some("Union")),
+        ("ЛИГА", Some("Union")),
         ("КЛУБ", Some("Sport")),
         ("ПАРТИЯ", Some("Policy")),
-        ("ФОНД", None), ("БЛАГОТВОРИТЕЛЬНЫЙ ФОНД", None),
-        ("ТОРГОВЫЙ ДОМ", None), ("ИЗДАТЕЛЬСТВО", None),
+        ("ФОНД", None),
+        ("БЛАГОТВОРИТЕЛЬНЫЙ ФОНД", None),
+        ("ТОРГОВЫЙ ДОМ", None),
+        ("ИЗДАТЕЛЬСТВО", None),
         ("ИЗДАТЕЛЬСКИЙ ДОМ", None),
         // English
-        ("CORPORATION", None), ("COMPANY", None), ("HOLDING", None),
-        ("GROUP", None), ("BANK", Some("Finance")),
-        ("FUND", None), ("FOUNDATION", None),
-        ("ASSOCIATION", Some("Union")), ("ALLIANCE", Some("Union")),
-        ("UNION", Some("Union")), ("FEDERATION", Some("Union")),
+        ("CORPORATION", None),
+        ("COMPANY", None),
+        ("HOLDING", None),
+        ("GROUP", None),
+        ("BANK", Some("Finance")),
+        ("FUND", None),
+        ("FOUNDATION", None),
+        ("ASSOCIATION", Some("Union")),
+        ("ALLIANCE", Some("Union")),
+        ("UNION", Some("Union")),
+        ("FEDERATION", Some("Union")),
     ];
     for (word, profile) in common {
         let key = word.to_uppercase();
@@ -138,12 +185,25 @@ fn build_tables() -> OrgTables {
 
     // ── 4. Education / Science ────────────────────────────────────────────────
     let edu: &[&str] = &[
-        "УНИВЕРСИТЕТ", "ИНСТИТУТ", "АКАДЕМИЯ", "КОЛЛЕДЖ",
-        "ТЕХНИКУМ", "УЧИЛИЩЕ", "ШКОЛА", "ГИМНАЗИЯ", "ЛИЦЕЙ",
-        "СЕМИНАРИЯ", "КОНСЕРВАТОРИЯ",
-        "UNIVERSITY", "INSTITUTE", "ACADEMY", "COLLEGE",
-        "ШКОЛА-ИНТЕРНАТ", "КАДЕТСКИЙ КОРПУС",
-        "ИССЛЕДОВАТЕЛЬСКИЙ ИНСТИТУТ", "НИИ",
+        "УНИВЕРСИТЕТ",
+        "ИНСТИТУТ",
+        "АКАДЕМИЯ",
+        "КОЛЛЕДЖ",
+        "ТЕХНИКУМ",
+        "УЧИЛИЩЕ",
+        "ШКОЛА",
+        "ГИМНАЗИЯ",
+        "ЛИЦЕЙ",
+        "СЕМИНАРИЯ",
+        "КОНСЕРВАТОРИЯ",
+        "UNIVERSITY",
+        "INSTITUTE",
+        "ACADEMY",
+        "COLLEGE",
+        "ШКОЛА-ИНТЕРНАТ",
+        "КАДЕТСКИЙ КОРПУС",
+        "ИССЛЕДОВАТЕЛЬСКИЙ ИНСТИТУТ",
+        "НИИ",
     ];
     for word in edu {
         let key = word.to_uppercase();
@@ -157,9 +217,14 @@ fn build_tables() -> OrgTables {
 
     // ── 5. Medical ────────────────────────────────────────────────────────────
     let med: &[&str] = &[
-        "БОЛЬНИЦА", "КЛИНИКА", "ГОСПИТАЛЬ", "ПОЛИКЛИНИКА",
-        "САНАТОРИЙ", "ДИСПАНСЕР",
-        "HOSPITAL", "CLINIC",
+        "БОЛЬНИЦА",
+        "КЛИНИКА",
+        "ГОСПИТАЛЬ",
+        "ПОЛИКЛИНИКА",
+        "САНАТОРИЙ",
+        "ДИСПАНСЕР",
+        "HOSPITAL",
+        "CLINIC",
     ];
     for word in med {
         let key = word.to_uppercase();
@@ -179,7 +244,8 @@ fn build_tables() -> OrgTables {
     }
 
     // ── 7. Build legal_abbr set ───────────────────────────────────────────────
-    let legal_abbr: HashSet<String> = type_map.iter()
+    let legal_abbr: HashSet<String> = type_map
+        .iter()
         .filter(|(_, e)| e.is_legal_form && !e.canonical.contains(' '))
         .map(|(k, _)| k.clone())
         .collect();
@@ -193,7 +259,12 @@ fn build_tables() -> OrgTables {
         parse_known_orgs_xml(xml2, &mut known_orgs, &mut known_map);
     }
 
-    OrgTables { type_map, known_map, known_orgs, legal_abbr }
+    OrgTables {
+        type_map,
+        known_map,
+        known_orgs,
+        legal_abbr,
+    }
 }
 
 fn parse_org_types_xml(xml: &str, map: &mut HashMap<String, OrgTypeEntry>) {
@@ -206,7 +277,9 @@ fn parse_org_types_xml(xml: &str, map: &mut HashMap<String, OrgTypeEntry>) {
         // <set .../>  or <type .../>
         let is_set = line.starts_with("<set ");
         let is_type = line.starts_with("<type ");
-        if !is_set && !is_type { continue; }
+        if !is_set && !is_type {
+            continue;
+        }
 
         if is_set {
             in_set = true;
@@ -216,7 +289,8 @@ fn parse_org_types_xml(xml: &str, map: &mut HashMap<String, OrgTypeEntry>) {
         }
 
         // <type ...> — inherit profile from enclosing <set>
-        let p = extract_attr(line, "profile").or_else(|| if in_set { profile.clone() } else { None });
+        let p =
+            extract_attr(line, "profile").or_else(|| if in_set { profile.clone() } else { None });
         let top = extract_attr(line, "top").as_deref() == Some("true") || (in_set && is_top);
 
         let names_ru = extract_attr(line, "name");
@@ -225,7 +299,9 @@ fn parse_org_types_xml(xml: &str, map: &mut HashMap<String, OrgTypeEntry>) {
         for names_str in [names_ru, names_en].iter().flatten() {
             for name in names_str.split(';') {
                 let name = name.trim();
-                if name.is_empty() { continue; }
+                if name.is_empty() {
+                    continue;
+                }
                 let key = name.to_uppercase();
                 map.entry(key.clone()).or_insert_with(|| OrgTypeEntry {
                     canonical: name.to_uppercase(),
@@ -244,7 +320,11 @@ fn extract_attr(line: &str, attr: &str) -> Option<String> {
     let rest = &line[start..];
     let end = rest.find('"')?;
     let val = &rest[..end];
-    if val.is_empty() { None } else { Some(val.to_string()) }
+    if val.is_empty() {
+        None
+    } else {
+        Some(val.to_string())
+    }
 }
 
 fn parse_known_orgs_xml(xml: &str, orgs: &mut Vec<KnownOrg>, map: &mut HashMap<String, usize>) {

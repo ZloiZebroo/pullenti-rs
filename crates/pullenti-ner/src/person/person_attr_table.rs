@@ -129,6 +129,40 @@ fn build_table() -> HashMap<String, PersonAttrEntry> {
         map.insert(term.to_string(), e);
     }
 
+    let military_ranks: &[(&str, &str)] = &[
+        ("ГЕНЕРАЛ", "генерал"),
+        ("ПОЛКОВНИК", "полковник"),
+        ("МАЙОР", "майор"),
+        ("КАПИТАН", "капитан"),
+        ("ЛЕЙТЕНАНТ", "лейтенант"),
+        ("СЕРЖАНТ", "сержант"),
+        ("COLONEL", "colonel"),
+        ("MAJOR", "major"),
+        ("CAPTAIN", "captain"),
+        ("LIEUTENANT", "lieutenant"),
+        ("SERGEANT", "sergeant"),
+    ];
+    for (term, canonic) in military_ranks {
+        let mut e = PersonAttrEntry::new(canonic, PersonAttrKind::MilitaryRank);
+        e.can_has_person_after = 1;
+        map.insert(term.to_string(), e);
+    }
+
+    let kin_terms: &[(&str, &str, Option<bool>)] = &[
+        ("ОТЕЦ", "отец", Some(true)),
+        ("МАТЬ", "мать", Some(false)),
+        ("СЫН", "сын", Some(true)),
+        ("ДОЧЬ", "дочь", Some(false)),
+        ("БРАТ", "брат", Some(true)),
+        ("СЕСТРА", "сестра", Some(false)),
+    ];
+    for (term, canonic, gender) in kin_terms {
+        let mut e = PersonAttrEntry::new(canonic, PersonAttrKind::Kin);
+        e.can_has_person_after = 1;
+        e.gender = *gender;
+        map.insert(term.to_string(), e);
+    }
+
     // ── Load attr_ru.dat ─────────────────────────────────────────────────────
     let bytes = include_bytes!("../../resources/attr_ru.dat");
     let raw = MorphDeserializer::deflate_gzip(bytes);

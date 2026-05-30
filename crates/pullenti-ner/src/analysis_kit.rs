@@ -1,13 +1,13 @@
+use std::any::Any;
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
-use std::cell::RefCell;
 use std::sync::Arc;
-use std::any::Any;
 
-use pullenti_morph::MorphLang;
-use crate::source_of_analysis::SourceOfAnalysis;
-use crate::token::{TokenRef, TokenKind, build_token_chain};
 use crate::referent::Referent;
+use crate::source_of_analysis::SourceOfAnalysis;
+use crate::token::{build_token_chain, TokenKind, TokenRef};
+use pullenti_morph::MorphLang;
 
 /// Per-analyzer state stored in AnalysisKit
 pub struct AnalyzerData {
@@ -15,7 +15,9 @@ pub struct AnalyzerData {
 }
 
 impl AnalyzerData {
-    pub fn new() -> Self { AnalyzerData { items: Vec::new() } }
+    pub fn new() -> Self {
+        AnalyzerData { items: Vec::new() }
+    }
 }
 
 /// Central working context during NER analysis
@@ -67,7 +69,9 @@ impl AnalysisKit {
             if bc <= pos && pos <= ec {
                 return Some(tok);
             }
-            if bc > pos { break; }
+            if bc > pos {
+                break;
+            }
             t = tok.borrow().next.clone();
         }
         None
@@ -80,10 +84,13 @@ impl AnalysisKit {
         let (type_name, slots): (String, Vec<(String, String)>) = {
             let rb = r.borrow();
             let tn = rb.type_name.clone();
-            let sl = rb.slots.iter()
+            let sl = rb
+                .slots
+                .iter()
                 .filter(|s| !s.is_internal())
                 .filter_map(|s| {
-                    s.value.as_ref()
+                    s.value
+                        .as_ref()
                         .and_then(|v| v.as_str())
                         .map(|sv| (s.type_name.clone(), sv.to_string()))
                 })
@@ -101,21 +108,30 @@ impl AnalysisKit {
                     let existing = &self.entities[idx];
                     let existing_b = existing.borrow();
                     // Check bidirectional slot equality (string slots only)
-                    let a_in_b = slots.iter().all(|(name, val)| {
-                        existing_b.find_slot(name, Some(val)).is_some()
-                    });
-                    if !a_in_b { continue; }
-                    let b_in_a = existing_b.slots.iter()
+                    let a_in_b = slots
+                        .iter()
+                        .all(|(name, val)| existing_b.find_slot(name, Some(val)).is_some());
+                    if !a_in_b {
+                        continue;
+                    }
+                    let b_in_a = existing_b
+                        .slots
+                        .iter()
                         .filter(|s| !s.is_internal())
-                        .filter_map(|s| s.value.as_ref().and_then(|v| v.as_str())
-                            .map(|sv| (s.type_name.as_str(), sv.to_string())))
-                        .all(|(name, val)| {
-                            slots.iter().any(|(n, v)| n == name && v == &val)
-                        });
+                        .filter_map(|s| {
+                            s.value
+                                .as_ref()
+                                .and_then(|v| v.as_str())
+                                .map(|sv| (s.type_name.as_str(), sv.to_string()))
+                        })
+                        .all(|(name, val)| slots.iter().any(|(n, v)| n == name && v == &val));
                     if b_in_a {
                         // Merge occurrences from new into existing
                         drop(existing_b);
-                        let new_occ: Vec<(i32, i32)> = r.borrow().occurrence.iter()
+                        let new_occ: Vec<(i32, i32)> = r
+                            .borrow()
+                            .occurrence
+                            .iter()
                             .map(|o| (o.begin_char, o.end_char))
                             .collect();
                         for (bc, ec) in new_occ {
@@ -144,9 +160,15 @@ impl AnalysisKit {
             let m = meta.borrow();
             match &m.kind {
                 TokenKind::Referent(rd) => {
-                    let prev = rd.meta.begin_token.as_ref()
+                    let prev = rd
+                        .meta
+                        .begin_token
+                        .as_ref()
                         .and_then(|bt| bt.borrow().prev.as_ref().and_then(|w| w.upgrade()));
-                    let after = rd.meta.end_token.as_ref()
+                    let after = rd
+                        .meta
+                        .end_token
+                        .as_ref()
                         .and_then(|et| et.borrow().next.clone());
                     (prev, after)
                 }
@@ -168,7 +190,9 @@ impl AnalysisKit {
         let mut prev: Option<TokenRef> = None;
         let mut t = self.first_token.clone();
         while let Some(tok) = t.clone() {
-            if tok.borrow().begin_char >= meta_begin { break; }
+            if tok.borrow().begin_char >= meta_begin {
+                break;
+            }
             prev = Some(tok.clone());
             t = tok.borrow().next.clone();
         }
@@ -232,7 +256,9 @@ impl AnalysisKit {
 
     /// Get or create per-analyzer data
     pub fn get_analyzer_data(&mut self, name: &str) -> &mut AnalyzerData {
-        self.analyzer_data.entry(name.to_string()).or_insert_with(AnalyzerData::new)
+        self.analyzer_data
+            .entry(name.to_string())
+            .or_insert_with(AnalyzerData::new)
     }
 
     /// Iteratively drop the token chain, preventing recursive-drop stack overflow
@@ -252,16 +278,26 @@ impl AnalysisKit {
         let mut t = self.first_token.clone();
         while let Some(tok) = t {
             let lang = tok.borrow().morph.language_no_recalc_mut();
-            if lang.is_ru() { ru += 1; }
-            if lang.is_ua() { ua += 1; }
-            if lang.is_en() { en += 1; }
+            if lang.is_ru() {
+                ru += 1;
+            }
+            if lang.is_ua() {
+                ua += 1;
+            }
+            if lang.is_en() {
+                en += 1;
+            }
             t = tok.borrow().next.clone();
         }
 
-        if ru >= ua && ru >= en { self.base_language = MorphLang::RU; }
-        else if ua > ru && ua >= en { self.base_language = MorphLang::UA; }
-        else if en > 0 { self.base_language = MorphLang::EN; }
-        else { self.base_language = MorphLang::RU; }
+        if ru >= ua && ru >= en {
+            self.base_language = MorphLang::RU;
+        } else if ua > ru && ua >= en {
+            self.base_language = MorphLang::UA;
+        } else if en > 0 {
+            self.base_language = MorphLang::EN;
+        } else {
+            self.base_language = MorphLang::RU;
+        }
     }
 }
-

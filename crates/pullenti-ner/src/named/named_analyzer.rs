@@ -1,30 +1,35 @@
+use std::cell::RefCell;
 /// NamedEntityAnalyzer — simplified port of NamedEntityAnalyzer.cs.
 ///
 /// Recognizes:
 ///  1. Type keyword + proper name:   "планета Марс", "река Волга"
 ///  2. Type keyword + quoted name:   "фильм «Матрица»"
 ///  3. Well-known name standalone:   "Марс", "Волга", "Кремль"
-
 use std::rc::Rc;
-use std::cell::RefCell;
 
-use crate::analyzer::Analyzer;
 use crate::analysis_kit::AnalysisKit;
-use crate::referent::Referent;
-use crate::token::{Token, TokenRef, TokenKind};
-use crate::source_of_analysis::SourceOfAnalysis;
+use crate::analyzer::Analyzer;
 use crate::named::named_referent as nr;
 use crate::named::named_table;
+use crate::referent::Referent;
+use crate::source_of_analysis::SourceOfAnalysis;
+use crate::token::{Token, TokenKind, TokenRef};
 
 pub struct NamedEntityAnalyzer;
 
 impl NamedEntityAnalyzer {
-    pub fn new() -> Self { NamedEntityAnalyzer }
+    pub fn new() -> Self {
+        NamedEntityAnalyzer
+    }
 }
 
 impl Analyzer for NamedEntityAnalyzer {
-    fn name(&self) -> &'static str { "NAMEDENTITY" }
-    fn caption(&self) -> &'static str { "Мелкие именованные сущности" }
+    fn name(&self) -> &'static str {
+        "NAMEDENTITY"
+    }
+    fn caption(&self) -> &'static str {
+        "Мелкие именованные сущности"
+    }
 
     fn process(&self, kit: &mut AnalysisKit) {
         let sofa = kit.sofa.clone();
@@ -35,13 +40,13 @@ impl Analyzer for NamedEntityAnalyzer {
                 continue;
             }
             match try_parse(&t, &sofa) {
-                None => { cur = t.borrow().next.clone(); }
+                None => {
+                    cur = t.borrow().next.clone();
+                }
                 Some((referent, end)) => {
                     let r_rc = Rc::new(RefCell::new(referent));
                     let r_rc = kit.add_entity(r_rc);
-                    let tok = Rc::new(RefCell::new(
-                        Token::new_referent(t.clone(), end, r_rc)
-                    ));
+                    let tok = Rc::new(RefCell::new(Token::new_referent(t.clone(), end, r_rc)));
                     kit.embed_token(tok.clone());
                     cur = tok.borrow().next.clone();
                 }
@@ -62,7 +67,11 @@ fn try_parse(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Referent, TokenRe
     }
 
     let surface = sofa.substring(tb.begin_char, tb.end_char);
-    let starts_upper = surface.chars().next().map(|c| c.is_uppercase()).unwrap_or(false);
+    let starts_upper = surface
+        .chars()
+        .next()
+        .map(|c| c.is_uppercase())
+        .unwrap_or(false);
 
     let uppers = collect_upper_forms(&tb);
     drop(tb);
@@ -127,7 +136,12 @@ fn try_type_then_name(
     // Try proper noun sequence: "планета Марс", "река Волга"
     if let TokenKind::Text(_) = &nb.kind {
         let surf = sofa.substring(nb.begin_char, nb.end_char);
-        if surf.chars().next().map(|c| c.is_uppercase()).unwrap_or(false) {
+        if surf
+            .chars()
+            .next()
+            .map(|c| c.is_uppercase())
+            .unwrap_or(false)
+        {
             let start_name = get_normal_or_surface(&next, sofa);
             drop(nb);
             let (full_name, end) = extend_name_from(start_name, next.clone(), 4, sofa);
@@ -155,8 +169,12 @@ fn collect_upper_forms(tb: &crate::token::Token) -> Vec<String> {
     if let TokenKind::Text(txt) = &tb.kind {
         v.push(txt.term.to_uppercase());
         for wf in tb.morph.items() {
-            if let Some(nc) = &wf.normal_case { v.push(nc.to_uppercase()); }
-            if let Some(nf) = &wf.normal_full { v.push(nf.to_uppercase()); }
+            if let Some(nc) = &wf.normal_case {
+                v.push(nc.to_uppercase());
+            }
+            if let Some(nf) = &wf.normal_full {
+                v.push(nf.to_uppercase());
+            }
         }
         v.dedup();
     }
@@ -165,7 +183,9 @@ fn collect_upper_forms(tb: &crate::token::Token) -> Vec<String> {
 
 fn is_open_quote_token(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<char> {
     let tb = t.borrow();
-    if tb.length_char() != 1 { return None; }
+    if tb.length_char() != 1 {
+        return None;
+    }
     match sofa.char_at(tb.begin_char) {
         '«' => Some('»'),
         '"' => Some('"'),
@@ -188,7 +208,9 @@ fn collect_quoted_name(
 
     loop {
         let cb = cur.borrow();
-        if cb.whitespaces_before_count(sofa) > 5 { break; }
+        if cb.whitespaces_before_count(sofa) > 5 {
+            break;
+        }
 
         if cb.length_char() == 1 && sofa.char_at(cb.begin_char) == close_ch {
             end = cur.clone();
@@ -208,7 +230,9 @@ fn collect_quoted_name(
         }
     }
 
-    if parts.is_empty() { return None; }
+    if parts.is_empty() {
+        return None;
+    }
     Some((parts.join(" "), end))
 }
 
@@ -216,14 +240,19 @@ fn get_normal_or_surface(t: &TokenRef, sofa: &SourceOfAnalysis) -> String {
     let tb = t.borrow();
     if let TokenKind::Text(txt) = &tb.kind {
         for wf in tb.morph.items() {
-            if wf.base.class.is_proper_name() || wf.base.class.is_proper_surname()
+            if wf.base.class.is_proper_name()
+                || wf.base.class.is_proper_surname()
                 || wf.base.class.is_proper_secname()
             {
-                if let Some(nc) = &wf.normal_case { return nc.to_uppercase(); }
+                if let Some(nc) = &wf.normal_case {
+                    return nc.to_uppercase();
+                }
             }
         }
         if let Some(wf) = tb.morph.items().first() {
-            if let Some(nc) = &wf.normal_case { return nc.to_uppercase(); }
+            if let Some(nc) = &wf.normal_case {
+                return nc.to_uppercase();
+            }
         }
         return txt.term.to_uppercase();
     }
@@ -243,14 +272,20 @@ fn extend_name_from(
     let mut count = 0;
 
     while let Some(t) = cur {
-        if count >= max_extra { break; }
+        if count >= max_extra {
+            break;
+        }
         let tb = t.borrow();
-        if tb.whitespaces_before_count(sofa) > 2 { break; }
+        if tb.whitespaces_before_count(sofa) > 2 {
+            break;
+        }
 
         match &tb.kind {
             TokenKind::Text(txt) => {
                 let surf = sofa.substring(tb.begin_char, tb.end_char);
-                if txt.term.chars().all(|c| !c.is_alphabetic()) { break; }
+                if txt.term.chars().all(|c| !c.is_alphabetic()) {
+                    break;
+                }
                 let first_ch = surf.chars().next().unwrap_or(' ');
                 if first_ch.is_lowercase() {
                     // Allow common connectors
@@ -259,7 +294,9 @@ fn extend_name_from(
                         break;
                     }
                 }
-                if is_stop_word(&txt.term.to_uppercase()) { break; }
+                if is_stop_word(&txt.term.to_uppercase()) {
+                    break;
+                }
                 parts.push(txt.term.to_uppercase());
                 end = t.clone();
                 count += 1;
@@ -275,8 +312,20 @@ fn extend_name_from(
 }
 
 fn is_stop_word(up: &str) -> bool {
-    matches!(up,
-        "В" | "НА" | "ПО" | "ДЛЯ" | "ЗА" | "ПРИ" | "С" | "ОТ" | "ДО" |
-        "ЯВЛЯЕТСЯ" | "КАК" | "ТАК" | "НЕ" | "НИ"
+    matches!(
+        up,
+        "В" | "НА"
+            | "ПО"
+            | "ДЛЯ"
+            | "ЗА"
+            | "ПРИ"
+            | "С"
+            | "ОТ"
+            | "ДО"
+            | "ЯВЛЯЕТСЯ"
+            | "КАК"
+            | "ТАК"
+            | "НЕ"
+            | "НИ"
     )
 }

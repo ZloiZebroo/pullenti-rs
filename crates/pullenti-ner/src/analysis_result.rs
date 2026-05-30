@@ -1,10 +1,10 @@
-use std::rc::Rc;
-use std::cell::RefCell;
-use std::sync::Arc;
-use pullenti_morph::MorphLang;
+use crate::referent::Referent;
 use crate::source_of_analysis::SourceOfAnalysis;
 use crate::token::TokenRef;
-use crate::referent::Referent;
+use pullenti_morph::MorphLang;
+use std::cell::RefCell;
+use std::rc::Rc;
+use std::sync::Arc;
 
 /// Output container from NER text processing
 pub struct AnalysisResult {
@@ -56,18 +56,22 @@ impl AnalysisResult {
                 let b = tok.borrow();
                 (b.begin_char, b.end_char)
             };
-            if bc <= pos && pos <= ec { return Some(tok); }
-            if bc > pos { break; }
+            if bc <= pos && pos <= ec {
+                return Some(tok);
+            }
+            if bc > pos {
+                break;
+            }
             t = tok.borrow().next.clone();
         }
         None
     }
 }
 
-// SAFETY: AnalysisResult contains Rc<RefCell<Referent>> and Option<TokenRef> (also Rc-based).
-// These are created thread-locally inside Processor::process() and are exclusively owned
-// after the function returns. No Rc is shared across threads. This impl enables returning
-// AnalysisResult from parallel batch processing (rayon par_iter).
+// SAFETY: This is required by Processor::process_batch() for the `parallel` feature.
+// Batch workers create each AnalysisResult from a fresh AnalysisKit and move the complete
+// result back to the caller; the token/referent Rc graphs are not shared between workers.
+// Do not share or clone those Rc graphs across threads outside that ownership pattern.
 unsafe impl Send for AnalysisResult {}
 
 impl Drop for AnalysisResult {
@@ -85,7 +89,11 @@ impl Drop for AnalysisResult {
 
 impl std::fmt::Debug for AnalysisResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "AnalysisResult({} entities, {} tokens)",
-            self.entities.len(), self.tokens_count())
+        write!(
+            f,
+            "AnalysisResult({} entities, {} tokens)",
+            self.entities.len(),
+            self.tokens_count()
+        )
     }
 }

@@ -1,24 +1,31 @@
-/// Weapon analyzer — ports WeaponAnalyzer.cs (first pass only).
-
-use std::rc::Rc;
 use std::cell::RefCell;
+/// Weapon analyzer — ports WeaponAnalyzer.cs (first pass only).
+use std::rc::Rc;
 
-use crate::analyzer::Analyzer;
 use crate::analysis_kit::AnalysisKit;
+use crate::analyzer::Analyzer;
 use crate::referent::{Referent, SlotValue};
-use crate::token::{Token, TokenRef, TokenKind};
 use crate::source_of_analysis::SourceOfAnalysis;
+use crate::token::{Token, TokenKind, TokenRef};
 
+use super::weapon_item_token::{try_parse_list, WeaponItemToken};
 use super::weapon_referent as wr;
-use super::weapon_item_token::{WeaponItemToken, try_parse_list};
 use super::weapon_table::WeaponItemTyp;
 
 pub struct WeaponAnalyzer;
-impl WeaponAnalyzer { pub fn new() -> Self { WeaponAnalyzer } }
+impl WeaponAnalyzer {
+    pub fn new() -> Self {
+        WeaponAnalyzer
+    }
+}
 
 impl Analyzer for WeaponAnalyzer {
-    fn name(&self) -> &'static str { "WEAPON" }
-    fn caption(&self) -> &'static str { "Оружие" }
+    fn name(&self) -> &'static str {
+        "WEAPON"
+    }
+    fn caption(&self) -> &'static str {
+        "Оружие"
+    }
 
     fn process(&self, kit: &mut AnalysisKit) {
         let sofa = kit.sofa.clone();
@@ -60,14 +67,18 @@ fn try_attach(its: &[WeaponItemToken], sofa: &SourceOfAnalysis) -> Option<(Refer
         match item.typ {
             WeaponItemTyp::Noun => {
                 // Single noun alone → no weapon
-                if its.len() == 1 { return None; }
+                if its.len() == 1 {
+                    return None;
+                }
                 // If we already have a different type set, stop
                 if r.find_slot(wr::ATTR_TYPE, None).is_some() {
                     if r.find_slot(wr::ATTR_TYPE, Some(&item.value)).is_none() {
                         break;
                     }
                 }
-                if !item.is_internal { noun = Some(item); }
+                if !item.is_internal {
+                    noun = Some(item);
+                }
                 r.add_slot(wr::ATTR_TYPE, SlotValue::Str(item.value.clone()), false);
                 if let Some(ref alt) = item.alt_value {
                     r.add_slot(wr::ATTR_TYPE, SlotValue::Str(alt.clone()), false);
@@ -81,7 +92,9 @@ fn try_attach(its: &[WeaponItemToken], sofa: &SourceOfAnalysis) -> Option<(Refer
                     }
                 }
                 if !item.is_internal {
-                    if let Some(n) = noun { if n.is_doubt { /* clear doubt */ } }
+                    if let Some(n) = noun {
+                        if n.is_doubt { /* clear doubt */ }
+                    }
                 }
                 brand = Some(item);
                 r.add_slot(wr::ATTR_BRAND, SlotValue::Str(item.value.clone()), false);
@@ -101,7 +114,9 @@ fn try_attach(its: &[WeaponItemToken], sofa: &SourceOfAnalysis) -> Option<(Refer
                 t1 = Some(item.end.clone());
             }
             WeaponItemTyp::Name => {
-                if r.find_slot(wr::ATTR_NAME, None).is_some() { break; }
+                if r.find_slot(wr::ATTR_NAME, None).is_some() {
+                    break;
+                }
                 r.add_slot(wr::ATTR_NAME, SlotValue::Str(item.value.clone()), false);
                 if let Some(ref alt) = item.alt_value {
                     r.add_slot(wr::ATTR_NAME, SlotValue::Str(alt.clone()), false);
@@ -109,12 +124,16 @@ fn try_attach(its: &[WeaponItemToken], sofa: &SourceOfAnalysis) -> Option<(Refer
                 t1 = Some(item.end.clone());
             }
             WeaponItemTyp::Number => {
-                if r.find_slot(wr::ATTR_NUMBER, None).is_some() { break; }
+                if r.find_slot(wr::ATTR_NUMBER, None).is_some() {
+                    break;
+                }
                 r.add_slot(wr::ATTR_NUMBER, SlotValue::Str(item.value.clone()), false);
                 t1 = Some(item.end.clone());
             }
             WeaponItemTyp::Caliber => {
-                if r.find_slot(wr::ATTR_CALIBER, None).is_some() { break; }
+                if r.find_slot(wr::ATTR_CALIBER, None).is_some() {
+                    break;
+                }
                 r.add_slot(wr::ATTR_CALIBER, SlotValue::Str(item.value.clone()), false);
                 t1 = Some(item.end.clone());
             }
@@ -134,13 +153,19 @@ fn try_attach(its: &[WeaponItemToken], sofa: &SourceOfAnalysis) -> Option<(Refer
         // (single-noun-alone is already rejected above with its.len()==1)
     } else if noun.is_some() {
         // Doubtful noun: requires model or non-doubtful brand
-        if !has_model && !has_brand_no_doubt { return None; }
+        if !has_model && !has_brand_no_doubt {
+            return None;
+        }
     } else {
         // No noun at all: need model
-        if !has_model { return None; }
+        if !has_model {
+            return None;
+        }
         // Check for "оружие"/"вооружение" context in preceding tokens
         let start = &its[0].begin;
-        if !has_weapon_context_before(start, sofa) { return None; }
+        if !has_weapon_context_before(start, sofa) {
+            return None;
+        }
     }
 
     Some((r, t1))
@@ -150,7 +175,9 @@ fn has_weapon_context_before(t: &TokenRef, sofa: &SourceOfAnalysis) -> bool {
     let mut cur_opt = t.borrow().prev.as_ref().and_then(|w| w.upgrade());
     let mut count = 0;
     while let Some(cur) = cur_opt {
-        if count > 20 { break; }
+        if count > 20 {
+            break;
+        }
         count += 1;
         if cur.borrow().is_value("ОРУЖИЕ", None)
             || cur.borrow().is_value("ВООРУЖЕНИЕ", None)

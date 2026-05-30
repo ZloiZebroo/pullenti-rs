@@ -1,3 +1,6 @@
+use super::short_name_helper::get_names_for_shortname;
+use crate::source_of_analysis::SourceOfAnalysis;
+use crate::token::{TokenKind, TokenRef};
 /// Simplified port of `PersonItemToken.cs` (2524 lines → ~420 lines).
 ///
 /// Covers the EmptyProcessor path used by `PersonNormalData::analyze()`:
@@ -8,11 +11,7 @@
 ///  - Initial (single capital letter) recognition
 ///  - `try_attach()` — parse one name token
 ///  - `try_attach_list()` — parse a chain, handles comma-separated FIO
-
 use pullenti_morph::MorphGenderFlags;
-use crate::token::{TokenRef, TokenKind};
-use crate::source_of_analysis::SourceOfAnalysis;
-use super::short_name_helper::get_names_for_shortname;
 
 // ── Item type ─────────────────────────────────────────────────────────────────
 
@@ -27,20 +26,37 @@ pub enum ItemType {
 /// `(suffix_uppercase, gender)` where gender: 1=masculine, 2=feminine, 0=neutral
 const SURNAME_TAILS: &[(&str, i32)] = &[
     // Russian / standard (longer suffixes first so we match most specific)
-    ("ЦКАЯ", 2), ("ЦКИЙ", 1),
-    ("СКАЯ", 2), ("СКИЙ", 1),
-    ("ОВА",  2), ("ОВ",   1),
-    ("ЕВА",  2), ("ЕВ",   1),
+    ("ЦКАЯ", 2),
+    ("ЦКИЙ", 1),
+    ("СКАЯ", 2),
+    ("СКИЙ", 1),
+    ("ОВА", 2),
+    ("ОВ", 1),
+    ("ЕВА", 2),
+    ("ЕВ", 1),
     // Ukrainian
-    ("ЄВА",  2), ("ЄВ",   1),
-    ("ІНА",  2), ("ІН",   1),
-    ("ИНА",  2), ("ИН",   1),
+    ("ЄВА", 2),
+    ("ЄВ", 1),
+    ("ІНА", 2),
+    ("ІН", 1),
+    ("ИНА", 2),
+    ("ИН", 1),
     // Gender-neutral / Georgian / Armenian / Uzbek / etc.
-    ("ВИЛИ", 0), ("ДЗЕ",  0), ("ЯН",   0),
-    ("УК",   0), ("ЮК",   0), ("КО",   0),
-    ("МАН",  0), ("АНН",  0), ("ЙН",   0),
-    ("УН",   0), ("СКУ",  0), ("СКИ",  0),
-    ("СЬКІ", 0), ("ЕР",   0), ("РН",   0),
+    ("ВИЛИ", 0),
+    ("ДЗЕ", 0),
+    ("ЯН", 0),
+    ("УК", 0),
+    ("ЮК", 0),
+    ("КО", 0),
+    ("МАН", 0),
+    ("АНН", 0),
+    ("ЙН", 0),
+    ("УН", 0),
+    ("СКУ", 0),
+    ("СКИ", 0),
+    ("СЬКІ", 0),
+    ("ЕР", 0),
+    ("РН", 0),
 ];
 
 /// Check whether `s` ends with a standard Russian/Ukrainian surname tail.
@@ -57,8 +73,12 @@ pub fn ends_with_std_surname(s: &str) -> Option<i32> {
 
 /// `(suffix_uppercase, gender)` where gender: 1=masculine, 2=feminine.
 const PATRONYMIC_TAILS: &[(&str, i32)] = &[
-    ("ОВИЧ", 1), ("ЕВИЧ", 1), ("ИЧ", 1),
-    ("ОВНА", 2), ("ЕВНА", 2), ("ИЧНА", 2),
+    ("ОВИЧ", 1),
+    ("ЕВИЧ", 1),
+    ("ИЧ", 1),
+    ("ОВНА", 2),
+    ("ЕВНА", 2),
+    ("ИЧНА", 2),
 ];
 
 /// Check whether `s` ends with a standard Russian patronymic tail.
@@ -83,7 +103,11 @@ pub fn is_capitalized_cyrillic_token(t: &TokenRef, sofa: &SourceOfAnalysis) -> b
         return false;
     }
     let mut chars = surface.chars();
-    if !chars.next().map(|c| c.is_uppercase() && ('А'..='Я').contains(&c)).unwrap_or(false) {
+    if !chars
+        .next()
+        .map(|c| c.is_uppercase() && ('А'..='Я').contains(&c))
+        .unwrap_or(false)
+    {
         return false;
     }
     chars.all(|c| c.is_lowercase() && ('а'..='я').contains(&c))
@@ -92,9 +116,29 @@ pub fn is_capitalized_cyrillic_token(t: &TokenRef, sofa: &SourceOfAnalysis) -> b
 // ── Arab postfix lists ─────────────────────────────────────────────────────────
 
 const ARAB_POSTFIX: &[&str] = &[
-    "АГА", "АЛИ", "АР", "АС", "АШ", "БЕЙ", "БЕК", "ЗАДЕ",
-    "ОГЛЫ", "ОГЛИ", "УГЛИ", "ОЛЬ", "ООЛ", "ПАША", "БАША",
-    "УЛЬ", "УЛЫ", "УУЛУ", "ХАН", "ХАДЖИ", "ШАХ", "ЭД", "ЭЛЬ",
+    "АГА",
+    "АЛИ",
+    "АР",
+    "АС",
+    "АШ",
+    "БЕЙ",
+    "БЕК",
+    "ЗАДЕ",
+    "ОГЛЫ",
+    "ОГЛИ",
+    "УГЛИ",
+    "ОЛЬ",
+    "ООЛ",
+    "ПАША",
+    "БАША",
+    "УЛЬ",
+    "УЛЫ",
+    "УУЛУ",
+    "ХАН",
+    "ХАДЖИ",
+    "ШАХ",
+    "ЭД",
+    "ЭЛЬ",
 ];
 const ARAB_POSTFIX_FEM: &[&str] = &["АСУ", "АЗУ", "ГЫЗЫ", "ЗУЛЬ", "КЫЗЫ", "КЫС", "КЗЫ"];
 
@@ -103,7 +147,11 @@ fn is_arab_postfix(term: &str) -> bool {
 }
 
 fn arab_postfix_gender(term: &str) -> i32 {
-    if ARAB_POSTFIX_FEM.contains(&term) { 2 } else { 1 }
+    if ARAB_POSTFIX_FEM.contains(&term) {
+        2
+    } else {
+        1
+    }
 }
 
 // ── MorphPersonItem ───────────────────────────────────────────────────────────
@@ -125,7 +173,9 @@ pub struct MorphPersonItem {
 impl MorphPersonItem {
     pub fn new(gender: i32, is_in_dictionary: bool, is_lastname_has_std_tail: bool) -> Self {
         MorphPersonItem {
-            gender, is_in_dictionary, is_lastname_has_std_tail,
+            gender,
+            is_in_dictionary,
+            is_lastname_has_std_tail,
             vars: Vec::new(),
         }
     }
@@ -137,16 +187,16 @@ impl MorphPersonItem {
 #[derive(Debug, Clone)]
 pub struct PersonItemToken {
     pub begin_token: TokenRef,
-    pub end_token:   TokenRef,
-    pub typ:   ItemType,
+    pub end_token: TokenRef,
+    pub typ: ItemType,
     /// Uppercase term (morph term or initial letter).
     pub value: String,
     /// Morph info if this token can be a Firstname.
-    pub firstname:  Option<MorphPersonItem>,
+    pub firstname: Option<MorphPersonItem>,
     /// Morph info if this token can be a Middlename (patronymic).
     pub middlename: Option<MorphPersonItem>,
     /// Morph info if this token can be a Lastname (surname).
-    pub lastname:   Option<MorphPersonItem>,
+    pub lastname: Option<MorphPersonItem>,
     /// Overall token gender (from morph — may differ from role gender).
     pub morph_gender: i32,
     /// Number of whitespace characters before this token.
@@ -161,10 +211,13 @@ impl PersonItemToken {
     /// Create a minimal PersonItemToken for an initial letter.
     fn initial(t: TokenRef, end: TokenRef, letter: char, ws: usize, nl: bool) -> Self {
         PersonItemToken {
-            begin_token: t, end_token: end,
+            begin_token: t,
+            end_token: end,
             typ: ItemType::Initial,
             value: letter.to_uppercase().to_string(),
-            firstname: None, middlename: None, lastname: None,
+            firstname: None,
+            middlename: None,
+            lastname: None,
             morph_gender: 0,
             whitespaces_before: ws,
             is_newline_before: nl,
@@ -177,8 +230,12 @@ impl PersonItemToken {
 
 /// Convert `MorphGenderFlags` to i32: 1=masculine, 2=feminine, 0=other/unknown.
 fn gender_i32(g: MorphGenderFlags) -> i32 {
-    if (g & MorphGenderFlags::MASCULINE) != MorphGenderFlags::UNDEFINED { return 1; }
-    if (g & MorphGenderFlags::FEMINIE)   != MorphGenderFlags::UNDEFINED { return 2; }
+    if (g & MorphGenderFlags::MASCULINE) != MorphGenderFlags::UNDEFINED {
+        return 1;
+    }
+    if (g & MorphGenderFlags::FEMINIE) != MorphGenderFlags::UNDEFINED {
+        return 2;
+    }
     0
 }
 
@@ -190,8 +247,12 @@ pub fn try_attach(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<PersonItemTok
     let tb = t.borrow();
 
     // Must be a text token with letters
-    let TokenKind::Text(txt) = &tb.kind else { return None; };
-    if !tb.chars.is_letter() { return None; }
+    let TokenKind::Text(txt) = &tb.kind else {
+        return None;
+    };
+    if !tb.chars.is_letter() {
+        return None;
+    }
 
     let ws = tb.whitespaces_before_count(sofa) as usize;
     let nl = tb.is_newline_before(sofa);
@@ -230,7 +291,9 @@ pub fn try_attach(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<PersonItemTok
 
     {
         let tb2 = t.borrow();
-        if tb2.chars.is_all_lower() { return None; }
+        if tb2.chars.is_all_lower() {
+            return None;
+        }
         // ALL-CAPS abbreviations (≥3 chars) without morph proper-name flags → reject
         let is_all_upper = tb2.chars.is_all_upper();
         if is_all_upper && term.chars().count() >= 3 {
@@ -239,7 +302,9 @@ pub fn try_attach(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<PersonItemTok
                     || wf.base.class.is_proper_name()
                     || wf.base.class.is_proper_secname()
             });
-            if !has_proper { return None; }
+            if !has_proper {
+                return None;
+            }
         }
     }
 
@@ -258,10 +323,27 @@ pub fn try_attach(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<PersonItemTok
 
         for wf in items {
             let g = gender_i32(wf.base.gender);
-            if overall_gender == 0 { overall_gender = g; }
-            if wf.base.class.is_proper_name()    { fn_dict = true; if fn_gender == 0 { fn_gender = g; } }
-            if wf.base.class.is_proper_secname() { mn_dict = true; if mn_gender == 0 { mn_gender = g; } }
-            if wf.base.class.is_proper_surname() { ln_dict = true; if ln_gender == 0 { ln_gender = g; } }
+            if overall_gender == 0 {
+                overall_gender = g;
+            }
+            if wf.base.class.is_proper_name() {
+                fn_dict = true;
+                if fn_gender == 0 {
+                    fn_gender = g;
+                }
+            }
+            if wf.base.class.is_proper_secname() {
+                mn_dict = true;
+                if mn_gender == 0 {
+                    mn_gender = g;
+                }
+            }
+            if wf.base.class.is_proper_surname() {
+                ln_dict = true;
+                if ln_gender == 0 {
+                    ln_gender = g;
+                }
+            }
         }
 
         let std_tail = ends_with_std_surname(&term);
@@ -280,17 +362,31 @@ pub fn try_attach(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<PersonItemTok
                 }
             }
             Some(m)
-        } else { None };
+        } else {
+            None
+        };
 
         let mn_item = if mn_dict || patronymic_tail.is_some() {
-            let mn_g = if mn_dict { mn_gender } else { patronymic_tail.unwrap_or(0) };
+            let mn_g = if mn_dict {
+                mn_gender
+            } else {
+                patronymic_tail.unwrap_or(0)
+            };
             Some(MorphPersonItem::new(mn_g, mn_dict, false))
-        } else { None };
+        } else {
+            None
+        };
         let ln_item = if ln_dict || std_tail.is_some() {
             let has_tail = std_tail.is_some();
-            let ln_g = if ln_dict { ln_gender } else { std_tail.unwrap_or(0) };
+            let ln_g = if ln_dict {
+                ln_gender
+            } else {
+                std_tail.unwrap_or(0)
+            };
             Some(MorphPersonItem::new(ln_g, ln_dict, has_tail))
-        } else { None };
+        } else {
+            None
+        };
 
         (fn_item, mn_item, ln_item, overall_gender)
     };
@@ -303,8 +399,11 @@ pub fn try_attach(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<PersonItemTok
         let mut is_non_name = false;
         for wf in tb2.morph.items() {
             let c = &wf.base.class;
-            if c.is_verb() || c.is_adjective() || c.is_pronoun()
-                || c.is_preposition() || c.is_conjunction()
+            if c.is_verb()
+                || c.is_adjective()
+                || c.is_pronoun()
+                || c.is_preposition()
+                || c.is_conjunction()
             {
                 is_non_name = true;
                 break;
@@ -316,9 +415,12 @@ pub fn try_attach(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<PersonItemTok
         }
         // Unknown capitalized word — treat as potential lastname
         let mut pit = PersonItemToken {
-            begin_token: t.clone(), end_token: t.clone(),
-            typ: ItemType::Value, value: term.clone(),
-            firstname: None, middlename: None,
+            begin_token: t.clone(),
+            end_token: t.clone(),
+            typ: ItemType::Value,
+            value: term.clone(),
+            firstname: None,
+            middlename: None,
             lastname: Some(MorphPersonItem::new(0, false, false)),
             morph_gender,
             whitespaces_before: ws,
@@ -333,9 +435,13 @@ pub fn try_attach(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<PersonItemTok
     let is_all_lower = t.borrow().chars.is_all_lower();
 
     let mut pit = PersonItemToken {
-        begin_token: t.clone(), end_token: t.clone(),
-        typ: ItemType::Value, value: term,
-        firstname: fn_item, middlename: mn_item, lastname: ln_item,
+        begin_token: t.clone(),
+        end_token: t.clone(),
+        typ: ItemType::Value,
+        value: term,
+        firstname: fn_item,
+        middlename: mn_item,
+        lastname: ln_item,
         morph_gender,
         whitespaces_before: ws,
         is_newline_before: nl,
@@ -416,7 +522,9 @@ pub fn try_attach_list(
     let mut cur = res[0].end_token.borrow().next.clone();
 
     while let Some(tt) = cur.clone() {
-        if res.len() >= max_count { break; }
+        if res.len() >= max_count {
+            break;
+        }
 
         let ws;
         let nl;
@@ -426,20 +534,26 @@ pub fn try_attach_list(
             let tb = tt.borrow();
             ws = tb.whitespaces_before_count(sofa) as usize;
             nl = tb.is_newline_before(sofa);
-            is_comma  = tb.length_char() == 1 && sofa.char_at(tb.begin_char) == ',';
+            is_comma = tb.length_char() == 1 && sofa.char_at(tb.begin_char) == ',';
             is_hyphen = tb.length_char() == 1 && sofa.char_at(tb.begin_char) == '-';
         }
 
         // Stop on large whitespace
-        if ws > 15 { break; }
+        if ws > 15 {
+            break;
+        }
         // Stop on newline after the first token (except comma-mode allows one newline gap)
-        if nl && !comma_seen { break; }
+        if nl && !comma_seen {
+            break;
+        }
 
         // ── Comma handling: "Иванов, И.И." ───────────────────────────────────
         if is_comma && res.len() == 1 && !comma_seen {
             // Only allow comma if the first token looks like a surname
             let first = &res[0];
-            let first_looks_like_surname = first.lastname.as_ref()
+            let first_looks_like_surname = first
+                .lastname
+                .as_ref()
                 .map(|ln| ln.is_in_dictionary || ln.is_lastname_has_std_tail)
                 .unwrap_or(false);
             if !first_looks_like_surname {
@@ -448,7 +562,9 @@ pub fn try_attach_list(
             let after_comma = tt.borrow().next.clone();
             let Some(ac) = after_comma else { break };
             // Must have a parseable name part after the comma
-            if try_attach(&ac, sofa).is_none() { break; }
+            if try_attach(&ac, sofa).is_none() {
+                break;
+            }
             comma_seen = true;
             cur = Some(ac);
             continue;
@@ -459,7 +575,9 @@ pub fn try_attach_list(
             let after = tt.borrow().next.clone();
             let Some(after_t) = after else { break };
             let ab_ws = after_t.borrow().whitespaces_before_count(sofa) as usize;
-            if ab_ws != 0 { break; }
+            if ab_ws != 0 {
+                break;
+            }
             after_t
         } else {
             tt.clone()
@@ -467,7 +585,7 @@ pub fn try_attach_list(
 
         // ── Try to parse the next name part ───────────────────────────────────
         match try_attach(&candidate_t, sofa) {
-            None    => break,
+            None => break,
             Some(p) => {
                 cur = p.end_token.borrow().next.clone();
                 res.push(p);
@@ -476,10 +594,14 @@ pub fn try_attach_list(
     }
 
     // If a comma was seen, validate we got a multi-token result
-    if comma_seen && res.len() < 2 { return None; }
+    if comma_seen && res.len() < 2 {
+        return None;
+    }
 
     // A single initial alone (without a surname in the list) is not enough
-    if res.len() == 1 && res[0].typ == ItemType::Initial { return None; }
+    if res.len() == 1 && res[0].typ == ItemType::Initial {
+        return None;
+    }
 
     Some(res)
 }

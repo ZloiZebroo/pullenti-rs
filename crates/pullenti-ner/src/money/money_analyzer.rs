@@ -1,29 +1,34 @@
+use std::cell::RefCell;
 /// Money analyzer — ports MoneyAnalyzer.cs.
 ///
 /// Supported patterns:
 ///   [CUR_SYMBOL] NUM [.NUM] [CUR_WORD]
 ///   NUM [.NUM] [CUR_WORD]
-
 use std::rc::Rc;
-use std::cell::RefCell;
 
-use crate::analyzer::Analyzer;
 use crate::analysis_kit::AnalysisKit;
-use crate::referent::Referent;
-use crate::token::{Token, TokenRef, TokenKind};
-use crate::source_of_analysis::SourceOfAnalysis;
-use crate::money::money_referent as mr;
+use crate::analyzer::Analyzer;
 use crate::money::currency_table;
+use crate::money::money_referent as mr;
+use crate::referent::Referent;
+use crate::source_of_analysis::SourceOfAnalysis;
+use crate::token::{Token, TokenKind, TokenRef};
 
 pub struct MoneyAnalyzer;
 
 impl MoneyAnalyzer {
-    pub fn new() -> Self { MoneyAnalyzer }
+    pub fn new() -> Self {
+        MoneyAnalyzer
+    }
 }
 
 impl Analyzer for MoneyAnalyzer {
-    fn name(&self) -> &'static str { "MONEY" }
-    fn caption(&self) -> &'static str { "Деньги" }
+    fn name(&self) -> &'static str {
+        "MONEY"
+    }
+    fn caption(&self) -> &'static str {
+        "Деньги"
+    }
 
     fn process(&self, kit: &mut AnalysisKit) {
         let sofa = kit.sofa.clone();
@@ -34,13 +39,13 @@ impl Analyzer for MoneyAnalyzer {
                 continue;
             }
             match try_parse(&t, &sofa) {
-                None => { cur = t.borrow().next.clone(); }
+                None => {
+                    cur = t.borrow().next.clone();
+                }
                 Some((referent, end)) => {
                     let r_rc = Rc::new(RefCell::new(referent));
                     let r_rc = kit.add_entity(r_rc);
-                    let tok = Rc::new(RefCell::new(
-                        Token::new_referent(t.clone(), end, r_rc)
-                    ));
+                    let tok = Rc::new(RefCell::new(Token::new_referent(t.clone(), end, r_rc)));
                     kit.embed_token(tok.clone());
                     cur = tok.borrow().next.clone();
                 }
@@ -55,7 +60,9 @@ fn try_parse(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Referent, TokenRe
     // Pattern A: currency symbol before number  (e.g. "$100", "€500")
     if let Some(cur_iso) = leading_currency_symbol(t, sofa) {
         let num_tok = t.borrow().next.clone()?;
-        if !is_number_token(&num_tok) { return None; }
+        if !is_number_token(&num_tok) {
+            return None;
+        }
         let (int_val, frac_val, end_tok) = parse_number_with_fraction(&num_tok, sofa);
         let mut r = mr::new_money_referent();
         mr::set_currency(&mut r, cur_iso);
@@ -65,7 +72,9 @@ fn try_parse(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Referent, TokenRe
     }
 
     // Pattern B: number [fraction] currency_word
-    if !is_number_token(t) { return None; }
+    if !is_number_token(t) {
+        return None;
+    }
     let (int_val, frac_val, after_num) = parse_number_with_fraction(t, sofa);
 
     // Skip optional hyphen between number and currency
@@ -73,7 +82,9 @@ fn try_parse(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Referent, TokenRe
 
     // Try to find a currency word
     let (iso, cur_end) = find_currency_word(currency_start, sofa)?;
-    if currency_table::is_subunit(&iso) { return None; }
+    if currency_table::is_subunit(&iso) {
+        return None;
+    }
 
     let mut r = mr::new_money_referent();
     mr::set_currency(&mut r, &iso);
@@ -91,9 +102,13 @@ fn is_number_token(t: &TokenRef) -> bool {
 /// If `t` is a single currency-symbol character (e.g. '$', '€'), return its ISO code.
 fn leading_currency_symbol<'a>(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<&'static str> {
     let tb = t.borrow();
-    if tb.length_char() != 1 { return None; }
+    if tb.length_char() != 1 {
+        return None;
+    }
     let ch = sofa.char_at(tb.begin_char);
-    if ch == '\0' { return None; }
+    if ch == '\0' {
+        return None;
+    }
     let s = ch.to_string();
     drop(tb);
     currency_table::lookup(&s)
@@ -106,10 +121,7 @@ fn leading_currency_symbol<'a>(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<
 ///   - comma (or final period) + 1-2 digit suffix is the fractional kopeck part
 ///
 /// Returns `(integer_string, kopeck_int, end_token)`.
-fn parse_number_with_fraction(
-    t: &TokenRef,
-    sofa: &SourceOfAnalysis,
-) -> (String, i32, TokenRef) {
+fn parse_number_with_fraction(t: &TokenRef, sofa: &SourceOfAnalysis) -> (String, i32, TokenRef) {
     let first_val = match &t.borrow().kind {
         TokenKind::Number(n) => n.value.clone(),
         _ => return ("0".to_string(), 0, t.clone()),
@@ -129,8 +141,12 @@ fn parse_number_with_fraction(
         };
         {
             let sb = sep.borrow();
-            if sb.whitespaces_before_count(sofa) != 0 || sb.length_char() != 1 { break; }
-            if sofa.char_at(sb.begin_char) != '.' { break; }
+            if sb.whitespaces_before_count(sofa) != 0 || sb.length_char() != 1 {
+                break;
+            }
+            if sofa.char_at(sb.begin_char) != '.' {
+                break;
+            }
         }
         // Peek at the token after the dot
         let after_sep = sep.borrow().next.clone();
@@ -140,11 +156,15 @@ fn parse_number_with_fraction(
         };
         {
             let nb = num_after.borrow();
-            if nb.whitespaces_before_count(sofa) != 0 { break; }
+            if nb.whitespaces_before_count(sofa) != 0 {
+                break;
+            }
             match &nb.kind {
                 TokenKind::Number(n) => {
                     // Only consume as thousands-separator if exactly 3 digits
-                    if n.value.len() != 3 { break; }
+                    if n.value.len() != 3 {
+                        break;
+                    }
                     segments.push(n.value.clone());
                 }
                 _ => break,
@@ -201,10 +221,7 @@ fn skip_connector(t: Option<TokenRef>, sofa: &SourceOfAnalysis) -> Option<TokenR
 }
 
 /// Try to match a currency word at `t`.  Returns `(ISO_code, end_token)`.
-fn find_currency_word(
-    t: Option<TokenRef>,
-    sofa: &SourceOfAnalysis,
-) -> Option<(String, TokenRef)> {
+fn find_currency_word(t: Option<TokenRef>, sofa: &SourceOfAnalysis) -> Option<(String, TokenRef)> {
     let tok = t?;
 
     // Try two-token phrase first (e.g. "австралийский доллар")
@@ -234,8 +251,12 @@ fn token_currency_term(tok: &TokenRef, sofa: &SourceOfAnalysis) -> Option<String
             // Try morph normal forms (handles inflected "рублей"→"РУБЛЬ")
             let mut candidates: Vec<String> = Vec::new();
             for wf in tok.borrow().morph.items() {
-                if let Some(nc) = &wf.normal_case { candidates.push(nc.to_uppercase()); }
-                if let Some(nf) = &wf.normal_full  { candidates.push(nf.to_uppercase()); }
+                if let Some(nc) = &wf.normal_case {
+                    candidates.push(nc.to_uppercase());
+                }
+                if let Some(nf) = &wf.normal_full {
+                    candidates.push(nf.to_uppercase());
+                }
             }
             candidates.push(raw_term);
             let surface = sofa.substring(tb.begin_char, tb.end_char).to_uppercase();
@@ -254,10 +275,18 @@ fn token_currency_term(tok: &TokenRef, sofa: &SourceOfAnalysis) -> Option<String
 
 /// Try to form a two-word currency phrase from two adjacent text tokens.
 fn two_word_phrase(t1: &TokenRef, t2: &TokenRef, sofa: &SourceOfAnalysis) -> Option<String> {
-    if t2.borrow().whitespaces_before_count(sofa) > 1 { return None; }
+    if t2.borrow().whitespaces_before_count(sofa) > 1 {
+        return None;
+    }
     let t1b = t1.borrow();
     let t2b = t2.borrow();
-    let term1 = match &t1b.kind { TokenKind::Text(t) => t.term.to_uppercase(), _ => return None };
-    let term2 = match &t2b.kind { TokenKind::Text(t) => t.term.to_uppercase(), _ => return None };
+    let term1 = match &t1b.kind {
+        TokenKind::Text(t) => t.term.to_uppercase(),
+        _ => return None,
+    };
+    let term2 = match &t2b.kind {
+        TokenKind::Text(t) => t.term.to_uppercase(),
+        _ => return None,
+    };
     Some(format!("{} {}", term1, term2))
 }

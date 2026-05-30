@@ -46,7 +46,10 @@ impl SourceOfAnalysis {
     /// Convert a char-based position to a byte offset.
     /// Returns `text.len()` if pos is past the end.
     pub fn char_to_byte_offset(&self, char_pos: usize) -> usize {
-        self.char_to_byte.get(char_pos).copied().unwrap_or(self.text.len())
+        self.char_to_byte
+            .get(char_pos)
+            .copied()
+            .unwrap_or(self.text.len())
     }
 
     /// Total number of characters (Unicode scalar values)
@@ -60,14 +63,18 @@ impl SourceOfAnalysis {
         let e = (end + 1) as usize;
         let byte_b = self.char_to_byte_offset(b);
         let byte_e = self.char_to_byte_offset(e);
-        if byte_b >= byte_e { return ""; }
+        if byte_b >= byte_e {
+            return "";
+        }
         &self.text[byte_b..byte_e]
     }
 
     /// Get character at char-based position, or null char if out of bounds
     pub fn char_at(&self, pos: i32) -> char {
         let p = pos as usize;
-        if p >= self.char_to_byte.len() { return '\0'; }
+        if p >= self.char_to_byte.len() {
+            return '\0';
+        }
         let byte_pos = self.char_to_byte[p];
         self.text[byte_pos..].chars().next().unwrap_or('\0')
     }

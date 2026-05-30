@@ -1,24 +1,29 @@
+use std::cell::RefCell;
 /// ChemicalAnalyzer — mirrors `ChemicalAnalyzer.cs`.
 ///
 /// Recognizes chemical formulas (H2O, CO2, NaCl) and named substances (вода, кислота).
-
 use std::rc::Rc;
-use std::cell::RefCell;
 
-use crate::analyzer::Analyzer;
+use super::chemical_token::{create_referent, try_parse_list};
 use crate::analysis_kit::AnalysisKit;
+use crate::analyzer::Analyzer;
 use crate::token::{Token, TokenRef};
-use super::chemical_token::{try_parse_list, create_referent};
 
 pub struct ChemicalAnalyzer;
 
 impl ChemicalAnalyzer {
-    pub fn new() -> Self { ChemicalAnalyzer }
+    pub fn new() -> Self {
+        ChemicalAnalyzer
+    }
 }
 
 impl Analyzer for ChemicalAnalyzer {
-    fn name(&self) -> &'static str { "CHEMICAL" }
-    fn caption(&self) -> &'static str { "Химические формулы" }
+    fn name(&self) -> &'static str {
+        "CHEMICAL"
+    }
+    fn caption(&self) -> &'static str {
+        "Химические формулы"
+    }
 
     fn process(&self, kit: &mut AnalysisKit) {
         let sofa = kit.sofa.clone();
@@ -32,8 +37,14 @@ impl Analyzer for ChemicalAnalyzer {
             }
 
             let li = match try_parse_list(&t, &sofa, 0) {
-                None => { cur = t.borrow().next.clone(); continue; }
-                Some(v) if v.is_empty() => { cur = t.borrow().next.clone(); continue; }
+                None => {
+                    cur = t.borrow().next.clone();
+                    continue;
+                }
+                Some(v) if v.is_empty() => {
+                    cur = t.borrow().next.clone();
+                    continue;
+                }
                 Some(v) => v,
             };
 
@@ -49,9 +60,11 @@ impl Analyzer for ChemicalAnalyzer {
                 Some(referent) => {
                     let r_rc = Rc::new(RefCell::new(referent));
                     let r_rc = kit.add_entity(r_rc);
-                    let tok = Rc::new(RefCell::new(
-                        Token::new_referent(t.clone(), last_end.clone(), r_rc)
-                    ));
+                    let tok = Rc::new(RefCell::new(Token::new_referent(
+                        t.clone(),
+                        last_end.clone(),
+                        r_rc,
+                    )));
                     kit.embed_token(tok.clone());
                     cur = tok.borrow().next.clone();
                 }
@@ -66,9 +79,11 @@ impl Analyzer for ChemicalAnalyzer {
                     if let Some(referent) = create_referent(&li, &sofa) {
                         let r_rc = Rc::new(RefCell::new(referent));
                         let r_rc = kit.add_entity(r_rc);
-                        let tok = Rc::new(RefCell::new(
-                            Token::new_referent(begin.clone(), end.clone(), r_rc)
-                        ));
+                        let tok = Rc::new(RefCell::new(Token::new_referent(
+                            begin.clone(),
+                            end.clone(),
+                            r_rc,
+                        )));
                         kit.embed_token(tok);
                     }
                 }

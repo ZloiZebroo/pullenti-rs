@@ -16,8 +16,13 @@ pub fn new_named_referent() -> Referent {
 }
 
 fn get_str(r: &Referent, attr: &str) -> Option<String> {
-    r.slots.iter().find(|s| s.type_name == attr)
-        .and_then(|s| if let Some(SlotValue::Str(v)) = &s.value { Some(v.clone()) } else { None })
+    r.slots.iter().find(|s| s.type_name == attr).and_then(|s| {
+        if let Some(SlotValue::Str(v)) = &s.value {
+            Some(v.clone())
+        } else {
+            None
+        }
+    })
 }
 
 pub fn add_name(r: &mut Referent, name: &str) {
@@ -55,13 +60,26 @@ pub fn set_type(r: &mut Referent, typ: &str) {
     }
 }
 
-pub fn get_name(r: &Referent) -> Option<String> { get_str(r, ATTR_NAME) }
-pub fn get_kind(r: &Referent) -> Option<String> { get_str(r, ATTR_KIND) }
-pub fn get_type(r: &Referent) -> Option<String> { get_str(r, ATTR_TYPE) }
+pub fn get_name(r: &Referent) -> Option<String> {
+    get_str(r, ATTR_NAME)
+}
+pub fn get_kind(r: &Referent) -> Option<String> {
+    get_str(r, ATTR_KIND)
+}
+pub fn get_type(r: &Referent) -> Option<String> {
+    get_str(r, ATTR_TYPE)
+}
 
 pub fn get_names(r: &Referent) -> Vec<String> {
-    r.slots.iter()
+    r.slots
+        .iter()
         .filter(|s| s.type_name == ATTR_NAME)
-        .filter_map(|s| if let Some(SlotValue::Str(v)) = &s.value { Some(v.clone()) } else { None })
+        .filter_map(|s| {
+            if let Some(SlotValue::Str(v)) = &s.value {
+                Some(v.clone())
+            } else {
+                None
+            }
+        })
         .collect()
 }

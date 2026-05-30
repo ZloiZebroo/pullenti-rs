@@ -1,16 +1,15 @@
 /// ResumeItemType + ResumeItemReferent constants.
 /// Mirrors `ResumeItemType.cs` and `ResumeItemReferent.cs`.
-
 use crate::referent::{Referent, SlotValue};
 
 // ── Constants ─────────────────────────────────────────────────────────────
 
 pub const OBJ_TYPENAME: &str = "RESUME";
-pub const ATTR_TYPE:      &str = "TYPE";
-pub const ATTR_VALUE:     &str = "VALUE";
-pub const ATTR_REF:       &str = "REF";
+pub const ATTR_TYPE: &str = "TYPE";
+pub const ATTR_VALUE: &str = "VALUE";
+pub const ATTR_REF: &str = "REF";
 pub const ATTR_DATERANGE: &str = "DATERANGE";
-pub const ATTR_MISC:      &str = "MISC";
+pub const ATTR_MISC: &str = "MISC";
 
 // ── ResumeItemType ─────────────────────────────────────────────────────────
 
@@ -41,49 +40,49 @@ pub enum ResumeItemType {
 impl ResumeItemType {
     pub fn as_str(self) -> &'static str {
         match self {
-            ResumeItemType::Undefined      => "Undefined",
-            ResumeItemType::Person         => "Person",
-            ResumeItemType::Contact        => "Contact",
-            ResumeItemType::Organization   => "Organization",
-            ResumeItemType::Study          => "Study",
-            ResumeItemType::Position       => "Position",
-            ResumeItemType::Sex            => "Sex",
-            ResumeItemType::Age            => "Age",
-            ResumeItemType::Money          => "Money",
-            ResumeItemType::Education      => "Education",
-            ResumeItemType::Experience     => "Experience",
-            ResumeItemType::Language       => "Language",
+            ResumeItemType::Undefined => "Undefined",
+            ResumeItemType::Person => "Person",
+            ResumeItemType::Contact => "Contact",
+            ResumeItemType::Organization => "Organization",
+            ResumeItemType::Study => "Study",
+            ResumeItemType::Position => "Position",
+            ResumeItemType::Sex => "Sex",
+            ResumeItemType::Age => "Age",
+            ResumeItemType::Money => "Money",
+            ResumeItemType::Education => "Education",
+            ResumeItemType::Experience => "Experience",
+            ResumeItemType::Language => "Language",
             ResumeItemType::DrivingLicense => "DrivingLicense",
-            ResumeItemType::License        => "License",
-            ResumeItemType::Speciality     => "Speciality",
-            ResumeItemType::Skill          => "Skill",
-            ResumeItemType::Moral          => "Moral",
-            ResumeItemType::Hobby          => "Hobby",
-            ResumeItemType::Document       => "Document",
+            ResumeItemType::License => "License",
+            ResumeItemType::Speciality => "Speciality",
+            ResumeItemType::Skill => "Skill",
+            ResumeItemType::Moral => "Moral",
+            ResumeItemType::Hobby => "Hobby",
+            ResumeItemType::Document => "Document",
         }
     }
 
     pub fn from_str(s: &str) -> Self {
         match s {
-            "Person"        => ResumeItemType::Person,
-            "Contact"       => ResumeItemType::Contact,
-            "Organization"  => ResumeItemType::Organization,
-            "Study"         => ResumeItemType::Study,
-            "Position"      => ResumeItemType::Position,
-            "Sex"           => ResumeItemType::Sex,
-            "Age"           => ResumeItemType::Age,
-            "Money"         => ResumeItemType::Money,
-            "Education"     => ResumeItemType::Education,
-            "Experience"    => ResumeItemType::Experience,
-            "Language"      => ResumeItemType::Language,
-            "DrivingLicense"=> ResumeItemType::DrivingLicense,
-            "License"       => ResumeItemType::License,
-            "Speciality"    => ResumeItemType::Speciality,
-            "Skill"         => ResumeItemType::Skill,
-            "Moral"         => ResumeItemType::Moral,
-            "Hobby"         => ResumeItemType::Hobby,
-            "Document"      => ResumeItemType::Document,
-            _               => ResumeItemType::Undefined,
+            "Person" => ResumeItemType::Person,
+            "Contact" => ResumeItemType::Contact,
+            "Organization" => ResumeItemType::Organization,
+            "Study" => ResumeItemType::Study,
+            "Position" => ResumeItemType::Position,
+            "Sex" => ResumeItemType::Sex,
+            "Age" => ResumeItemType::Age,
+            "Money" => ResumeItemType::Money,
+            "Education" => ResumeItemType::Education,
+            "Experience" => ResumeItemType::Experience,
+            "Language" => ResumeItemType::Language,
+            "DrivingLicense" => ResumeItemType::DrivingLicense,
+            "License" => ResumeItemType::License,
+            "Speciality" => ResumeItemType::Speciality,
+            "Skill" => ResumeItemType::Skill,
+            "Moral" => ResumeItemType::Moral,
+            "Hobby" => ResumeItemType::Hobby,
+            "Document" => ResumeItemType::Document,
+            _ => ResumeItemType::Undefined,
         }
     }
 }

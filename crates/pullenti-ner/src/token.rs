@@ -1,10 +1,10 @@
-use std::rc::{Rc, Weak};
-use std::cell::{Cell, RefCell};
-use std::any::Any;
-use pullenti_morph::{CharsInfo, LanguageHelper};
 use crate::morph_collection::MorphCollection;
 use crate::referent::Referent;
 use crate::source_of_analysis::SourceOfAnalysis;
+use pullenti_morph::{CharsInfo, LanguageHelper};
+use std::any::Any;
+use std::cell::{Cell, RefCell};
+use std::rc::{Rc, Weak};
 
 pub type TokenRef = Rc<RefCell<Token>>;
 pub type WeakTokenRef = Weak<RefCell<Token>>;
@@ -103,7 +103,13 @@ impl std::fmt::Debug for Token {
 }
 
 impl Token {
-    pub fn new_text(begin: i32, end: i32, term: String, morph: MorphCollection, chars: CharsInfo) -> Self {
+    pub fn new_text(
+        begin: i32,
+        end: i32,
+        term: String,
+        morph: MorphCollection,
+        chars: CharsInfo,
+    ) -> Self {
         Token {
             begin_char: begin,
             end_char: end,
@@ -138,10 +144,18 @@ impl Token {
         }
     }
 
-    pub fn new_referent(begin_token: TokenRef, end_token: TokenRef, referent: Rc<RefCell<Referent>>) -> Self {
+    pub fn new_referent(
+        begin_token: TokenRef,
+        end_token: TokenRef,
+        referent: Rc<RefCell<Referent>>,
+    ) -> Self {
         let (begin_char, morph, chars) = {
             let begin = begin_token.borrow();
-            (begin.begin_char, begin.morph.clone_collection(), begin.chars)
+            (
+                begin.begin_char,
+                begin.morph.clone_collection(),
+                begin.chars,
+            )
         };
         let end_char = end_token.borrow().end_char;
         Token {
@@ -164,7 +178,13 @@ impl Token {
         }
     }
 
-    pub fn new_number(begin: i32, end: i32, value: String, morph: MorphCollection, chars: CharsInfo) -> Self {
+    pub fn new_number(
+        begin: i32,
+        end: i32,
+        value: String,
+        morph: MorphCollection,
+        chars: CharsInfo,
+    ) -> Self {
         Token {
             begin_char: begin,
             end_char: end,
@@ -174,7 +194,10 @@ impl Token {
                 value,
                 spelling_type: NumberSpellingType::Digit,
                 is_real: false,
-                meta: MetaTokenData { begin_token: None, end_token: None },
+                meta: MetaTokenData {
+                    begin_token: None,
+                    end_token: None,
+                },
             }),
             tag: None,
             next: None,
@@ -218,9 +241,13 @@ impl Token {
     pub fn is_value(&self, term: &str, term_ua: Option<&str>) -> bool {
         match &self.kind {
             TokenKind::Text(t) => {
-                if t.term == term { return true; }
+                if t.term == term {
+                    return true;
+                }
                 if let Some(ua) = term_ua {
-                    if t.term == ua { return true; }
+                    if t.term == ua {
+                        return true;
+                    }
                 }
                 // Check morph word forms
                 self.morph.items().iter().any(|wf| {
@@ -238,13 +265,19 @@ impl Token {
 
     /// Check two consecutive tokens
     pub fn is_value2(&self, term: &str, next_term: &str) -> bool {
-        if !self.is_value(term, None) { return false; }
-        self.next.as_ref().map_or(false, |n| n.borrow().is_value(next_term, None))
+        if !self.is_value(term, None) {
+            return false;
+        }
+        self.next
+            .as_ref()
+            .map_or(false, |n| n.borrow().is_value(next_term, None))
     }
 
     /// Comma or coordinating conjunction ("и", "and", ",")
     pub fn is_comma_and(&self, sofa: &SourceOfAnalysis) -> bool {
-        if self.is_char(',', sofa) { return true; }
+        if self.is_char(',', sofa) {
+            return true;
+        }
         self.is_value("И", Some("І")) || self.is_value("AND", None)
     }
 
@@ -253,7 +286,9 @@ impl Token {
             if self.begin_char == self.end_char {
                 let ch = sofa.char_at(self.begin_char);
                 ch == '&'
-            } else { false }
+            } else {
+                false
+            }
         }
     }
 
@@ -266,17 +301,27 @@ impl Token {
     }
 
     pub fn is_char(&self, ch: char, sofa: &SourceOfAnalysis) -> bool {
-        if self.begin_char != self.end_char { return false; }
+        if self.begin_char != self.end_char {
+            return false;
+        }
         let c = sofa.char_at(self.begin_char);
-        if ch == '-' && LanguageHelper::is_hiphen(c) { return true; }
+        if ch == '-' && LanguageHelper::is_hiphen(c) {
+            return true;
+        }
         c == ch
     }
 
     pub fn is_char_of(&self, chars: &str, sofa: &SourceOfAnalysis) -> bool {
-        if self.begin_char != self.end_char { return false; }
+        if self.begin_char != self.end_char {
+            return false;
+        }
         let c = sofa.char_at(self.begin_char);
-        if chars.contains(c) { return true; }
-        if chars.contains('-') && LanguageHelper::is_hiphen(c) { return true; }
+        if chars.contains(c) {
+            return true;
+        }
+        if chars.contains('-') && LanguageHelper::is_hiphen(c) {
+            return true;
+        }
         false
     }
 
@@ -286,7 +331,9 @@ impl Token {
     }
 
     pub fn is_table_control_char(&self, sofa: &SourceOfAnalysis) -> bool {
-        if self.begin_char != self.end_char { return false; }
+        if self.begin_char != self.end_char {
+            return false;
+        }
         let ch = sofa.char_at(self.begin_char);
         ch == '\x07' || ch == '\x0C' || ch == '\u{001F}'
     }
@@ -314,7 +361,9 @@ impl Token {
         let mut a: i16 = ATTR_INIT;
 
         // Whitespace/newline BEFORE
-        let prev_end = self.prev.as_ref()
+        let prev_end = self
+            .prev
+            .as_ref()
             .and_then(|w| w.upgrade())
             .map(|p| p.borrow().end_char)
             .unwrap_or(-1);
@@ -327,7 +376,8 @@ impl Token {
                 let ch = sofa.char_at(j as i32);
                 if ch.is_whitespace() || ch == '\x1F' {
                     a |= ATTR_WS_BEFORE;
-                    if ch == '\r' || ch == '\n' || ch == '\x0C' || ch == '\u{2028}' || ch == '\x1F' {
+                    if ch == '\r' || ch == '\n' || ch == '\x0C' || ch == '\u{2028}' || ch == '\x1F'
+                    {
                         a |= ATTR_NL_BEFORE;
                     }
                 }
@@ -335,7 +385,9 @@ impl Token {
         }
 
         // Whitespace/newline AFTER
-        let next_begin = self.next.as_ref()
+        let next_begin = self
+            .next
+            .as_ref()
             .map(|n| n.borrow().begin_char)
             .unwrap_or(i32::MAX);
 
@@ -383,7 +435,11 @@ impl Token {
     }
     pub fn set_inner_bool(&self, val: bool) {
         let a = self.attrs.get();
-        self.attrs.set(if val { a | ATTR_INNER_BOOL } else { a & !ATTR_INNER_BOOL });
+        self.attrs.set(if val {
+            a | ATTR_INNER_BOOL
+        } else {
+            a & !ATTR_INNER_BOOL
+        });
     }
 
     pub fn not_noun_phrase(&self) -> bool {
@@ -391,7 +447,11 @@ impl Token {
     }
     pub fn set_not_noun_phrase(&self, val: bool) {
         let a = self.attrs.get();
-        self.attrs.set(if val { a | ATTR_NOT_NOUN_PHRASE } else { a & !ATTR_NOT_NOUN_PHRASE });
+        self.attrs.set(if val {
+            a | ATTR_NOT_NOUN_PHRASE
+        } else {
+            a & !ATTR_NOT_NOUN_PHRASE
+        });
     }
 
     /// Union of MorphClass for all in-dictionary word forms
@@ -407,13 +467,16 @@ impl Token {
 
     /// True if token is purely a verb form (not also noun/adjective)
     pub fn is_pure_verb(&self) -> bool {
-        if self.is_value("МОЖНО", None) || self.is_value("МОЖЕТ", None)
-            || self.is_value("ДОЛЖНЫЙ", None) || self.is_value("НУЖНО", None)
+        if self.is_value("МОЖНО", None)
+            || self.is_value("МОЖЕТ", None)
+            || self.is_value("ДОЛЖНЫЙ", None)
+            || self.is_value("НУЖНО", None)
         {
             return true;
         }
         if let TokenKind::Text(t) = &self.kind {
-            if t.term == "ВПРАВЕ" || t.term == "ДОПУСТИМО" || t.term == "НЕДОПУСТИМО" {
+            if t.term == "ВПРАВЕ" || t.term == "ДОПУСТИМО" || t.term == "НЕДОПУСТИМО"
+            {
                 return true;
             }
         }
@@ -432,14 +495,18 @@ impl Token {
                 }
             }
         }
-        if short_form { return true; }
+        if short_form {
+            return true;
+        }
         ret
     }
 
     /// True if token is a form of "быть" (to be)
     pub fn is_verb_be(&self) -> bool {
-        if self.is_value("БЫТЬ", None) || self.is_value("ЕСТЬ", None)
-            || self.is_value("ЯВЛЯТЬ", None) || self.is_value("BE", None)
+        if self.is_value("БЫТЬ", None)
+            || self.is_value("ЕСТЬ", None)
+            || self.is_value("ЯВЛЯТЬ", None)
+            || self.is_value("BE", None)
         {
             return true;
         }
@@ -485,10 +552,14 @@ impl Token {
                     None => return 100,
                     Some(p) => p.borrow().end_char,
                 };
-                if prev_end + 1 > self.begin_char { return 0; }
+                if prev_end + 1 > self.begin_char {
+                    return 0;
+                }
                 let mut count = 0i32;
                 for pos in (prev_end + 1)..self.begin_char {
-                    if pos as usize >= sofa.text.len() { break; }
+                    if pos as usize >= sofa.text.len() {
+                        break;
+                    }
                     let ch = sofa.char_at(pos);
                     if ch == '\r' || ch == '\n' || ch == '\u{2028}' {
                         count += 1;
@@ -502,7 +573,9 @@ impl Token {
     /// Count whitespace units before this token (cached after first call)
     pub fn whitespaces_before_count(&self, sofa: &SourceOfAnalysis) -> i32 {
         let cached = self.ws_before_cache.get();
-        if cached != i32::MIN { return cached; }
+        if cached != i32::MIN {
+            return cached;
+        }
         let result = match &self.prev {
             None => 100,
             Some(prev_weak) => {
@@ -510,8 +583,11 @@ impl Token {
                     None => 100,
                     Some(p) => p.borrow().end_char,
                 };
-                if prev_end + 1 == self.begin_char { 0 }
-                else { self.calc_whitespaces(prev_end + 1, self.begin_char - 1, sofa) }
+                if prev_end + 1 == self.begin_char {
+                    0
+                } else {
+                    self.calc_whitespaces(prev_end + 1, self.begin_char - 1, sofa)
+                }
             }
         };
         self.ws_before_cache.set(result);
@@ -519,7 +595,9 @@ impl Token {
     }
 
     fn calc_whitespaces(&self, p0: i32, p1: i32, sofa: &SourceOfAnalysis) -> i32 {
-        if p0 < 0 || p0 > p1 || p1 as usize >= sofa.char_len() { return -1; }
+        if p0 < 0 || p0 > p1 || p1 as usize >= sofa.char_len() {
+            return -1;
+        }
         let mut res = 0i32;
         let mut i = p0;
         while i <= p1 {
@@ -528,7 +606,9 @@ impl Token {
                 res += 10;
                 if i + 1 <= p1 {
                     let next = sofa.char_at(i + 1);
-                    if ch != next && (next == '\r' || next == '\n') { i += 1; }
+                    if ch != next && (next == '\r' || next == '\n') {
+                        i += 1;
+                    }
                 }
             } else if ch == '\t' {
                 res += 5;
@@ -559,7 +639,9 @@ pub fn build_token_chain(
     morph_tokens: Vec<pullenti_morph::MorphToken>,
     _sofa: &SourceOfAnalysis,
 ) -> Option<TokenRef> {
-    if morph_tokens.is_empty() { return None; }
+    if morph_tokens.is_empty() {
+        return None;
+    }
 
     let mut chain: Vec<TokenRef> = Vec::with_capacity(morph_tokens.len());
 

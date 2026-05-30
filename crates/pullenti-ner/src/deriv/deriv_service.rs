@@ -1,13 +1,12 @@
-/// DerivateService — static word-family lookup service.
-/// Mirrors `DerivateService.cs`.
-
-use std::sync::{RwLock, OnceLock};
-use pullenti_morph::{MorphLang, MorphClass, MorphCase};
-use super::control_model::{ControlModelItemType, SemanticRole, items as cmq_items};
+use super::control_model::{items as cmq_items, ControlModelItemType, SemanticRole};
 use super::deriv_dict::DerivateDictionary;
 use super::deriv_group::DerivateGroup;
 use super::deriv_word::DerivateWord;
 use super::explan_word_attr::ExplanWordAttr;
+use pullenti_morph::{MorphCase, MorphClass, MorphLang};
+/// DerivateService — static word-family lookup service.
+/// Mirrors `DerivateService.cs`.
+use std::sync::{OnceLock, RwLock};
 
 // ── Resource ───────────────────────────────────────────────────────────────
 
@@ -26,14 +25,20 @@ fn dict() -> &'static RwLock<DerivateDictionary> {
 /// Initialize the deriv dictionary for the given languages.
 /// Automatically called on first use; call explicitly to pre-warm.
 pub fn initialize(langs: MorphLang) {
-    let langs = if langs.is_undefined() { MorphLang::RU } else { langs };
+    let langs = if langs.is_undefined() {
+        MorphLang::RU
+    } else {
+        langs
+    };
     load_languages(langs);
 }
 
 pub fn load_languages(langs: MorphLang) {
     if langs.is_ru() || langs.is_ua() {
         let d = dict().read().unwrap();
-        if d.is_loaded() { return; }
+        if d.is_loaded() {
+            return;
+        }
         drop(d);
         let mut d = dict().write().unwrap();
         if !d.is_loaded() {
@@ -50,7 +55,16 @@ pub fn find_derivates(word: &str, try_variants: bool, lang: MorphLang) -> Option
     let res = d.find(word, try_variants, lang)?;
     // Return just the first word spelling of each group for now;
     // callers iterate via find_derivate_groups
-    Some(res.iter().map(|g| g.words.first().map(|w| w.spelling.clone()).unwrap_or_default()).collect())
+    Some(
+        res.iter()
+            .map(|g| {
+                g.words
+                    .first()
+                    .map(|w| w.spelling.clone())
+                    .unwrap_or_default()
+            })
+            .collect(),
+    )
 }
 
 /// Find deriv groups and return them by id (to allow deeper inspection).
@@ -71,7 +85,9 @@ pub fn is_animated(word: &str, lang: MorphLang) -> bool {
     match d.find(word, false, lang) {
         None => false,
         Some(groups) => groups.iter().any(|g| {
-            g.words.iter().any(|w| w.spelling == word && w.attrs.is_animated())
+            g.words
+                .iter()
+                .any(|w| w.spelling == word && w.attrs.is_animated())
         }),
     }
 }
@@ -83,7 +99,9 @@ pub fn is_named(word: &str, lang: MorphLang) -> bool {
     match d.find(word, false, lang) {
         None => false,
         Some(groups) => groups.iter().any(|g| {
-            g.words.iter().any(|w| w.spelling == word && w.attrs.is_named())
+            g.words
+                .iter()
+                .any(|w| w.spelling == word && w.attrs.is_named())
         }),
     }
 }
@@ -91,7 +109,11 @@ pub fn is_named(word: &str, lang: MorphLang) -> bool {
 /// Find and clone derivate groups for `word`.
 /// Unlike `find_derivate_group_ids`, this returns full `DerivateGroup` copies so
 /// the caller can work with the data without holding the dictionary lock.
-pub fn find_groups_cloned(word: &str, try_variants: bool, lang: MorphLang) -> Vec<super::deriv_group::DerivateGroup> {
+pub fn find_groups_cloned(
+    word: &str,
+    try_variants: bool,
+    lang: MorphLang,
+) -> Vec<super::deriv_group::DerivateGroup> {
     ensure_loaded();
     let d = dict().read().unwrap();
     match d.find(word, try_variants, lang) {
@@ -167,21 +189,38 @@ pub fn find_verb_role(
 
     for gr in &groups {
         // Find the control model item for this verb form (Verb or Reflexive)
-        let target_typ = if is_reflexive { ControlModelItemType::Reflexive } else { ControlModelItemType::Verb };
-        let cit = gr.model.items.iter().find(|it| it.typ == target_typ)
+        let target_typ = if is_reflexive {
+            ControlModelItemType::Reflexive
+        } else {
+            ControlModelItemType::Verb
+        };
+        let cit = gr
+            .model
+            .items
+            .iter()
+            .find(|it| it.typ == target_typ)
             .or_else(|| {
                 // Fallback: if reflexive and no Reflexive item, try Verb item
                 if is_reflexive {
-                    gr.model.items.iter().find(|it| it.typ == ControlModelItemType::Verb)
+                    gr.model
+                        .items
+                        .iter()
+                        .find(|it| it.typ == ControlModelItemType::Verb)
                 } else {
                     None
                 }
             });
-        let cit = match cit { Some(c) => c, None => continue };
+        let cit = match cit {
+            Some(c) => c,
+            None => continue,
+        };
 
         // _createRoles: iterate cit.links, check if q.check(prep, case)
         for (&qi, &role) in &cit.links {
-            let q = match qs.get(qi) { Some(q) => q, None => continue };
+            let q = match qs.get(qi) {
+                Some(q) => q,
+                None => continue,
+            };
             if q.check(prep, case) {
                 return Some(role);
             }
@@ -192,7 +231,9 @@ pub fn find_verb_role(
 
 fn ensure_loaded() {
     let d = dict().read().unwrap();
-    if d.is_loaded() { return; }
+    if d.is_loaded() {
+        return;
+    }
     drop(d);
     load_languages(MorphLang::RU);
 }

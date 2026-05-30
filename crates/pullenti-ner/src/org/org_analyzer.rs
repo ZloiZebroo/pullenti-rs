@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 /// OrgAnalyzer — simplified port of OrganizationAnalyzer.cs.
 ///
 /// Recognizes Russian/English organizations using:
@@ -6,27 +7,31 @@
 ///  3. Type keyword + proper name:               "Министерство финансов"
 ///  4. Well-known org name (from Orgs_ru.dat):   "ГИБДД", "ФСБ"
 ///  5. Quoted name after type keyword:            "банк «Открытие»"
-
 use std::rc::Rc;
-use std::cell::RefCell;
 
-use crate::analyzer::Analyzer;
 use crate::analysis_kit::AnalysisKit;
-use crate::referent::Referent;
-use crate::token::{Token, TokenRef, TokenKind};
-use crate::source_of_analysis::SourceOfAnalysis;
+use crate::analyzer::Analyzer;
 use crate::org::org_referent as or_;
 use crate::org::org_table;
+use crate::referent::Referent;
+use crate::source_of_analysis::SourceOfAnalysis;
+use crate::token::{Token, TokenKind, TokenRef};
 
 pub struct OrgAnalyzer;
 
 impl OrgAnalyzer {
-    pub fn new() -> Self { OrgAnalyzer }
+    pub fn new() -> Self {
+        OrgAnalyzer
+    }
 }
 
 impl Analyzer for OrgAnalyzer {
-    fn name(&self) -> &'static str { "ORGANIZATION" }
-    fn caption(&self) -> &'static str { "Организации" }
+    fn name(&self) -> &'static str {
+        "ORGANIZATION"
+    }
+    fn caption(&self) -> &'static str {
+        "Организации"
+    }
 
     fn process(&self, kit: &mut AnalysisKit) {
         let sofa = kit.sofa.clone();
@@ -40,13 +45,13 @@ impl Analyzer for OrgAnalyzer {
                 }
             }
             match try_parse(&t, &sofa) {
-                None => { cur = t.borrow().next.clone(); }
+                None => {
+                    cur = t.borrow().next.clone();
+                }
                 Some((referent, end)) => {
                     let r_rc = Rc::new(RefCell::new(referent));
                     let r_rc = kit.add_entity(r_rc);
-                    let tok = Rc::new(RefCell::new(
-                        Token::new_referent(t.clone(), end, r_rc)
-                    ));
+                    let tok = Rc::new(RefCell::new(Token::new_referent(t.clone(), end, r_rc)));
                     kit.embed_token(tok.clone());
                     cur = tok.borrow().next.clone();
                 }
@@ -66,7 +71,12 @@ fn try_parse(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Referent, TokenRe
     }
     // Must start with uppercase
     let surface = sofa.substring(tb.begin_char, tb.end_char);
-    if !surface.chars().next().map(|c| c.is_uppercase()).unwrap_or(false) {
+    if !surface
+        .chars()
+        .next()
+        .map(|c| c.is_uppercase())
+        .unwrap_or(false)
+    {
         return None;
     }
 
@@ -136,7 +146,9 @@ fn try_multiword_known_org(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Ref
                 Some(tok) => tok,
             };
             let tb = tok.borrow();
-            if !tokens.is_empty() && tb.whitespaces_before_count(sofa) > 2 { break; }
+            if !tokens.is_empty() && tb.whitespaces_before_count(sofa) > 2 {
+                break;
+            }
             if let TokenKind::Text(_) = &tb.kind {
                 let next = tb.next.clone();
                 drop(tb);
@@ -148,7 +160,9 @@ fn try_multiword_known_org(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Ref
         }
     }
 
-    if tokens.len() < 2 { return None; } // single-token handled by pattern 4
+    if tokens.len() < 2 {
+        return None;
+    } // single-token handled by pattern 4
 
     let mut phrase = String::new();
     let mut best: Option<(&'static org_table::KnownOrg, usize)> = None;
@@ -162,9 +176,13 @@ fn try_multiword_known_org(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Ref
                 break;
             }
         };
-        if i > 0 { phrase.push(' '); }
+        if i > 0 {
+            phrase.push(' ');
+        }
         phrase.push_str(&term);
-        if i == 0 { continue; } // single-token is handled by pattern 4
+        if i == 0 {
+            continue;
+        } // single-token is handled by pattern 4
         if let Some(known) = org_table::lookup_known(&phrase) {
             best = Some((known, i));
         }
@@ -211,22 +229,36 @@ fn try_adj_prefix_then_type(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Re
                 Some(tok) => tok,
             };
             let tb = tok.borrow();
-            if !words.is_empty() && tb.whitespaces_before_count(sofa) > 2 { break; }
+            if !words.is_empty() && tb.whitespaces_before_count(sofa) > 2 {
+                break;
+            }
             if let TokenKind::Text(txt) = &tb.kind {
                 let surf = sofa.substring(tb.begin_char, tb.end_char);
                 let first = surf.chars().next().unwrap_or(' ');
-                if !first.is_alphabetic() { break; }
+                if !first.is_alphabetic() {
+                    break;
+                }
                 let surface_upper = txt.term.to_uppercase();
-                if is_stop_word(&surface_upper) { break; }
+                if is_stop_word(&surface_upper) {
+                    break;
+                }
                 let mut morph_forms = vec![surface_upper.clone()];
                 for wf in tb.morph.items() {
-                    if let Some(nc) = &wf.normal_case { morph_forms.push(nc.to_uppercase()); }
-                    if let Some(nf) = &wf.normal_full { morph_forms.push(nf.to_uppercase()); }
+                    if let Some(nc) = &wf.normal_case {
+                        morph_forms.push(nc.to_uppercase());
+                    }
+                    if let Some(nf) = &wf.normal_full {
+                        morph_forms.push(nf.to_uppercase());
+                    }
                 }
                 morph_forms.dedup();
                 let next = tb.next.clone();
                 drop(tb);
-                words.push(WordInfo { tok, surface_upper, morph_forms });
+                words.push(WordInfo {
+                    tok,
+                    surface_upper,
+                    morph_forms,
+                });
                 cur = next;
             } else {
                 break;
@@ -237,12 +269,16 @@ fn try_adj_prefix_then_type(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Re
     // Try type keyword at each position from 1 onward (position 0 handled by pattern 3)
     for type_pos in 1..words.len() {
         let type_word = &words[type_pos];
-        let found_entry = type_word.morph_forms.iter()
+        let found_entry = type_word
+            .morph_forms
+            .iter()
             .find_map(|f| org_table::lookup_type(f));
         let Some(entry) = found_entry else { continue };
         // Skip legal form abbreviations (ООО, ОАО, etc.) — they are handled
         // by Pattern 1/2 where they appear as prefix, not after a noun.
-        if entry.is_legal_form { continue; }
+        if entry.is_legal_form {
+            continue;
+        }
 
         let name_parts: Vec<&str> = words[..type_pos]
             .iter()
@@ -263,7 +299,9 @@ fn try_adj_prefix_then_type(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Re
                 let first_a = if is_text {
                     let s = sofa.substring(ab.begin_char, ab.end_char);
                     s.chars().next().unwrap_or(' ')
-                } else { ' ' };
+                } else {
+                    ' '
+                };
                 let first_a_lower_cyr = !first_a.is_uppercase()
                     && first_a.is_alphabetic()
                     && (first_a as u32) >= 0x0400;
@@ -284,7 +322,9 @@ fn try_adj_prefix_then_type(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Re
         if !full_name.is_empty() {
             let mut r = or_::new_org_referent();
             or_::set_type(&mut r, &type_canonical);
-            if let Some(p) = profile { or_::set_profile(&mut r, p.as_str()); }
+            if let Some(p) = profile {
+                or_::set_profile(&mut r, p.as_str());
+            }
             or_::add_name(&mut r, &full_name);
             return Some((r, end));
         }
@@ -320,10 +360,16 @@ fn try_legal_abbr_then_name(
         // Try proper noun(s): ООО Ромашка, ООО АЛЛО
         if let TokenKind::Text(_) = &nb.kind {
             let surf_n = sofa.substring(nb.begin_char, nb.end_char);
-            if surf_n.chars().next().map(|c| c.is_uppercase()).unwrap_or(false) {
-                let is_proper = nb.morph.items().iter().any(|wf| {
-                    wf.base.class.is_proper_name() || wf.base.class.is_proper_surname()
-                }) || nb.chars.is_all_upper();
+            if surf_n
+                .chars()
+                .next()
+                .map(|c| c.is_uppercase())
+                .unwrap_or(false)
+            {
+                let is_proper =
+                    nb.morph.items().iter().any(|wf| {
+                        wf.base.class.is_proper_name() || wf.base.class.is_proper_surname()
+                    }) || nb.chars.is_all_upper();
                 if is_proper {
                     let name = get_normal_or_surface(&next, sofa);
                     drop(nb);
@@ -368,7 +414,9 @@ fn try_type_then_name(
         if let Some((name, end)) = collect_quoted_name(&next, open_ch, sofa) {
             let mut r = or_::new_org_referent();
             or_::set_type(&mut r, type_keyword);
-            if let Some(p) = profile { or_::set_profile(&mut r, p); }
+            if let Some(p) = profile {
+                or_::set_profile(&mut r, p);
+            }
             or_::add_name(&mut r, &name);
             return Some((r, end));
         }
@@ -379,20 +427,37 @@ fn try_type_then_name(
     // Allow lowercase initial word for state org names (genitive: "финансов", "образования").
     if let TokenKind::Text(_txt) = &nb.kind {
         let surf = sofa.substring(nb.begin_char, nb.end_char);
-        let first_upper = surf.chars().next().map(|c| c.is_uppercase()).unwrap_or(false);
+        let first_upper = surf
+            .chars()
+            .next()
+            .map(|c| c.is_uppercase())
+            .unwrap_or(false);
         let first_lower_cyrillic = !first_upper
-            && surf.chars().next().map(|c| c.is_alphabetic() && (c as u32) >= 0x0400).unwrap_or(false);
+            && surf
+                .chars()
+                .next()
+                .map(|c| c.is_alphabetic() && (c as u32) >= 0x0400)
+                .unwrap_or(false);
         if first_upper || first_lower_cyrillic {
             // Don't start an org name from a verb word ("производит", "является"…)
-            let is_verb_start = first_lower_cyrillic && nb.get_morph_class_in_dictionary().is_verb();
+            let is_verb_start =
+                first_lower_cyrillic && nb.get_morph_class_in_dictionary().is_verb();
             let start_name = get_normal_or_surface(&next, sofa);
             drop(nb);
             if !is_verb_start {
-                let (full_name, end) = extend_org_name_from_with_lower(start_name, next.clone(), 6, first_lower_cyrillic, sofa);
+                let (full_name, end) = extend_org_name_from_with_lower(
+                    start_name,
+                    next.clone(),
+                    6,
+                    first_lower_cyrillic,
+                    sofa,
+                );
                 if !full_name.is_empty() {
                     let mut r = or_::new_org_referent();
                     or_::set_type(&mut r, type_keyword);
-                    if let Some(p) = profile { or_::set_profile(&mut r, p); }
+                    if let Some(p) = profile {
+                        or_::set_profile(&mut r, p);
+                    }
                     or_::add_name(&mut r, &full_name);
                     return Some((r, end));
                 }
@@ -410,7 +475,9 @@ fn try_type_then_name(
         if entry.is_prefix {
             let mut r = or_::new_org_referent();
             or_::set_type(&mut r, type_keyword);
-            if let Some(p) = profile { or_::set_profile(&mut r, p); }
+            if let Some(p) = profile {
+                or_::set_profile(&mut r, p);
+            }
             return Some((r, type_end));
         }
     }
@@ -426,8 +493,12 @@ fn collect_upper_forms(tb: &crate::token::Token) -> Vec<String> {
     if let TokenKind::Text(txt) = &tb.kind {
         v.push(txt.term.to_uppercase());
         for wf in tb.morph.items() {
-            if let Some(nc) = &wf.normal_case { v.push(nc.to_uppercase()); }
-            if let Some(nf) = &wf.normal_full { v.push(nf.to_uppercase()); }
+            if let Some(nc) = &wf.normal_case {
+                v.push(nc.to_uppercase());
+            }
+            if let Some(nf) = &wf.normal_full {
+                v.push(nf.to_uppercase());
+            }
         }
         v.dedup();
     }
@@ -438,7 +509,9 @@ fn collect_upper_forms(tb: &crate::token::Token) -> Vec<String> {
 /// Returns Some(matching_close_quote) if it is.
 fn is_open_quote_token(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<char> {
     let tb = t.borrow();
-    if tb.length_char() != 1 { return None; }
+    if tb.length_char() != 1 {
+        return None;
+    }
     match sofa.char_at(tb.begin_char) {
         '«' => Some('»'),
         '"' => Some('"'),
@@ -463,7 +536,9 @@ fn collect_quoted_name(
 
     loop {
         let cb = cur.borrow();
-        if cb.whitespaces_before_count(sofa) > 5 { break; } // newline inside quote = stop
+        if cb.whitespaces_before_count(sofa) > 5 {
+            break;
+        } // newline inside quote = stop
 
         if cb.length_char() == 1 && sofa.char_at(cb.begin_char) == close_ch {
             end = cur.clone();
@@ -484,7 +559,9 @@ fn collect_quoted_name(
         }
     }
 
-    if parts.is_empty() { return None; }
+    if parts.is_empty() {
+        return None;
+    }
     Some((parts.join(" "), end))
 }
 
@@ -493,14 +570,19 @@ fn get_normal_or_surface(t: &TokenRef, sofa: &SourceOfAnalysis) -> String {
     let tb = t.borrow();
     if let TokenKind::Text(txt) = &tb.kind {
         for wf in tb.morph.items() {
-            if wf.base.class.is_proper_name() || wf.base.class.is_proper_surname()
+            if wf.base.class.is_proper_name()
+                || wf.base.class.is_proper_surname()
                 || wf.base.class.is_proper_secname()
             {
-                if let Some(nc) = &wf.normal_case { return nc.to_uppercase(); }
+                if let Some(nc) = &wf.normal_case {
+                    return nc.to_uppercase();
+                }
             }
         }
         if let Some(wf) = tb.morph.items().first() {
-            if let Some(nc) = &wf.normal_case { return nc.to_uppercase(); }
+            if let Some(nc) = &wf.normal_case {
+                return nc.to_uppercase();
+            }
         }
         return txt.term.to_uppercase();
     }
@@ -530,27 +612,36 @@ fn extend_org_name_from(
     let mut count = 0;
 
     while let Some(t) = cur {
-        if count >= max_extra { break; }
+        if count >= max_extra {
+            break;
+        }
         let tb = t.borrow();
-        if tb.whitespaces_before_count(sofa) > 2 { break; } // newline or large gap = stop
+        if tb.whitespaces_before_count(sofa) > 2 {
+            break;
+        } // newline or large gap = stop
 
         match &tb.kind {
             TokenKind::Text(txt) => {
                 let surf = sofa.substring(tb.begin_char, tb.end_char);
                 // Stop on punctuation-only token
-                if txt.term.chars().all(|c| !c.is_alphabetic()) { break; }
+                if txt.term.chars().all(|c| !c.is_alphabetic()) {
+                    break;
+                }
                 // Stop on lowercase token (unless it's a preposition/conjunction allowed inside org names)
                 let first_ch = surf.chars().next().unwrap_or(' ');
                 if first_ch.is_lowercase() {
                     // Allow common Russian genitive prepositions inside org names
                     let up = txt.term.to_uppercase();
-                    if !matches!(up.as_str(), "ПО" | "И" | "ОФ" | "OF" | "AND" | "И" | "ДЛЯ") {
+                    if !matches!(up.as_str(), "ПО" | "И" | "ОФ" | "OF" | "AND" | "И" | "ДЛЯ")
+                    {
                         break;
                     }
                     // Don't count connector words as name parts
                 }
                 // Stop on a token that is clearly a common non-name word
-                if is_stop_word(&txt.term.to_uppercase()) { break; }
+                if is_stop_word(&txt.term.to_uppercase()) {
+                    break;
+                }
 
                 parts.push(txt.term.to_uppercase());
                 end = t.clone();
@@ -586,25 +677,35 @@ fn extend_org_name_from_with_lower(
     let mut lower_mode = allow_lower_start;
 
     while let Some(t) = cur {
-        if count >= max_extra { break; }
+        if count >= max_extra {
+            break;
+        }
         let tb = t.borrow();
-        if tb.whitespaces_before_count(sofa) > 2 { break; }
+        if tb.whitespaces_before_count(sofa) > 2 {
+            break;
+        }
 
         match &tb.kind {
             TokenKind::Text(txt) => {
                 let surf = sofa.substring(tb.begin_char, tb.end_char);
                 // Stop on punctuation-only token
-                if txt.term.chars().all(|c| !c.is_alphabetic()) { break; }
+                if txt.term.chars().all(|c| !c.is_alphabetic()) {
+                    break;
+                }
                 let first_ch = surf.chars().next().unwrap_or(' ');
                 let up = txt.term.to_uppercase();
                 // Stop on known stop words
-                if is_stop_word(&up) { break; }
+                if is_stop_word(&up) {
+                    break;
+                }
 
                 if first_ch.is_lowercase() {
                     let is_cyrillic = (first_ch as u32) >= 0x0400;
                     if is_cyrillic && lower_mode {
                         // Skip verbs — "производит", "является", etc. are not org name parts
-                        if tb.get_morph_class_in_dictionary().is_verb() { break; }
+                        if tb.get_morph_class_in_dictionary().is_verb() {
+                            break;
+                        }
                         // Collect lowercase Cyrillic genitive/adjective word
                         parts.push(up);
                         end = t.clone();
@@ -621,7 +722,9 @@ fn extend_org_name_from_with_lower(
                     // Uppercase word — accepted, and turn off lower_mode going forward
                     // (subsequent lowercase words need to be connectors only)
                     lower_mode = false;
-                    if is_stop_word(&up) { break; }
+                    if is_stop_word(&up) {
+                        break;
+                    }
                     parts.push(up);
                     end = t.clone();
                     count += 1;
@@ -638,9 +741,28 @@ fn extend_org_name_from_with_lower(
 }
 
 fn is_stop_word(up: &str) -> bool {
-    matches!(up,
-        "ОТ" | "В" | "С" | "НА" | "ПО" | "ДЛЯ" | "ЗА" | "ПРИ" |
-        "ЯВЛЯЕТСЯ" | "ОСУЩЕСТВЛЯЕТ" | "ИМЕЕТ" | "БЫЛО" | "БЫЛА" | "БЫЛИ" |
-        "КАК" | "ТАК" | "УЖЕ" | "ЕЩЁ" | "ЕЩЕ" | "НЕ" | "НИ" | "БЫЛ"
+    matches!(
+        up,
+        "ОТ" | "В"
+            | "С"
+            | "НА"
+            | "ПО"
+            | "ДЛЯ"
+            | "ЗА"
+            | "ПРИ"
+            | "ЯВЛЯЕТСЯ"
+            | "ОСУЩЕСТВЛЯЕТ"
+            | "ИМЕЕТ"
+            | "БЫЛО"
+            | "БЫЛА"
+            | "БЫЛИ"
+            | "КАК"
+            | "ТАК"
+            | "УЖЕ"
+            | "ЕЩЁ"
+            | "ЕЩЕ"
+            | "НЕ"
+            | "НИ"
+            | "БЫЛ"
     )
 }

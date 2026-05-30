@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 /// AddressAnalyzer — simplified address/street recognition for Russian text.
 ///
 /// Recognizes patterns like:
@@ -5,27 +6,31 @@
 ///   "проспект Мира, 12, кв. 4"  → STREET + ADDRESS
 ///   "Ленинский проспект, 10"    → STREET (prefix-less form)
 ///   "ул. Ленина"                → STREET alone (without house number)
-
 use std::rc::Rc;
-use std::cell::RefCell;
 
-use crate::analyzer::Analyzer;
-use crate::analysis_kit::AnalysisKit;
-use crate::referent::Referent;
-use crate::token::{Token, TokenRef, TokenKind};
-use crate::source_of_analysis::SourceOfAnalysis;
 use crate::address::address_referent as ar;
 use crate::address::street_table;
+use crate::analysis_kit::AnalysisKit;
+use crate::analyzer::Analyzer;
+use crate::referent::Referent;
+use crate::source_of_analysis::SourceOfAnalysis;
+use crate::token::{Token, TokenKind, TokenRef};
 
 pub struct AddressAnalyzer;
 
 impl AddressAnalyzer {
-    pub fn new() -> Self { AddressAnalyzer }
+    pub fn new() -> Self {
+        AddressAnalyzer
+    }
 }
 
 impl Analyzer for AddressAnalyzer {
-    fn name(&self) -> &'static str { "ADDRESS" }
-    fn caption(&self) -> &'static str { "Адреса" }
+    fn name(&self) -> &'static str {
+        "ADDRESS"
+    }
+    fn caption(&self) -> &'static str {
+        "Адреса"
+    }
 
     fn process(&self, kit: &mut AnalysisKit) {
         let sofa = kit.sofa.clone();
@@ -39,26 +44,32 @@ impl Analyzer for AddressAnalyzer {
                 }
             }
             match try_parse_street(&t, &sofa) {
-                None => { cur = t.borrow().next.clone(); }
+                None => {
+                    cur = t.borrow().next.clone();
+                }
                 Some((street, street_end)) => {
                     // Register the STREET referent
                     let s_rc = Rc::new(RefCell::new(street));
                     let s_rc = kit.add_entity(s_rc);
-                    let street_tok = Rc::new(RefCell::new(
-                        Token::new_referent(t.clone(), street_end.clone(), s_rc.clone())
-                    ));
+                    let street_tok = Rc::new(RefCell::new(Token::new_referent(
+                        t.clone(),
+                        street_end.clone(),
+                        s_rc.clone(),
+                    )));
                     kit.embed_token(street_tok.clone());
 
                     // Try to build an ADDRESS from the street + following house/flat info
                     let next_after_street = street_tok.borrow().next.clone();
-                    if let Some((address, addr_end)) = try_parse_address_after_street(
-                        s_rc.clone(), &next_after_street, &sofa
-                    ) {
+                    if let Some((address, addr_end)) =
+                        try_parse_address_after_street(s_rc.clone(), &next_after_street, &sofa)
+                    {
                         let a_rc = Rc::new(RefCell::new(address));
                         let a_rc = kit.add_entity(a_rc);
-                        let addr_tok = Rc::new(RefCell::new(
-                            Token::new_referent(street_tok.clone(), addr_end, a_rc)
-                        ));
+                        let addr_tok = Rc::new(RefCell::new(Token::new_referent(
+                            street_tok.clone(),
+                            addr_end,
+                            a_rc,
+                        )));
                         kit.embed_token(addr_tok.clone());
                         cur = addr_tok.borrow().next.clone();
                     } else {
@@ -110,8 +121,14 @@ fn try_parse_street(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Referent, 
 
     let tb = t.borrow();
     let canonical_from_morph = tb.morph.items().iter().find_map(|wf| {
-        wf.normal_case.as_deref().and_then(street_table::lookup_street_type)
-            .or_else(|| wf.normal_full.as_deref().and_then(street_table::lookup_street_type))
+        wf.normal_case
+            .as_deref()
+            .and_then(street_table::lookup_street_type)
+            .or_else(|| {
+                wf.normal_full
+                    .as_deref()
+                    .and_then(street_table::lookup_street_type)
+            })
             .map(|entry| entry.canonical.clone())
     });
     drop(tb);
@@ -135,9 +152,18 @@ fn try_suffix_street_type(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Refe
     // Current token must be uppercase text
     {
         let tb = t.borrow();
-        if !matches!(tb.kind, TokenKind::Text(_)) { return None; }
+        if !matches!(tb.kind, TokenKind::Text(_)) {
+            return None;
+        }
         let surf = sofa.substring(tb.begin_char, tb.end_char);
-        if !surf.chars().next().map(|c| c.is_uppercase()).unwrap_or(false) { return None; }
+        if !surf
+            .chars()
+            .next()
+            .map(|c| c.is_uppercase())
+            .unwrap_or(false)
+        {
+            return None;
+        }
     }
 
     // Scan ahead up to 3 tokens for a street type keyword
@@ -156,17 +182,24 @@ fn try_suffix_street_type(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Refe
             None => break,
         };
         let tb = tok.borrow();
-        if tb.whitespaces_before_count(sofa) > 1 { break; }
+        if tb.whitespaces_before_count(sofa) > 1 {
+            break;
+        }
 
         if let TokenKind::Text(ref txt) = tb.kind {
             // Check if this token is a street type keyword
-            let entry = street_table::lookup_street_type(&txt.term)
-                .or_else(|| {
-                    tb.morph.items().iter().find_map(|wf| {
-                        wf.normal_case.as_deref().and_then(street_table::lookup_street_type)
-                            .or_else(|| wf.normal_full.as_deref().and_then(street_table::lookup_street_type))
-                    })
-                });
+            let entry = street_table::lookup_street_type(&txt.term).or_else(|| {
+                tb.morph.items().iter().find_map(|wf| {
+                    wf.normal_case
+                        .as_deref()
+                        .and_then(street_table::lookup_street_type)
+                        .or_else(|| {
+                            wf.normal_full
+                                .as_deref()
+                                .and_then(street_table::lookup_street_type)
+                        })
+                })
+            });
 
             if let Some(e) = entry {
                 canonical = Some(e.canonical.clone());
@@ -177,7 +210,12 @@ fn try_suffix_street_type(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Refe
 
             // Not a street type — accumulate as name part if uppercase
             let surf = sofa.substring(tb.begin_char, tb.end_char);
-            if surf.chars().next().map(|c| c.is_uppercase()).unwrap_or(false) {
+            if surf
+                .chars()
+                .next()
+                .map(|c| c.is_uppercase())
+                .unwrap_or(false)
+            {
                 name_parts.push(get_nominative_form(&tb, sofa));
             } else {
                 break;
@@ -202,7 +240,10 @@ fn try_suffix_street_type(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Refe
 
 /// Starting after the street-type token (at `type_tok`), collect the street name.
 /// The name is one or more capitalized or all-caps tokens, possibly separated by '-'.
-fn collect_street_name_after(type_tok: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(String, TokenRef)> {
+fn collect_street_name_after(
+    type_tok: &TokenRef,
+    sofa: &SourceOfAnalysis,
+) -> Option<(String, TokenRef)> {
     let next = type_tok.borrow().next.clone()?;
 
     // Skip a dot after an abbreviation (e.g. "ул." — the '.' is separate token)
@@ -218,19 +259,31 @@ fn collect_street_name_after(type_tok: &TokenRef, sofa: &SourceOfAnalysis) -> Op
     };
 
     let sb = start.borrow();
-    if sb.whitespaces_before_count(sofa) > 3 { return None; }
+    if sb.whitespaces_before_count(sofa) > 3 {
+        return None;
+    }
 
     let (first_upper, first_part) = match &sb.kind {
         TokenKind::Text(_) | TokenKind::Referent(_) => {
             let surf = sofa.substring(sb.begin_char, sb.end_char);
-            let upper = surf.chars().next().map(|c| c.is_uppercase()).unwrap_or(false);
+            let upper = surf
+                .chars()
+                .next()
+                .map(|c| c.is_uppercase())
+                .unwrap_or(false);
             let part = get_street_name_part(&sb, sofa)?;
             (upper, part)
         }
         TokenKind::Number(n) => (true, n.value.clone()),
-        _ => { drop(sb); return None; }
+        _ => {
+            drop(sb);
+            return None;
+        }
     };
-    if !first_upper { drop(sb); return None; }
+    if !first_upper {
+        drop(sb);
+        return None;
+    }
     drop(sb);
 
     // Extend with more tokens
@@ -244,7 +297,9 @@ fn get_nominative_form(tb: &crate::token::Token, sofa: &SourceOfAnalysis) -> Str
     if let TokenKind::Text(_) = &tb.kind {
         // Use morph normal form if available (already uppercase)
         for wf in tb.morph.items() {
-            if let Some(nc) = &wf.normal_case { return nc.clone(); }
+            if let Some(nc) = &wf.normal_case {
+                return nc.clone();
+            }
         }
         return sofa.substring(tb.begin_char, tb.end_char).to_uppercase();
     }
@@ -261,14 +316,29 @@ fn get_street_name_part(tb: &crate::token::Token, sofa: &SourceOfAnalysis) -> Op
 }
 
 fn is_month_name(up: &str) -> bool {
-    matches!(up,
-        "ЯНВАРЯ" | "ФЕВРАЛЯ" | "МАРТА" | "АПРЕЛЯ" | "МАЯ" | "ИЮНЯ" |
-        "ИЮЛЯ" | "АВГУСТА" | "СЕНТЯБРЯ" | "ОКТЯБРЯ" | "НОЯБРЯ" | "ДЕКАБРЯ"
+    matches!(
+        up,
+        "ЯНВАРЯ"
+            | "ФЕВРАЛЯ"
+            | "МАРТА"
+            | "АПРЕЛЯ"
+            | "МАЯ"
+            | "ИЮНЯ"
+            | "ИЮЛЯ"
+            | "АВГУСТА"
+            | "СЕНТЯБРЯ"
+            | "ОКТЯБРЯ"
+            | "НОЯБРЯ"
+            | "ДЕКАБРЯ"
     )
 }
 
 /// Extend street name with subsequent capitalized tokens.
-fn extend_street_name(start: String, start_tok: TokenRef, sofa: &SourceOfAnalysis) -> (String, TokenRef) {
+fn extend_street_name(
+    start: String,
+    start_tok: TokenRef,
+    sofa: &SourceOfAnalysis,
+) -> (String, TokenRef) {
     let mut parts = vec![start];
     let mut end = start_tok.clone();
     let mut cur = start_tok.borrow().next.clone();
@@ -276,12 +346,20 @@ fn extend_street_name(start: String, start_tok: TokenRef, sofa: &SourceOfAnalysi
     const MAX: usize = 5;
 
     while let Some(t) = cur {
-        if count >= MAX { break; }
+        if count >= MAX {
+            break;
+        }
         let tb = t.borrow();
-        if tb.whitespaces_before_count(sofa) > 1 { break; }
+        if tb.whitespaces_before_count(sofa) > 1 {
+            break;
+        }
 
-        if tb.length_char() == 1 && sofa.char_at(tb.begin_char) == '-'
-            && parts.last().map(|p| p.chars().all(|c| c.is_ascii_digit())).unwrap_or(false)
+        if tb.length_char() == 1
+            && sofa.char_at(tb.begin_char) == '-'
+            && parts
+                .last()
+                .map(|p| p.chars().all(|c| c.is_ascii_digit()))
+                .unwrap_or(false)
         {
             let after_hyphen = tb.next.clone();
             drop(tb);
@@ -307,8 +385,12 @@ fn extend_street_name(start: String, start_tok: TokenRef, sofa: &SourceOfAnalysi
             break;
         }
 
-        if tb.length_char() == 1 && sofa.char_at(tb.begin_char) == '.'
-            && parts.last().map(|p| p.chars().count() == 1).unwrap_or(false)
+        if tb.length_char() == 1
+            && sofa.char_at(tb.begin_char) == '.'
+            && parts
+                .last()
+                .map(|p| p.chars().count() == 1)
+                .unwrap_or(false)
         {
             let after_dot = tb.next.clone();
             drop(tb);
@@ -319,10 +401,17 @@ fn extend_street_name(start: String, start_tok: TokenRef, sofa: &SourceOfAnalysi
             }
             if matches!(&nb.kind, TokenKind::Text(_) | TokenKind::Referent(_)) {
                 let surf = sofa.substring(nb.begin_char, nb.end_char);
-                if !surf.chars().next().map(|c| c.is_uppercase()).unwrap_or(false) {
+                if !surf
+                    .chars()
+                    .next()
+                    .map(|c| c.is_uppercase())
+                    .unwrap_or(false)
+                {
                     break;
                 }
-                let Some(part) = get_street_name_part(&nb, sofa) else { break };
+                let Some(part) = get_street_name_part(&nb, sofa) else {
+                    break;
+                };
                 parts.push(part);
                 end = next_word.clone();
                 count += 1;
@@ -342,21 +431,29 @@ fn extend_street_name(start: String, start_tok: TokenRef, sofa: &SourceOfAnalysi
             TokenKind::Text(txt) => {
                 let surf = sofa.substring(tb.begin_char, tb.end_char);
                 // Stop on punctuation
-                if txt.term.chars().all(|c| !c.is_alphanumeric()) { break; }
+                if txt.term.chars().all(|c| !c.is_alphanumeric()) {
+                    break;
+                }
                 // Stop if next word is clearly an address keyword (house, flat)
                 // txt.term is already uppercase
-                if is_address_stop_word(&txt.term) { break; }
+                if is_address_stop_word(&txt.term) {
+                    break;
+                }
                 // Allow all-caps abbreviations (ВОЙСК, etc.) and capitalized words and hyphens
                 let first_ch = surf.chars().next().unwrap_or(' ');
                 if first_ch.is_lowercase() {
                     // Allow Russian genitive particles
-                    if !matches!(txt.term.as_str(), "И" | "ИМ" | "ИМ." | "ИМЕНИ" | "ЛЕТ" | "OF" | "AND")
-                        && !is_month_name(&txt.term)
+                    if !matches!(
+                        txt.term.as_str(),
+                        "И" | "ИМ" | "ИМ." | "ИМЕНИ" | "ЛЕТ" | "OF" | "AND"
+                    ) && !is_month_name(&txt.term)
                     {
                         break;
                     }
                     if txt.term == "ЛЕТ" || is_month_name(&txt.term) {
-                        parts.push(get_street_name_part(&tb, sofa).unwrap_or_else(|| txt.term.clone()));
+                        parts.push(
+                            get_street_name_part(&tb, sofa).unwrap_or_else(|| txt.term.clone()),
+                        );
                         end = t.clone();
                         count += 1;
                     }
@@ -367,14 +464,25 @@ fn extend_street_name(start: String, start_tok: TokenRef, sofa: &SourceOfAnalysi
                 }
                 // If this token is a street type keyword, stop (e.g. "Ленина ул." — suffix form).
                 // Check term first (no alloc), then morph forms inline (no Vec).
-                if street_table::lookup_street_type(&txt.term).is_some() { break; }
+                if street_table::lookup_street_type(&txt.term).is_some() {
+                    break;
+                }
                 if tb.morph.items().iter().any(|wf| {
-                    wf.normal_case.as_deref().map_or(false, |s| street_table::lookup_street_type(s).is_some())
-                    || wf.normal_full.as_deref().map_or(false, |s| street_table::lookup_street_type(s).is_some())
-                }) { break; }
+                    wf.normal_case
+                        .as_deref()
+                        .map_or(false, |s| street_table::lookup_street_type(s).is_some())
+                        || wf
+                            .normal_full
+                            .as_deref()
+                            .map_or(false, |s| street_table::lookup_street_type(s).is_some())
+                }) {
+                    break;
+                }
 
                 // Stop on clearly-stop words
-                if is_name_stop_word(&txt.term) { break; }
+                if is_name_stop_word(&txt.term) {
+                    break;
+                }
 
                 let form = get_nominative_form(&tb, sofa);
                 parts.push(form);
@@ -383,8 +491,17 @@ fn extend_street_name(start: String, start_tok: TokenRef, sofa: &SourceOfAnalysi
             }
             TokenKind::Referent(_) => {
                 let surf = sofa.substring(tb.begin_char, tb.end_char);
-                if surf.chars().all(|c| !c.is_alphanumeric()) { break; }
-                if surf.chars().next().map(|c| c.is_lowercase()).unwrap_or(false) { break; }
+                if surf.chars().all(|c| !c.is_alphanumeric()) {
+                    break;
+                }
+                if surf
+                    .chars()
+                    .next()
+                    .map(|c| c.is_lowercase())
+                    .unwrap_or(false)
+                {
+                    break;
+                }
                 parts.push(surf.to_uppercase());
                 end = t.clone();
                 count += 1;
@@ -401,7 +518,8 @@ fn extend_street_name(start: String, start_tok: TokenRef, sofa: &SourceOfAnalysi
 
 fn is_address_stop_word(up: &str) -> bool {
     // House/flat/corpus/building/office/floor abbreviations — O(1) matches! instead of 6 linear searches
-    matches!(up,
+    matches!(
+        up,
         // HOUSE_ABBRS
         "Д" | "Д." | "ДОМ" | "ДОМОВЛ" | "ДОМОВЛАДЕНИЕ" |
         // FLAT_ABBRS
@@ -418,9 +536,22 @@ fn is_address_stop_word(up: &str) -> bool {
 }
 
 fn is_name_stop_word(up: &str) -> bool {
-    matches!(up,
-        "В" | "НА" | "ПО" | "ОТ" | "ДО" | "ЗА" | "ПРИ" | "С" |
-        "ЯВЛЯЕТСЯ" | "КАК" | "ТАК" | "НЕ" | "НИ" | "УЖЕ" | "ЕЩЁ"
+    matches!(
+        up,
+        "В" | "НА"
+            | "ПО"
+            | "ОТ"
+            | "ДО"
+            | "ЗА"
+            | "ПРИ"
+            | "С"
+            | "ЯВЛЯЕТСЯ"
+            | "КАК"
+            | "ТАК"
+            | "НЕ"
+            | "НИ"
+            | "УЖЕ"
+            | "ЕЩЁ"
     )
 }
 
@@ -462,7 +593,9 @@ fn try_parse_address_after_street(
 
     // Optionally parse more components: корп., стр., кв., оф., эт.
     loop {
-        let Some(next_tok) = end.borrow().next.clone() else { break };
+        let Some(next_tok) = end.borrow().next.clone() else {
+            break;
+        };
         let (is_comma, next_after_comma) = {
             let nb = next_tok.borrow();
             (
@@ -471,21 +604,25 @@ fn try_parse_address_after_street(
             )
         };
         let mut probe = if is_comma {
-            let Some(after_comma) = next_after_comma else { break };
+            let Some(after_comma) = next_after_comma else {
+                break;
+            };
             after_comma
         } else {
             let ws = next_tok.borrow().whitespaces_before_count(sofa);
-            if ws == 0 || ws > 2 { break; }
+            if ws == 0 || ws > 2 {
+                break;
+            }
             next_tok
         };
 
         if let Some((kind, val, val_end)) = parse_address_component(&mut probe, sofa) {
             match kind {
-                "flat"   => ar::add_slot_str(&mut r, ar::ADDRESS_ATTR_FLAT, &val),
+                "flat" => ar::add_slot_str(&mut r, ar::ADDRESS_ATTR_FLAT, &val),
                 "corpus" => ar::add_slot_str(&mut r, ar::ADDRESS_ATTR_CORPUS, &val),
-                "floor"  => ar::add_slot_str(&mut r, ar::ADDRESS_ATTR_FLOOR, &val),
+                "floor" => ar::add_slot_str(&mut r, ar::ADDRESS_ATTR_FLOOR, &val),
                 "office" => ar::add_slot_str(&mut r, ar::ADDRESS_ATTR_OFFICE, &val),
-                _        => {}
+                _ => {}
             }
             end = val_end;
         } else {
@@ -498,10 +635,16 @@ fn try_parse_address_after_street(
 
 /// Try to consume "Д." / "Д" / "ДОМ" / standalone number for house.
 /// Returns (house_number_string, end_token).
-fn parse_house_component(cur: &mut TokenRef, sofa: &SourceOfAnalysis) -> Option<(String, TokenRef)> {
+fn parse_house_component(
+    cur: &mut TokenRef,
+    sofa: &SourceOfAnalysis,
+) -> Option<(String, TokenRef)> {
     let cb = cur.borrow();
     let is_house_abbr = match &cb.kind {
-        TokenKind::Text(txt) => matches!(txt.term.as_str(), "Д" | "Д." | "ДОМ" | "ДОМОВЛ" | "ДОМОВЛАДЕНИЕ"),
+        TokenKind::Text(txt) => matches!(
+            txt.term.as_str(),
+            "Д" | "Д." | "ДОМ" | "ДОМОВЛ" | "ДОМОВЛАДЕНИЕ"
+        ),
         TokenKind::Number(n) => {
             // Standalone number after comma — treat as house
             let val = n.value.clone();
@@ -509,7 +652,10 @@ fn parse_house_component(cur: &mut TokenRef, sofa: &SourceOfAnalysis) -> Option<
             drop(cb);
             return Some((val, end));
         }
-        _ => { drop(cb); return None; }
+        _ => {
+            drop(cb);
+            return None;
+        }
     };
     drop(cb);
 
@@ -538,20 +684,31 @@ fn parse_house_component(cur: &mut TokenRef, sofa: &SourceOfAnalysis) -> Option<
 
 /// Try to parse кв./корп./оф./эт. followed by a number.
 /// Returns (kind_str, value, end_token).
-fn parse_address_component(cur: &mut TokenRef, sofa: &SourceOfAnalysis) -> Option<(&'static str, String, TokenRef)> {
+fn parse_address_component(
+    cur: &mut TokenRef,
+    sofa: &SourceOfAnalysis,
+) -> Option<(&'static str, String, TokenRef)> {
     let cb = cur.borrow();
     let term = match &cb.kind {
         TokenKind::Text(txt) => txt.term.as_str(),
-        _ => { drop(cb); return None; }
+        _ => {
+            drop(cb);
+            return None;
+        }
     };
     // Classify component type using matches! (O(1)) instead of 4 linear .contains() calls
     let kind: &'static str = match term {
-        "КВ" | "КВ." | "КВАРТИРА" | "ПОМЕЩЕНИЕ" | "ПОМ" | "ПОМ." => "flat",
+        "КВ" | "КВ." | "КВАРТИРА" | "ПОМЕЩЕНИЕ" | "ПОМ" | "ПОМ." => {
+            "flat"
+        }
         "КОРП" | "КОРП." | "КОРПУС" | "К." | "К" => "corpus",
         "СТР" | "СТР." | "СТРОЕНИЕ" => "corpus",
         "ЭТ" | "ЭТ." | "ЭТАЖ" => "floor",
         "ОФ" | "ОФ." | "ОФИС" => "office",
-        _ => { drop(cb); return None; }
+        _ => {
+            drop(cb);
+            return None;
+        }
     };
     drop(cb);
 
@@ -606,7 +763,22 @@ fn parse_number_like(start: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Strin
                         continue;
                     }
                 }
-                if surf.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false) {
+                if saw_digit
+                    && surf.chars().count() == 1
+                    && surf.chars().all(|c| c.is_alphabetic())
+                {
+                    value.push_str(&surf.to_uppercase());
+                    allow_separator = true;
+                    end = tok.clone();
+                    cur = tb.next.clone();
+                    continue;
+                }
+                if surf
+                    .chars()
+                    .next()
+                    .map(|c| c.is_ascii_digit())
+                    .unwrap_or(false)
+                {
                     value.push_str(&surf.to_uppercase());
                     saw_digit = true;
                     allow_separator = true;
@@ -635,5 +807,9 @@ fn parse_number_like(start: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Strin
         }
     }
 
-    if saw_digit { Some((value, end)) } else { None }
+    if saw_digit {
+        Some((value, end))
+    } else {
+        None
+    }
 }

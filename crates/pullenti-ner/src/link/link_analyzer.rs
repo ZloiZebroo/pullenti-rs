@@ -1,24 +1,23 @@
+use std::cell::RefCell;
 /// LinkAnalyzer — detects relationships (links) between already-recognized entities.
 /// Mirrors `LinkAnalyzer.cs` (simplified port, skipping PersonPropertyReferent /
 /// PersonIdentityReferent which are not yet ported).
 ///
 /// This is a *specific* analyzer (is_specific = true) — it runs after all general
 /// analyzers and post-processes their output.
-
 use std::rc::Rc;
-use std::cell::RefCell;
 
-use crate::analyzer::Analyzer;
 use crate::analysis_kit::AnalysisKit;
-use crate::token::{Token, TokenRef, TokenKind};
+use crate::analyzer::Analyzer;
 use crate::referent::{Referent, SlotValue};
 use crate::source_of_analysis::SourceOfAnalysis;
+use crate::token::{Token, TokenKind, TokenRef};
 
 use super::link_referent::{self as lr, LinkType};
-use crate::resume::resume_analyzer::parse_org;
-use crate::resume::resume_referent::{self as rr, ResumeItemType, ATTR_REF, ATTR_DATERANGE};
 use crate::geo::geo_referent;
 use crate::person::person_referent;
+use crate::resume::resume_analyzer::parse_org;
+use crate::resume::resume_referent::{self as rr, ResumeItemType, ATTR_DATERANGE, ATTR_REF};
 
 // ── Sentinel slot ──────────────────────────────────────────────────────────
 
@@ -44,15 +43,25 @@ fn emit_link(
     obj2: Option<Rc<RefCell<Referent>>>,
     param: Option<&str>,
     date_from: Option<Rc<RefCell<Referent>>>,
-    date_to:   Option<Rc<RefCell<Referent>>>,
+    date_to: Option<Rc<RefCell<Referent>>>,
 ) {
     let mut link = lr::new_link_referent();
     lr::set_link_type(&mut link, &typ);
-    if let Some(p) = param { lr::set_param(&mut link, p); }
-    if let Some(o1) = obj1  { lr::set_object1(&mut link, o1); }
-    if let Some(o2) = obj2  { lr::set_object2(&mut link, o2); }
-    if let Some(df) = date_from { lr::set_datefrom(&mut link, df); }
-    if let Some(dt) = date_to   { lr::set_dateto(&mut link, dt); }
+    if let Some(p) = param {
+        lr::set_param(&mut link, p);
+    }
+    if let Some(o1) = obj1 {
+        lr::set_object1(&mut link, o1);
+    }
+    if let Some(o2) = obj2 {
+        lr::set_object2(&mut link, o2);
+    }
+    if let Some(df) = date_from {
+        lr::set_datefrom(&mut link, df);
+    }
+    if let Some(dt) = date_to {
+        lr::set_dateto(&mut link, dt);
+    }
 
     let r_rc = Rc::new(RefCell::new(link));
     let r_rc = kit.add_entity(r_rc);
@@ -67,14 +76,23 @@ fn get_ref(t: &TokenRef) -> Option<Rc<RefCell<Referent>>> {
 
 /// Look backward for a word that starts with one of the given prefixes.
 /// Stops at newlines or long text tokens (within `max` steps).
-fn prev_term_starts_with(t: &TokenRef, prefixes: &[&str], max: usize, sofa: &SourceOfAnalysis) -> bool {
+fn prev_term_starts_with(
+    t: &TokenRef,
+    prefixes: &[&str],
+    max: usize,
+    sofa: &SourceOfAnalysis,
+) -> bool {
     let mut cur = t.borrow().prev.as_ref().and_then(|w| w.upgrade());
     let mut steps = 0;
     while let Some(tt) = cur {
-        if steps >= max { break; }
+        if steps >= max {
+            break;
+        }
         steps += 1;
         let is_nl_after = tt.borrow().is_newline_after(sofa);
-        if is_nl_after { break; }
+        if is_nl_after {
+            break;
+        }
         let found = {
             let b = tt.borrow();
             if let TokenKind::Text(td) = &b.kind {
@@ -82,18 +100,24 @@ fn prev_term_starts_with(t: &TokenRef, prefixes: &[&str], max: usize, sofa: &Sou
                 prefixes.iter().any(|p| term.starts_with(p))
             } else if let TokenKind::Referent(rd) = &b.kind {
                 let rtn = rd.referent.borrow().type_name.clone();
-                if rtn != "DATE" && rtn != "GEO" { break; }
+                if rtn != "DATE" && rtn != "GEO" {
+                    break;
+                }
                 false
             } else {
                 false
             }
         };
-        if found { return true; }
+        if found {
+            return true;
+        }
         // If it's a long text token, stop searching
         {
             let b = tt.borrow();
             if let TokenKind::Text(_) = &b.kind {
-                if b.length_char() > 1 { break; }
+                if b.length_char() > 1 {
+                    break;
+                }
             }
         }
         cur = tt.borrow().prev.as_ref().and_then(|w| w.upgrade());
@@ -105,7 +129,9 @@ fn prev_term_starts_with(t: &TokenRef, prefixes: &[&str], max: usize, sofa: &Sou
 fn next_term_starts_with(t: &TokenRef, prefixes: &[&str], sofa: &SourceOfAnalysis) -> bool {
     if let Some(nx) = t.borrow().next.clone() {
         let b = nx.borrow();
-        if b.is_newline_before(sofa) { return false; }
+        if b.is_newline_before(sofa) {
+            return false;
+        }
         if let TokenKind::Text(td) = &b.kind {
             let term = td.term.as_str();
             return prefixes.iter().any(|p| term.starts_with(p));
@@ -119,22 +145,34 @@ fn next_term_starts_with(t: &TokenRef, prefixes: &[&str], sofa: &SourceOfAnalysi
 pub struct LinkAnalyzer;
 
 impl LinkAnalyzer {
-    pub fn new() -> Self { LinkAnalyzer }
+    pub fn new() -> Self {
+        LinkAnalyzer
+    }
 }
-impl Default for LinkAnalyzer { fn default() -> Self { LinkAnalyzer } }
+impl Default for LinkAnalyzer {
+    fn default() -> Self {
+        LinkAnalyzer
+    }
+}
 
 impl Analyzer for LinkAnalyzer {
-    fn name(&self)        -> &'static str { "LINK" }
-    fn caption(&self)     -> &'static str { "Связи" }
-    fn is_specific(&self) -> bool         { true }
+    fn name(&self) -> &'static str {
+        "LINK"
+    }
+    fn caption(&self) -> &'static str {
+        "Связи"
+    }
+    fn is_specific(&self) -> bool {
+        true
+    }
 
     fn process(&self, kit: &mut AnalysisKit) {
         let sofa = kit.sofa.clone();
 
         // ── Scan and build links ───────────────────────────────────────────
         let mut main_pers: Option<Rc<RefCell<Referent>>> = None;
-        let mut cur_pers:  Option<Rc<RefCell<Referent>>> = None;
-        let mut cur_org:   Option<Rc<RefCell<Referent>>> = None;
+        let mut cur_pers: Option<Rc<RefCell<Referent>>> = None;
+        let mut cur_org: Option<Rc<RefCell<Referent>>> = None;
         let mut cur_typ = ResumeItemType::Undefined;
 
         let mut cur = kit.first_token.clone();
@@ -143,7 +181,11 @@ impl Analyzer for LinkAnalyzer {
             let nl = t.borrow().is_newline_before(&sofa);
 
             // ── keyword tracking ──────────────────────────────────────────
-            let term_opt = if let TokenKind::Text(td) = &t.borrow().kind { Some(td.term.clone()) } else { None };
+            let term_opt = if let TokenKind::Text(td) = &t.borrow().kind {
+                Some(td.term.clone())
+            } else {
+                None
+            };
             if let Some(term) = term_opt {
                 let term = term.as_str();
                 if term == "ОБРАЗОВАНИЕ" {
@@ -152,9 +194,15 @@ impl Analyzer for LinkAnalyzer {
                     cur_typ = ResumeItemType::Organization;
                 } else if term == "ОПЫТ" || term == "МЕСТО" || term == "ПЕРИОД" {
                     let is_raboty = next.as_ref().map_or(false, |n| {
-                        if let TokenKind::Text(td2) = &n.borrow().kind { td2.term == "РАБОТЫ" } else { false }
+                        if let TokenKind::Text(td2) = &n.borrow().kind {
+                            td2.term == "РАБОТЫ"
+                        } else {
+                            false
+                        }
                     });
-                    if is_raboty { cur_typ = ResumeItemType::Organization; }
+                    if is_raboty {
+                        cur_typ = ResumeItemType::Organization;
+                    }
                 }
             }
 
@@ -166,17 +214,25 @@ impl Analyzer for LinkAnalyzer {
                         let rb = rt.borrow();
                         if let TokenKind::Referent(rd) = &rb.kind {
                             Some(rd.referent.clone())
-                        } else { None }
+                        } else {
+                            None
+                        }
                     };
                     if let Some(rref) = resume_ref {
                         let new_typ = rr::get_typ(&rref.borrow());
                         cur_typ = new_typ;
 
-                        let org_ref: Option<Rc<RefCell<Referent>>> = rref.borrow().slots.iter()
+                        let org_ref: Option<Rc<RefCell<Referent>>> = rref
+                            .borrow()
+                            .slots
+                            .iter()
                             .find(|s| s.type_name == ATTR_REF)
                             .and_then(|s| s.value.as_ref())
                             .and_then(|v| v.as_referent());
-                        let date_range: Option<Rc<RefCell<Referent>>> = rref.borrow().slots.iter()
+                        let date_range: Option<Rc<RefCell<Referent>>> = rref
+                            .borrow()
+                            .slots
+                            .iter()
                             .find(|s| s.type_name == ATTR_DATERANGE)
                             .and_then(|s| s.value.as_ref())
                             .and_then(|v| v.as_referent());
@@ -196,14 +252,26 @@ impl Analyzer for LinkAnalyzer {
                             let span = t.clone();
                             let mut link = lr::new_link_referent();
                             lr::set_link_type(&mut link, &link_typ);
-                            if let Some(ref p) = p_ref { lr::set_object1(&mut link, p.clone()); }
+                            if let Some(ref p) = p_ref {
+                                lr::set_object1(&mut link, p.clone());
+                            }
                             lr::set_object2(&mut link, org.clone());
-                            if let Some(ref s) = value_str { lr::set_param(&mut link, s); }
-                            if let Some(df2) = df { lr::set_datefrom(&mut link, df2); }
-                            if let Some(dt2) = dt { lr::set_dateto(&mut link, dt2); }
+                            if let Some(ref s) = value_str {
+                                lr::set_param(&mut link, s);
+                            }
+                            if let Some(df2) = df {
+                                lr::set_datefrom(&mut link, df2);
+                            }
+                            if let Some(dt2) = dt {
+                                lr::set_dateto(&mut link, dt2);
+                            }
                             let r_rc = Rc::new(RefCell::new(link));
                             let r_rc = kit.add_entity(r_rc);
-                            let wrap = Rc::new(RefCell::new(Token::new_referent(span.clone(), span, r_rc)));
+                            let wrap = Rc::new(RefCell::new(Token::new_referent(
+                                span.clone(),
+                                span,
+                                r_rc,
+                            )));
                             kit.embed_token(wrap);
                         }
                         kit.embed_token(rt.clone());
@@ -216,7 +284,10 @@ impl Analyzer for LinkAnalyzer {
             // ── referent token processing ─────────────────────────────────
             let rref = match get_ref(&t) {
                 Some(r) => r,
-                None => { cur = next; continue; }
+                None => {
+                    cur = next;
+                    continue;
+                }
             };
 
             let rtype = rref.borrow().type_name.clone();
@@ -227,7 +298,8 @@ impl Analyzer for LinkAnalyzer {
                     let p = rref.clone();
                     if is_object(&p.borrow()) {
                         cur_pers = Some(p);
-                        cur = next; continue;
+                        cur = next;
+                        continue;
                     }
                     if main_pers.is_none() || nl {
                         // Become main person
@@ -235,17 +307,28 @@ impl Analyzer for LinkAnalyzer {
                         main_pers = Some(p.clone());
                         cur_pers = None;
                     } else {
-                        let is_same_main = main_pers.as_ref().map_or(false, |mp| Rc::ptr_eq(mp, &p));
-                        let is_same_cur  = cur_pers.as_ref().map_or(false, |cp| Rc::ptr_eq(cp, &p));
+                        let is_same_main =
+                            main_pers.as_ref().map_or(false, |mp| Rc::ptr_eq(mp, &p));
+                        let is_same_cur = cur_pers.as_ref().map_or(false, |cp| Rc::ptr_eq(cp, &p));
                         if is_same_main || is_same_cur {
-                            cur = next; continue;
+                            cur = next;
+                            continue;
                         }
                         let has_first = person_referent::get_firstname(&p.borrow())
                             .map_or(false, |s| s.chars().count() >= 2);
                         if has_first {
                             set_object(&mut p.borrow_mut());
                             let mp = main_pers.clone();
-                            emit_link(kit, t.clone(), LinkType::Undefined, mp, Some(p.clone()), None, None, None);
+                            emit_link(
+                                kit,
+                                t.clone(),
+                                LinkType::Undefined,
+                                mp,
+                                Some(p.clone()),
+                                None,
+                                None,
+                                None,
+                            );
                         }
                         cur_pers = Some(p);
                     }
@@ -258,7 +341,16 @@ impl Analyzer for LinkAnalyzer {
                         let birth_prefixes: &[&str] = &["УР", "РОДИ", "РОЖД"];
                         if prev_term_starts_with(&t, birth_prefixes, 4, &sofa) {
                             set_object(&mut rref.borrow_mut());
-                            emit_link(kit, t.clone(), LinkType::Born, p, Some(rref.clone()), None, None, None);
+                            emit_link(
+                                kit,
+                                t.clone(),
+                                LinkType::Born,
+                                p,
+                                Some(rref.clone()),
+                                None,
+                                None,
+                                None,
+                            );
                         }
                     }
                 }
@@ -283,32 +375,75 @@ impl Analyzer for LinkAnalyzer {
                 }
 
                 "PHONE" => {
-                    let obj1 = cur_org.clone().or_else(|| cur_pers.clone()).or_else(|| main_pers.clone());
+                    let obj1 = cur_org
+                        .clone()
+                        .or_else(|| cur_pers.clone())
+                        .or_else(|| main_pers.clone());
                     if obj1.is_some() {
                         set_object(&mut rref.borrow_mut());
-                        emit_link(kit, t.clone(), LinkType::Contact, obj1, Some(rref.clone()), None, None, None);
+                        emit_link(
+                            kit,
+                            t.clone(),
+                            LinkType::Contact,
+                            obj1,
+                            Some(rref.clone()),
+                            None,
+                            None,
+                            None,
+                        );
                     }
                 }
 
                 "URI" => {
-                    let scheme = rref.borrow().get_string_value("SCHEME").map(|s| s.to_string()).unwrap_or_default();
+                    let scheme = rref
+                        .borrow()
+                        .get_string_value("SCHEME")
+                        .map(|s| s.to_string())
+                        .unwrap_or_default();
                     if scheme == "http" || scheme == "https" || scheme == "www" {
-                        cur = next; continue;
+                        cur = next;
+                        continue;
                     }
-                    let obj1 = cur_org.clone().or_else(|| cur_pers.clone()).or_else(|| main_pers.clone());
+                    let obj1 = cur_org
+                        .clone()
+                        .or_else(|| cur_pers.clone())
+                        .or_else(|| main_pers.clone());
                     if obj1.is_some() {
                         set_object(&mut rref.borrow_mut());
-                        emit_link(kit, t.clone(), LinkType::Contact, obj1, Some(rref.clone()), None, None, None);
+                        emit_link(
+                            kit,
+                            t.clone(),
+                            LinkType::Contact,
+                            obj1,
+                            Some(rref.clone()),
+                            None,
+                            None,
+                            None,
+                        );
                     }
                 }
 
                 "ADDRESS" | "STREET" => {
-                    let obj1 = cur_org.clone().or_else(|| cur_pers.clone()).or_else(|| main_pers.clone());
+                    let obj1 = cur_org
+                        .clone()
+                        .or_else(|| cur_pers.clone())
+                        .or_else(|| main_pers.clone());
                     if obj1.is_some() {
                         set_object(&mut rref.borrow_mut());
-                        let is_org = obj1.as_ref().map_or(false, |o| o.borrow().type_name == "ORGANIZATION");
+                        let is_org = obj1
+                            .as_ref()
+                            .map_or(false, |o| o.borrow().type_name == "ORGANIZATION");
                         let param = detect_addr_param(&t, is_org, &sofa);
-                        emit_link(kit, t.clone(), LinkType::Address, obj1, Some(rref.clone()), param.as_deref(), None, None);
+                        emit_link(
+                            kit,
+                            t.clone(),
+                            LinkType::Address,
+                            obj1,
+                            Some(rref.clone()),
+                            param.as_deref(),
+                            None,
+                            None,
+                        );
                     }
                 }
 
@@ -322,8 +457,9 @@ impl Analyzer for LinkAnalyzer {
                         } else if cur_typ == ResumeItemType::Organization {
                             LinkType::Work
                         } else {
-                            let study_prefixes: &[&str] = &["ОБРАЗОВАН", "ОКОНЧИТ", "ОБУЧАТ", "ЗАКОНЧИТ"];
-                            let work_prefixes: &[&str]  = &["РАБОТАТ", "ПРАКТИК"];
+                            let study_prefixes: &[&str] =
+                                &["ОБРАЗОВАН", "ОКОНЧИТ", "ОБУЧАТ", "ЗАКОНЧИТ"];
+                            let work_prefixes: &[&str] = &["РАБОТАТ", "ПРАКТИК"];
                             if prev_term_starts_with(&t, study_prefixes, 5, &sofa) {
                                 LinkType::Study
                             } else if prev_term_starts_with(&t, work_prefixes, 5, &sofa) {
@@ -334,18 +470,33 @@ impl Analyzer for LinkAnalyzer {
                         };
                         let (df, dt) = find_adjacent_date(&t, &sofa);
                         if link_typ != LinkType::Undefined || df.is_some() || dt.is_some() {
-                            emit_link(kit, t.clone(), link_typ, p, Some(rref.clone()), None, df, dt);
+                            emit_link(
+                                kit,
+                                t.clone(),
+                                link_typ,
+                                p,
+                                Some(rref.clone()),
+                                None,
+                                df,
+                                dt,
+                            );
                         }
                     }
                 }
 
                 "RESUME" => {
-                    let org_ref: Option<Rc<RefCell<Referent>>> = rref.borrow().slots.iter()
+                    let org_ref: Option<Rc<RefCell<Referent>>> = rref
+                        .borrow()
+                        .slots
+                        .iter()
                         .find(|s| s.type_name == ATTR_REF)
                         .and_then(|s| s.value.as_ref())
                         .and_then(|v| v.as_referent())
                         .filter(|r| r.borrow().type_name == "ORGANIZATION");
-                    let date_range: Option<Rc<RefCell<Referent>>> = rref.borrow().slots.iter()
+                    let date_range: Option<Rc<RefCell<Referent>>> = rref
+                        .borrow()
+                        .slots
+                        .iter()
                         .find(|s| s.type_name == ATTR_DATERANGE)
                         .and_then(|s| s.value.as_ref())
                         .and_then(|v| v.as_referent());
@@ -355,10 +506,23 @@ impl Analyzer for LinkAnalyzer {
 
                     if let (Some(p_ref), Some(org)) = (p, org_ref) {
                         set_object(&mut org.borrow_mut());
-                        let link_typ = if typ == ResumeItemType::Study { LinkType::Study } else { LinkType::Work };
+                        let link_typ = if typ == ResumeItemType::Study {
+                            LinkType::Study
+                        } else {
+                            LinkType::Work
+                        };
                         let (df, dt) = extract_date_range(date_range.as_ref());
                         cur_org = Some(org.clone());
-                        emit_link(kit, t.clone(), link_typ, Some(p_ref), Some(org), value_str.as_deref(), df, dt);
+                        emit_link(
+                            kit,
+                            t.clone(),
+                            link_typ,
+                            Some(p_ref),
+                            Some(org),
+                            value_str.as_deref(),
+                            df,
+                            dt,
+                        );
                     }
                 }
 
@@ -366,7 +530,16 @@ impl Analyzer for LinkAnalyzer {
                     let p = cur_pers.clone().or_else(|| main_pers.clone());
                     if p.is_some() {
                         set_object(&mut rref.borrow_mut());
-                        emit_link(kit, t.clone(), LinkType::Undefined, p, Some(rref.clone()), None, None, None);
+                        emit_link(
+                            kit,
+                            t.clone(),
+                            LinkType::Undefined,
+                            p,
+                            Some(rref.clone()),
+                            None,
+                            None,
+                            None,
+                        );
                     }
                 }
 
@@ -384,14 +557,23 @@ impl Analyzer for LinkAnalyzer {
 fn extract_date_range(
     dr_ref: Option<&Rc<RefCell<Referent>>>,
 ) -> (Option<Rc<RefCell<Referent>>>, Option<Rc<RefCell<Referent>>>) {
-    let dr = match dr_ref { Some(r) => r, None => return (None, None) };
+    let dr = match dr_ref {
+        Some(r) => r,
+        None => return (None, None),
+    };
     let rtype = dr.borrow().type_name.clone();
     if rtype == "DATERANGE" {
-        let df = dr.borrow().slots.iter()
+        let df = dr
+            .borrow()
+            .slots
+            .iter()
             .find(|s| s.type_name == "DATEFROM")
             .and_then(|s| s.value.as_ref())
             .and_then(|v| v.as_referent());
-        let dt = dr.borrow().slots.iter()
+        let dt = dr
+            .borrow()
+            .slots
+            .iter()
             .find(|s| s.type_name == "DATETO")
             .and_then(|s| s.value.as_ref())
             .and_then(|v| v.as_referent());
@@ -411,9 +593,13 @@ fn find_adjacent_date(
     let mut cur = t.borrow().next.clone();
     let mut steps = 0;
     while let Some(tt) = cur.clone() {
-        if steps >= 5 { break; }
+        if steps >= 5 {
+            break;
+        }
         steps += 1;
-        if tt.borrow().is_newline_before(sofa) { break; }
+        if tt.borrow().is_newline_before(sofa) {
+            break;
+        }
         if let Some(r) = tt.borrow().get_referent() {
             let rn = r.borrow().type_name.clone();
             if rn == "DATERANGE" || rn == "DATE" {
@@ -432,11 +618,19 @@ fn detect_addr_param(t: &TokenRef, is_org: bool, sofa: &SourceOfAnalysis) -> Opt
     let mut prev = t.borrow().prev.as_ref().and_then(|w| w.upgrade());
     let mut steps = 0;
     while let Some(tt) = prev {
-        if steps >= 5 { break; }
+        if steps >= 5 {
+            break;
+        }
         steps += 1;
-        if tt.borrow().is_newline_before(sofa) { break; }
-        if tt.borrow().is_comma(sofa) { break; }
-        if let Some(p) = check_addr_param(&tt, is_org) { return Some(p); }
+        if tt.borrow().is_newline_before(sofa) {
+            break;
+        }
+        if tt.borrow().is_comma(sofa) {
+            break;
+        }
+        if let Some(p) = check_addr_param(&tt, is_org) {
+            return Some(p);
+        }
         prev = tt.borrow().prev.as_ref().and_then(|w| w.upgrade());
     }
     None
@@ -445,12 +639,21 @@ fn detect_addr_param(t: &TokenRef, is_org: bool, sofa: &SourceOfAnalysis) -> Opt
 fn check_addr_param(t: &TokenRef, is_org: bool) -> Option<String> {
     if let TokenKind::Text(td) = &t.borrow().kind {
         let term = td.term.as_str();
-        if term == "АДРЕС" { return None; }
+        if term == "АДРЕС" {
+            return None;
+        }
         if is_org {
-            if term.starts_with("ЮР") { return Some("юридический".to_string()); }
-            if term.starts_with("ФАКТ") { return Some("фактический".to_string()); }
+            if term.starts_with("ЮР") {
+                return Some("юридический".to_string());
+            }
+            if term.starts_with("ФАКТ") {
+                return Some("фактический".to_string());
+            }
         } else {
-            if term.starts_with("ЗАРЕГ") || term.starts_with("РЕГИСТР") || term.starts_with("ПРОПИС") {
+            if term.starts_with("ЗАРЕГ")
+                || term.starts_with("РЕГИСТР")
+                || term.starts_with("ПРОПИС")
+            {
                 return Some("регистрация".to_string());
             }
             if term.starts_with("ФАКТИЧ") || term.starts_with("ПРОЖИВ") {

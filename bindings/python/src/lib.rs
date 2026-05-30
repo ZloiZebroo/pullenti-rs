@@ -778,7 +778,7 @@ macro_rules! impl_analyzer_new {
             #[new]
             fn new() -> Self { <$t>::default() }
         }
-        impl Default for $t { fn default() -> Self { unsafe { std::mem::zeroed() } } }
+        impl Default for $t { fn default() -> Self { Self } }
     )+};
 }
 
@@ -914,7 +914,7 @@ fn py_analyze_person_name(text: &str) -> PyPersonNormalData {
 ///   - ``number``      — ``"sg"``, ``"pl"`` or ``""``
 ///   - ``is_proper``   — True if the form is a proper noun/name
 ///   - ``in_dict``     — True if the form was found in the morphological dictionary
-#[pyclass(name = "MorphForm")]
+#[pyclass(name = "MorphForm", skip_from_py_object)]
 #[derive(Clone)]
 pub struct PyMorphForm {
     #[pyo3(get)] pub normal:    String,

@@ -1,36 +1,45 @@
-/// VacanceAnalyzer — job vacancy text parser.
-/// Mirrors `VacanceAnalyzer.cs`.
-
-use std::rc::Rc;
-use std::cell::RefCell;
-use crate::analyzer::Analyzer;
-use crate::analysis_kit::AnalysisKit;
-use crate::token::Token;
 use super::vacance_referent::{
-    OBJ_TYPENAME as _, new_vacancy_referent, set_item_type, set_value, set_expired,
-    VacanceItemType, ATTR_REF,
+    new_vacancy_referent, set_expired, set_item_type, set_value, VacanceItemType, ATTR_REF,
+    OBJ_TYPENAME as _,
 };
 use super::vacance_token::{VacanceToken, VacanceTokenType};
+use crate::analysis_kit::AnalysisKit;
+use crate::analyzer::Analyzer;
+use crate::token::Token;
+use std::cell::RefCell;
+/// VacanceAnalyzer — job vacancy text parser.
+/// Mirrors `VacanceAnalyzer.cs`.
+use std::rc::Rc;
 
 pub struct VacanceAnalyzer;
 
 impl VacanceAnalyzer {
-    pub fn new() -> Self { VacanceAnalyzer }
+    pub fn new() -> Self {
+        VacanceAnalyzer
+    }
 }
 
 impl Default for VacanceAnalyzer {
-    fn default() -> Self { VacanceAnalyzer }
+    fn default() -> Self {
+        VacanceAnalyzer
+    }
 }
 
 impl Analyzer for VacanceAnalyzer {
-    fn name(&self) -> &'static str { "VACANCE" }
-    fn caption(&self) -> &'static str { "Вакансия" }
-    fn is_specific(&self) -> bool { true }
+    fn name(&self) -> &'static str {
+        "VACANCE"
+    }
+    fn caption(&self) -> &'static str {
+        "Вакансия"
+    }
+    fn is_specific(&self) -> bool {
+        true
+    }
 
     fn process(&self, kit: &mut AnalysisKit) {
         let first = match kit.first_token.clone() {
             Some(t) => t,
-            None    => return,
+            None => return,
         };
         let sofa = &kit.sofa.clone();
 
@@ -44,20 +53,22 @@ impl Analyzer for VacanceAnalyzer {
 
         for v in li {
             // Skip items with no content
-            if v.value.is_none() && v.refs.is_empty() { continue; }
+            if v.value.is_none() && v.refs.is_empty() {
+                continue;
+            }
 
             let item_type = match v.typ {
-                VacanceTokenType::Date       => VacanceItemType::Date,
+                VacanceTokenType::Date => VacanceItemType::Date,
                 VacanceTokenType::Experience => VacanceItemType::Experience,
-                VacanceTokenType::Money      => VacanceItemType::Money,
-                VacanceTokenType::Name       => VacanceItemType::Name,
-                VacanceTokenType::Education  => VacanceItemType::Education,
-                VacanceTokenType::Language   => VacanceItemType::Language,
-                VacanceTokenType::Driving    => VacanceItemType::DrivingLicense,
-                VacanceTokenType::License    => VacanceItemType::License,
-                VacanceTokenType::Moral      => VacanceItemType::Moral,
-                VacanceTokenType::Plus       => VacanceItemType::Plus,
-                VacanceTokenType::Skill      => VacanceItemType::Skill,
+                VacanceTokenType::Money => VacanceItemType::Money,
+                VacanceTokenType::Name => VacanceItemType::Name,
+                VacanceTokenType::Education => VacanceItemType::Education,
+                VacanceTokenType::Language => VacanceItemType::Language,
+                VacanceTokenType::Driving => VacanceItemType::DrivingLicense,
+                VacanceTokenType::License => VacanceItemType::License,
+                VacanceTokenType::Moral => VacanceItemType::Moral,
+                VacanceTokenType::Plus => VacanceItemType::Plus,
+                VacanceTokenType::Skill => VacanceItemType::Skill,
                 _ => continue,
             };
 
@@ -83,9 +94,11 @@ impl Analyzer for VacanceAnalyzer {
 
             let r_rc = Rc::new(RefCell::new(referent));
             let r_rc = kit.add_entity(r_rc);
-            let tok = Rc::new(RefCell::new(
-                Token::new_referent(v.begin_token.clone(), v.end_token.clone(), r_rc)
-            ));
+            let tok = Rc::new(RefCell::new(Token::new_referent(
+                v.begin_token.clone(),
+                v.end_token.clone(),
+                r_rc,
+            )));
             kit.embed_token(tok);
         }
     }

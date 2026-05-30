@@ -1,32 +1,37 @@
+use std::cell::RefCell;
 /// GeoAnalyzer — simplified port of GeoAnalyzer.cs.
 ///
 /// Handles the main patterns:
 ///  1. Known country/city name (direct lookup via morph normal forms)
 ///  2. Territory type keyword + proper name  ("Московская область", "г. Москва")
 ///  3. Country/region adjective forms when followed by a type keyword
-
 use std::rc::Rc;
-use std::cell::RefCell;
 
-use crate::analyzer::Analyzer;
+use crate::address::street_table;
 use crate::analysis_kit::AnalysisKit;
-use crate::referent::Referent;
-use crate::token::{Token, TokenRef, TokenKind};
-use crate::source_of_analysis::SourceOfAnalysis;
+use crate::analyzer::Analyzer;
 use crate::geo::geo_referent as gr;
 use crate::geo::geo_table::{self, GeoEntry, GeoEntryKind};
-use crate::address::street_table;
 use crate::person::person_item_token;
+use crate::referent::Referent;
+use crate::source_of_analysis::SourceOfAnalysis;
+use crate::token::{Token, TokenKind, TokenRef};
 
 pub struct GeoAnalyzer;
 
 impl GeoAnalyzer {
-    pub fn new() -> Self { GeoAnalyzer }
+    pub fn new() -> Self {
+        GeoAnalyzer
+    }
 }
 
 impl Analyzer for GeoAnalyzer {
-    fn name(&self) -> &'static str { "GEO" }
-    fn caption(&self) -> &'static str { "Страны, регионы, города" }
+    fn name(&self) -> &'static str {
+        "GEO"
+    }
+    fn caption(&self) -> &'static str {
+        "Страны, регионы, города"
+    }
 
     fn process(&self, kit: &mut AnalysisKit) {
         let sofa = kit.sofa.clone();
@@ -41,14 +46,14 @@ impl Analyzer for GeoAnalyzer {
                 }
             }
             match try_parse(&t, &sofa) {
-                None => { cur = t.borrow().next.clone(); }
+                None => {
+                    cur = t.borrow().next.clone();
+                }
                 Some((referent, end)) => {
                     let r_rc = Rc::new(RefCell::new(referent));
                     let r_rc = kit.add_entity(r_rc);
                     let begin = geo_occurrence_begin(&t, &sofa).unwrap_or_else(|| t.clone());
-                    let tok = Rc::new(RefCell::new(
-                        Token::new_referent(begin, end, r_rc)
-                    ));
+                    let tok = Rc::new(RefCell::new(Token::new_referent(begin, end, r_rc)));
                     kit.embed_token(tok.clone());
                     cur = tok.borrow().next.clone();
                 }
@@ -104,8 +109,12 @@ fn try_parse(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Referent, TokenRe
                     let is_verb_form = wf.base.class.is_verb();
                     if let Some(nc) = &wf.normal_case {
                         if !is_verb_form {
-                            if !is_cp { is_cp = geo_table::is_city_prefix(nc); }
-                            if !is_cpa { is_cpa = geo_table::is_city_prefix_abbrev(nc); }
+                            if !is_cp {
+                                is_cp = geo_table::is_city_prefix(nc);
+                            }
+                            if !is_cpa {
+                                is_cpa = geo_table::is_city_prefix_abbrev(nc);
+                            }
                             if tkw.is_none() {
                                 tkw = geo_table::type_keyword(nc).map(|(s, _)| s);
                             }
@@ -113,14 +122,20 @@ fn try_parse(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Referent, TokenRe
                     }
                     if let Some(nf) = &wf.normal_full {
                         if !is_verb_form {
-                            if !is_cp { is_cp = geo_table::is_city_prefix(nf); }
-                            if !is_cpa { is_cpa = geo_table::is_city_prefix_abbrev(nf); }
+                            if !is_cp {
+                                is_cp = geo_table::is_city_prefix(nf);
+                            }
+                            if !is_cpa {
+                                is_cpa = geo_table::is_city_prefix_abbrev(nf);
+                            }
                             if tkw.is_none() {
                                 tkw = geo_table::type_keyword(nf).map(|(s, _)| s);
                             }
                         }
                     }
-                    if is_cp && tkw.is_some() { break; }
+                    if is_cp && tkw.is_some() {
+                        break;
+                    }
                 }
                 (is_cp, is_cpa, tkw)
             }
@@ -159,7 +174,11 @@ fn try_parse(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Referent, TokenRe
 //
 // "г. Москва", "город Москва", "г Москва"
 
-fn try_city_prefix(t: &TokenRef, is_abbrev: bool, sofa: &SourceOfAnalysis) -> Option<(Referent, TokenRef)> {
+fn try_city_prefix(
+    t: &TokenRef,
+    is_abbrev: bool,
+    sofa: &SourceOfAnalysis,
+) -> Option<(Referent, TokenRef)> {
     let requires_dot = {
         let tb = t.borrow();
         matches!(&tb.kind, TokenKind::Text(txt) if matches!(txt.term.as_str(), "С" | "П"))
@@ -198,10 +217,29 @@ fn try_city_from_name(
     {
         let tb = name_tok.borrow();
         if let TokenKind::Text(txt) = &tb.kind {
-            if matches!(txt.term.as_str(),
-                "Я" | "МЫ" | "ТЫ" | "ВЫ" | "ОН" | "ОНА" | "ОНО" | "ОНИ" |
-                "НО" | "А" | "И" | "ИЛИ" | "ЧТО" | "КТО" | "КАК" |
-                "НЕ" | "НИ" | "ДА" | "НЕТ" | "ЕСЛИ" | "ТО" | "АЛЕ"
+            if matches!(
+                txt.term.as_str(),
+                "Я" | "МЫ"
+                    | "ТЫ"
+                    | "ВЫ"
+                    | "ОН"
+                    | "ОНА"
+                    | "ОНО"
+                    | "ОНИ"
+                    | "НО"
+                    | "А"
+                    | "И"
+                    | "ИЛИ"
+                    | "ЧТО"
+                    | "КТО"
+                    | "КАК"
+                    | "НЕ"
+                    | "НИ"
+                    | "ДА"
+                    | "НЕТ"
+                    | "ЕСЛИ"
+                    | "ТО"
+                    | "АЛЕ"
             ) {
                 return None;
             }
@@ -246,9 +284,12 @@ fn try_city_from_name(
         }
     }
     if let Some((name, end_tok)) = collect_prefix_geo_name(name_tok, sofa) {
-        let is_person_name = name_tok.borrow().morph.items().iter().any(|wf|
-            wf.base.class.is_proper_name() || wf.base.class.is_proper_surname()
-        );
+        let is_person_name = name_tok
+            .borrow()
+            .morph
+            .items()
+            .iter()
+            .any(|wf| wf.base.class.is_proper_name() || wf.base.class.is_proper_surname());
         if is_person_name && !is_trusted_geo_prefix(_begin, sofa) {
             return None;
         }
@@ -264,13 +305,19 @@ fn try_city_from_name(
     let tb = name_tok.borrow();
     if let TokenKind::Text(_) = &tb.kind {
         let surface = sofa.substring(tb.begin_char, tb.end_char);
-        if surface.chars().next().map(|c| c.is_uppercase()).unwrap_or(false)
+        if surface
+            .chars()
+            .next()
+            .map(|c| c.is_uppercase())
+            .unwrap_or(false)
             && !tb.chars.is_all_lower()
         {
             // Reject proper person names / surnames used as "city" fallback
-            let is_person_name = tb.morph.items().iter().any(|wf|
-                wf.base.class.is_proper_name() || wf.base.class.is_proper_surname()
-            );
+            let is_person_name = tb
+                .morph
+                .items()
+                .iter()
+                .any(|wf| wf.base.class.is_proper_name() || wf.base.class.is_proper_surname());
             if !is_person_name {
                 drop(tb);
                 // Try multi-word hyphenated city (e.g. "Санкт-Петербург")
@@ -301,13 +348,20 @@ fn try_type_keyword_prefix(
     if let TokenKind::Text(txt) = &nb.kind {
         // Must start with uppercase (proper noun or adjective)
         let surface = sofa.substring(nb.begin_char, nb.end_char);
-        if !surface.chars().next().map(|c| c.is_uppercase()).unwrap_or(false) {
+        if !surface
+            .chars()
+            .next()
+            .map(|c| c.is_uppercase())
+            .unwrap_or(false)
+        {
             return None;
         }
         // term is already uppercase from morph engine
         let name = txt.term.clone();
         // Compute Cyrillic flag while nb is still borrowed.
-        let has_cyrillic = surface.chars().any(|c| ('\u{0400}'..='\u{04FF}').contains(&c));
+        let has_cyrillic = surface
+            .chars()
+            .any(|c| ('\u{0400}'..='\u{04FF}').contains(&c));
         drop(nb);
 
         // Try looking up the name directly
@@ -339,9 +393,10 @@ fn try_type_keyword_prefix(
         if has_cyrillic {
             let is_person_name = {
                 let nb2 = next.borrow();
-                nb2.morph.items().iter().any(|wf|
-                    wf.base.class.is_proper_name() || wf.base.class.is_proper_surname()
-                )
+                nb2.morph
+                    .items()
+                    .iter()
+                    .any(|wf| wf.base.class.is_proper_name() || wf.base.class.is_proper_surname())
             };
             if !is_person_name {
                 let (full_name, end_tok) = collect_hyphenated_name(&next, sofa);
@@ -368,14 +423,32 @@ fn try_direct_name(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Referent, T
     // O(1) length via length_char(), O(1) first char via sofa.char_at().
     // is_all_ascii is computed once from txt.term bytes (txt.term IS uppercase surface),
     // avoiding 3× repeated surface.chars() scans in the candidates loop.
-    let (term, char_count, first_char, is_all_ascii, is_adj, is_all_upper): (String, i32, char, bool, bool, bool) = {
+    let (term, char_count, first_char, is_all_ascii, is_adj, is_all_upper): (
+        String,
+        i32,
+        char,
+        bool,
+        bool,
+        bool,
+    ) = {
         let tb = t.borrow();
         match &tb.kind {
             TokenKind::Text(txt) => {
                 let fc = sofa.char_at(tb.begin_char);
                 let all_ascii = txt.term.bytes().all(|b| b.is_ascii_alphabetic());
-                let adj = tb.morph.items().iter().any(|wf| wf.base.class.is_adjective());
-                (txt.term.clone(), tb.length_char(), fc, all_ascii, adj, tb.chars.is_all_upper())
+                let adj = tb
+                    .morph
+                    .items()
+                    .iter()
+                    .any(|wf| wf.base.class.is_adjective());
+                (
+                    txt.term.clone(),
+                    tb.length_char(),
+                    fc,
+                    all_ascii,
+                    adj,
+                    tb.chars.is_all_upper(),
+                )
             }
             _ => return None,
         }
@@ -389,11 +462,27 @@ fn try_direct_name(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Referent, T
 
     // Guard 1b — Russian function words (conjunctions, particles) that begin a
     //   sentence with an uppercase letter but are never place names.
-    if matches!(term.as_str(),
-        "ЕСЛИ" | "КОГДА" | "ХОТЯ" | "ПОКА" | "ПУСТЬ" | "ПОТОМУ" |
-        "ПОЭТОМУ" | "ОДНАКО" | "ЗАТО" | "ЛИБО" | "ТОЖЕ" | "ТАКЖЕ" |
-        "КОТОРЫЙ" | "КОТОРАЯ" | "КОТОРОЕ" | "КОТОРЫЕ" |
-        "ЧТОБЫ" | "ПРИЧЁМ" | "ПРИТОМ"
+    if matches!(
+        term.as_str(),
+        "ЕСЛИ"
+            | "КОГДА"
+            | "ХОТЯ"
+            | "ПОКА"
+            | "ПУСТЬ"
+            | "ПОТОМУ"
+            | "ПОЭТОМУ"
+            | "ОДНАКО"
+            | "ЗАТО"
+            | "ЛИБО"
+            | "ТОЖЕ"
+            | "ТАКЖЕ"
+            | "КОТОРЫЙ"
+            | "КОТОРАЯ"
+            | "КОТОРОЕ"
+            | "КОТОРЫЕ"
+            | "ЧТОБЫ"
+            | "ПРИЧЁМ"
+            | "ПРИТОМ"
     ) {
         return None;
     }
@@ -426,12 +515,17 @@ fn try_direct_name(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Referent, T
         }
     }
 
-    let has_adjacent_hyphen = t.borrow().next.as_ref().map(|next| {
-        let nb = next.borrow();
-        nb.whitespaces_before_count(sofa) == 0
-            && nb.length_char() == 1
-            && matches!(sofa.char_at(nb.begin_char), '-' | '\u{2013}' | '\u{2014}')
-    }).unwrap_or(false);
+    let has_adjacent_hyphen = t
+        .borrow()
+        .next
+        .as_ref()
+        .map(|next| {
+            let nb = next.borrow();
+            nb.whitespaces_before_count(sofa) == 0
+                && nb.length_char() == 1
+                && matches!(sofa.char_at(nb.begin_char), '-' | '\u{2013}' | '\u{2014}')
+        })
+        .unwrap_or(false);
 
     let mut candidates: Option<Vec<String>> = None;
 
@@ -486,13 +580,16 @@ fn try_direct_name(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Referent, T
 }
 
 fn followed_by_person_name_part(t: &TokenRef) -> bool {
-    t.borrow().next.as_ref()
+    t.borrow()
+        .next
+        .as_ref()
         .map(|next| {
             let nb = next.borrow();
             if let TokenKind::Text(_) = &nb.kind {
-                nb.morph.items().iter().any(|wf|
-                    wf.base.class.is_proper_secname() || wf.base.class.is_proper_name()
-                )
+                nb.morph
+                    .items()
+                    .iter()
+                    .any(|wf| wf.base.class.is_proper_secname() || wf.base.class.is_proper_name())
             } else {
                 false
             }
@@ -522,48 +619,72 @@ fn try_make_direct_geo(
             ),
             GeoEntryKind::State => false,
         };
-        if should_block { return None; }
+        if should_block {
+            return None;
+        }
     }
 
     if matches!(entry.kind, GeoEntryKind::City | GeoEntryKind::Region) && is_all_ascii {
-        if in_person_name_context(t, sofa) { return None; }
+        if in_person_name_context(t, sofa) {
+            return None;
+        }
     }
 
     if matches!(entry.kind, GeoEntryKind::City | GeoEntryKind::Region) {
-        if preceded_by_street_type(t, sofa) { return None; }
+        if preceded_by_street_type(t, sofa) {
+            return None;
+        }
     }
 
     if matches!(entry.kind, GeoEntryKind::City | GeoEntryKind::Region) && !is_all_ascii {
-        if followed_by_person_name_part(t) { return None; }
+        if followed_by_person_name_part(t) {
+            return None;
+        }
     }
 
     if matches!(entry.kind, GeoEntryKind::City | GeoEntryKind::Region) && !is_all_ascii {
-        if preceded_by_patronymic(t) { return None; }
+        if preceded_by_patronymic(t) {
+            return None;
+        }
     }
 
     if matches!(entry.kind, GeoEntryKind::City | GeoEntryKind::Region) && !is_all_ascii {
         let is_surname = {
             let tb = t.borrow();
-            tb.morph.items().iter().any(|wf| wf.base.class.is_proper_surname())
+            tb.morph
+                .items()
+                .iter()
+                .any(|wf| wf.base.class.is_proper_surname())
         };
         if is_surname {
-            let prev_is_name_context = t.borrow().prev.as_ref()
+            let prev_is_name_context = t
+                .borrow()
+                .prev
+                .as_ref()
                 .and_then(|w| w.upgrade())
                 .map(|prev| {
                     let pb = prev.borrow();
                     if let TokenKind::Text(_) = &pb.kind {
-                        pb.morph.items().iter().any(|wf|
+                        pb.morph.items().iter().any(|wf| {
                             wf.base.class.is_proper_secname() || wf.base.class.is_proper_name()
-                        )
+                        })
                     } else {
                         false
                     }
                 })
                 .unwrap_or(false);
-            if prev_is_name_context { return None; }
-            if followed_by_initials(t, sofa) { return None; }
-            if preceded_by_initials(t, sofa) { return None; }
-            if preceded_by_person_title(t, sofa) { return None; }
+            if prev_is_name_context {
+                return None;
+            }
+            if followed_by_initials(t, sofa) {
+                return None;
+            }
+            if preceded_by_initials(t, sofa) {
+                return None;
+            }
+            if preceded_by_person_title(t, sofa) {
+                return None;
+            }
         }
     }
 
@@ -580,12 +701,17 @@ fn try_make_direct_geo(
 }
 
 fn preceded_by_patronymic(t: &TokenRef) -> bool {
-    t.borrow().prev.as_ref()
+    t.borrow()
+        .prev
+        .as_ref()
         .and_then(|w| w.upgrade())
         .map(|prev| {
             let pb = prev.borrow();
             if let TokenKind::Text(txt) = &pb.kind {
-                pb.morph.items().iter().any(|wf| wf.base.class.is_proper_secname())
+                pb.morph
+                    .items()
+                    .iter()
+                    .any(|wf| wf.base.class.is_proper_secname())
                     || person_item_token::ends_with_std_patronymic(&txt.term).is_some()
             } else {
                 false
@@ -606,24 +732,34 @@ fn try_hyphenated_name(
     let hyp = t.borrow().next.clone()?;
     {
         let hb = hyp.borrow();
-        if hb.whitespaces_before_count(sofa) != 0 { return None; }
-        if hb.length_char() != 1 { return None; }
+        if hb.whitespaces_before_count(sofa) != 0 {
+            return None;
+        }
+        if hb.length_char() != 1 {
+            return None;
+        }
         let ch = sofa.char_at(hb.begin_char);
-        if ch != '-' && ch != '\u{2013}' && ch != '\u{2014}' { return None; }
+        if ch != '-' && ch != '\u{2013}' && ch != '\u{2014}' {
+            return None;
+        }
     }
 
     // Collect segments: start with token after hyphen, keep going while
     // the pattern continues as "-Word".
-    let mut segments: Vec<TokenRef> = Vec::new();  // the Word tokens after each hyphen
-    let mut hyphens: Vec<TokenRef> = Vec::new();   // the hyphen tokens
+    let mut segments: Vec<TokenRef> = Vec::new(); // the Word tokens after each hyphen
+    let mut hyphens: Vec<TokenRef> = Vec::new(); // the hyphen tokens
     {
         let mut cur_hyp = hyp.clone();
         loop {
             let word = cur_hyp.borrow().next.clone()?;
             {
                 let wb = word.borrow();
-                if wb.whitespaces_before_count(sofa) != 0 { break; }
-                if !matches!(wb.kind, TokenKind::Text(_)) { break; }
+                if wb.whitespaces_before_count(sofa) != 0 {
+                    break;
+                }
+                if !matches!(wb.kind, TokenKind::Text(_)) {
+                    break;
+                }
             }
             hyphens.push(cur_hyp.clone());
             segments.push(word.clone());
@@ -634,22 +770,33 @@ fn try_hyphenated_name(
                 None => break,
                 Some(nh) => {
                     let nhb = nh.borrow();
-                    if nhb.whitespaces_before_count(sofa) != 0 { break; }
-                    if nhb.length_char() != 1 { break; }
+                    if nhb.whitespaces_before_count(sofa) != 0 {
+                        break;
+                    }
+                    if nhb.length_char() != 1 {
+                        break;
+                    }
                     let ch = sofa.char_at(nhb.begin_char);
-                    if ch != '-' && ch != '\u{2013}' && ch != '\u{2014}' { break; }
+                    if ch != '-' && ch != '\u{2013}' && ch != '\u{2014}' {
+                        break;
+                    }
                     drop(nhb);
                     cur_hyp = nh;
                 }
             }
-            if segments.len() >= 3 { break; } // max 3 segments (e.g. "Ростов-на-Дону")
+            if segments.len() >= 3 {
+                break;
+            } // max 3 segments (e.g. "Ростов-на-Дону")
         }
     }
 
-    if segments.is_empty() { return None; }
+    if segments.is_empty() {
+        return None;
+    }
 
     // Build candidate strings for each segment
-    let seg_candidates: Vec<Vec<String>> = segments.iter()
+    let seg_candidates: Vec<Vec<String>> = segments
+        .iter()
         .map(|s| collect_candidates(s, sofa))
         .collect();
 
@@ -682,11 +829,16 @@ fn try_hyphenated_name(
                     let mut valid = true;
                     for i in 1..num_segs {
                         let part_cands = &seg_candidates[i];
-                        if part_cands.is_empty() { valid = false; break; }
+                        if part_cands.is_empty() {
+                            valid = false;
+                            break;
+                        }
                         key.push('-');
                         key.push_str(&part_cands[0]);
                     }
-                    if !valid { continue; }
+                    if !valid {
+                        continue;
+                    }
                     if let Some(entry) = geo_table::lookup_name(&key) {
                         let mut r = gr::new_geo_referent();
                         gr::add_name(&mut r, &entry.canonical_name);
@@ -718,8 +870,12 @@ fn try_two_word_name(
     {
         let nb = next.borrow();
         // Only try if the next token is a text token with at most 1 space before it.
-        if nb.whitespaces_before_count(sofa) > 1 { return None; }
-        if !matches!(nb.kind, TokenKind::Text(_)) { return None; }
+        if nb.whitespaces_before_count(sofa) > 1 {
+            return None;
+        }
+        if !matches!(nb.kind, TokenKind::Text(_)) {
+            return None;
+        }
     }
 
     let second_candidates = collect_candidates(&next, sofa);
@@ -756,17 +912,25 @@ fn try_three_word_name(
     let second = t.borrow().next.clone()?;
     {
         let nb = second.borrow();
-        if nb.whitespaces_before_count(sofa) > 1 { return None; }
-        if !matches!(nb.kind, TokenKind::Text(_)) { return None; }
+        if nb.whitespaces_before_count(sofa) > 1 {
+            return None;
+        }
+        if !matches!(nb.kind, TokenKind::Text(_)) {
+            return None;
+        }
     }
     let third = second.borrow().next.clone()?;
     {
         let tb = third.borrow();
-        if tb.whitespaces_before_count(sofa) > 1 { return None; }
-        if !matches!(tb.kind, TokenKind::Text(_)) { return None; }
+        if tb.whitespaces_before_count(sofa) > 1 {
+            return None;
+        }
+        if !matches!(tb.kind, TokenKind::Text(_)) {
+            return None;
+        }
     }
     let second_candidates = collect_candidates(&second, sofa);
-    let third_candidates  = collect_candidates(&third, sofa);
+    let third_candidates = collect_candidates(&third, sofa);
 
     for c1 in first_candidates.iter().take(3) {
         for c2 in second_candidates.iter().take(3) {
@@ -775,9 +939,13 @@ fn try_three_word_name(
                 if let Some(entry) = geo_table::lookup_name(&key) {
                     let mut r = gr::new_geo_referent();
                     gr::add_name(&mut r, &entry.canonical_name);
-                    for n in &entry.all_names { gr::add_name(&mut r, n); }
+                    for n in &entry.all_names {
+                        gr::add_name(&mut r, n);
+                    }
                     gr::add_type(&mut r, &entry.type_str);
-                    if let Some(ref a2) = entry.alpha2 { gr::set_alpha2(&mut r, a2); }
+                    if let Some(ref a2) = entry.alpha2 {
+                        gr::set_alpha2(&mut r, a2);
+                    }
                     return Some((r, third.clone()));
                 }
             }
@@ -798,27 +966,42 @@ fn try_linebreak_join(
     let hyp = t.borrow().next.clone()?;
     {
         let hb = hyp.borrow();
-        if hb.whitespaces_before_count(sofa) != 0 { return None; }
-        if hb.length_char() != 1 { return None; }
+        if hb.whitespaces_before_count(sofa) != 0 {
+            return None;
+        }
+        if hb.length_char() != 1 {
+            return None;
+        }
         let ch = sofa.char_at(hb.begin_char);
-        if ch != '-' && ch != '\u{2013}' { return None; }
+        if ch != '-' && ch != '\u{2013}' {
+            return None;
+        }
     }
     let cont = hyp.borrow().next.clone()?;
     let cont_term: String = {
         let cb = cont.borrow();
         // Must have whitespace before it (newline gap)
-        if cb.whitespaces_before_count(sofa) == 0 { return None; }
+        if cb.whitespaces_before_count(sofa) == 0 {
+            return None;
+        }
         // The gap between hyphen end and cont begin must contain a newline
-        let hyp_end   = hyp.borrow().end_char;
+        let hyp_end = hyp.borrow().end_char;
         let cont_begin = cb.begin_char;
         let mut has_nl = false;
         for pos in (hyp_end + 1)..cont_begin {
-            if sofa.char_at(pos) == '\n' { has_nl = true; break; }
+            if sofa.char_at(pos) == '\n' {
+                has_nl = true;
+                break;
+            }
         }
-        if !has_nl { return None; }
+        if !has_nl {
+            return None;
+        }
         // Continuation must start with a lowercase letter (line-break word wrap)
         let fc = sofa.char_at(cb.begin_char);
-        if !fc.is_alphabetic() || !fc.is_lowercase() { return None; }
+        if !fc.is_alphabetic() || !fc.is_lowercase() {
+            return None;
+        }
         match &cb.kind {
             // term is already uppercase from morph engine
             TokenKind::Text(txt) => txt.term.clone(),
@@ -836,27 +1019,39 @@ fn try_linebreak_join(
             {
                 let after_cont_is_name = cont.borrow().next.clone().map_or(false, |nx| {
                     let nb = nx.borrow();
-                    if nb.whitespaces_before_count(sofa) != 1 { return false; }
-                    if !matches!(nb.kind, TokenKind::Text(_)) { return false; }
+                    if nb.whitespaces_before_count(sofa) != 1 {
+                        return false;
+                    }
+                    if !matches!(nb.kind, TokenKind::Text(_)) {
+                        return false;
+                    }
                     let s = sofa.substring(nb.begin_char, nb.end_char);
                     let mut cs = s.chars();
                     let f = cs.next();
                     let s2 = cs.next();
                     match (f, s2) {
-                        (Some(f), Some(s2)) =>
-                            f.is_ascii_alphabetic() && f.is_uppercase()
-                            && s2.is_ascii_alphabetic()
-                            && cs.all(|c| c.is_ascii_alphabetic()),
+                        (Some(f), Some(s2)) => {
+                            f.is_ascii_alphabetic()
+                                && f.is_uppercase()
+                                && s2.is_ascii_alphabetic()
+                                && cs.all(|c| c.is_ascii_alphabetic())
+                        }
                         _ => false,
                     }
                 });
-                if in_person_name_context(t, sofa) || after_cont_is_name { continue; }
+                if in_person_name_context(t, sofa) || after_cont_is_name {
+                    continue;
+                }
             }
             let mut r = gr::new_geo_referent();
             gr::add_name(&mut r, &entry.canonical_name);
-            for n in &entry.all_names { gr::add_name(&mut r, n); }
+            for n in &entry.all_names {
+                gr::add_name(&mut r, n);
+            }
             gr::add_type(&mut r, &entry.type_str);
-            if let Some(ref a2) = entry.alpha2 { gr::set_alpha2(&mut r, a2); }
+            if let Some(ref a2) = entry.alpha2 {
+                gr::set_alpha2(&mut r, a2);
+            }
             return Some((r, cont.clone()));
         }
     }
@@ -869,7 +1064,9 @@ fn try_linebreak_join(
 /// (walking backwards: dot, letter, dot, letter — with no whitespace between each).
 fn preceded_by_initials(t: &TokenRef, sofa: &SourceOfAnalysis) -> bool {
     let tb = t.borrow();
-    if tb.whitespaces_before_count(sofa) == 0 { return false; }
+    if tb.whitespaces_before_count(sofa) == 0 {
+        return false;
+    }
     // Walk backwards: expect "." "X" "." "X" (reverse of "X.X.")
     let dot1 = match tb.prev.as_ref().and_then(|w| w.upgrade()) {
         Some(d) => d,
@@ -878,8 +1075,12 @@ fn preceded_by_initials(t: &TokenRef, sofa: &SourceOfAnalysis) -> bool {
     drop(tb);
     {
         let db = dot1.borrow();
-        if db.length_char() != 1 || sofa.char_at(db.begin_char) != '.' { return false; }
-        if db.whitespaces_before_count(sofa) != 0 { return false; }
+        if db.length_char() != 1 || sofa.char_at(db.begin_char) != '.' {
+            return false;
+        }
+        if db.whitespaces_before_count(sofa) != 0 {
+            return false;
+        }
     }
     let letter1 = match dot1.borrow().prev.as_ref().and_then(|w| w.upgrade()) {
         Some(l) => l,
@@ -888,7 +1089,9 @@ fn preceded_by_initials(t: &TokenRef, sofa: &SourceOfAnalysis) -> bool {
     {
         let lb = letter1.borrow();
         let surface = sofa.substring(lb.begin_char, lb.end_char);
-        if surface.chars().count() != 1 { return false; }
+        if surface.chars().count() != 1 {
+            return false;
+        }
         let ch = match surface.chars().next() {
             Some(c) if c.is_uppercase() && c.is_alphabetic() => c,
             _ => return false,
@@ -908,12 +1111,19 @@ fn preceded_by_person_title(t: &TokenRef, sofa: &SourceOfAnalysis) -> bool {
     let pb = prev.borrow();
     if let TokenKind::Text(ref txt) = pb.kind {
         // Direct title match
-        if is_geo_person_title(&txt.term) { return true; }
+        if is_geo_person_title(&txt.term) {
+            return true;
+        }
         // Check morph lemma for declined forms
         let morph_match = pb.morph.items().iter().any(|wf| {
-            wf.normal_case.as_ref().map(|nc| is_geo_person_title(nc)).unwrap_or(false)
+            wf.normal_case
+                .as_ref()
+                .map(|nc| is_geo_person_title(nc))
+                .unwrap_or(false)
         });
-        if morph_match { return true; }
+        if morph_match {
+            return true;
+        }
     }
     drop(pb);
 
@@ -939,7 +1149,9 @@ fn preceded_by_person_title(t: &TokenRef, sofa: &SourceOfAnalysis) -> bool {
                     if let Some(g) = g {
                         let gb = g.borrow();
                         if let TokenKind::Text(ref txt) = gb.kind {
-                            if txt.term == "Г" { return true; }
+                            if txt.term == "Г" {
+                                return true;
+                            }
                         }
                     }
                 }
@@ -952,14 +1164,38 @@ fn preceded_by_person_title(t: &TokenRef, sofa: &SourceOfAnalysis) -> bool {
 
 /// Subset of person-title terms used by GEO guard to detect person context.
 fn is_geo_person_title(term: &str) -> bool {
-    matches!(term,
-        "ГОСПОДИН" | "ГОСПОЖА" | "ДИРЕКТОР" | "ПРЕЗИДЕНТ" | "МИНИСТР" |
-        "ПРОФЕССОР" | "ДОКТОР" | "ГРАЖДАНИН" | "ГРАЖДАНКА" |
-        "КЛИЕНТ" | "КЛИЕНТКА" | "ЮРИСТ" | "АДВОКАТ" | "ВРАЧ" |
-        "СУДЬЯ" | "ДЕПУТАТ" | "ГУБЕРНАТОР" | "ГЕНЕРАЛ" |
-        "АКАДЕМИК" | "РЕКТОР" | "ДЕКАН" | "НАЧАЛЬНИК" |
-        "РУКОВОДИТЕЛЬ" | "ЗАМЕСТИТЕЛЬ" | "СЕКРЕТАРЬ" |
-        "ТОВАРИЩ" | "MR" | "MRS" | "MS" | "DR"
+    matches!(
+        term,
+        "ГОСПОДИН"
+            | "ГОСПОЖА"
+            | "ДИРЕКТОР"
+            | "ПРЕЗИДЕНТ"
+            | "МИНИСТР"
+            | "ПРОФЕССОР"
+            | "ДОКТОР"
+            | "ГРАЖДАНИН"
+            | "ГРАЖДАНКА"
+            | "КЛИЕНТ"
+            | "КЛИЕНТКА"
+            | "ЮРИСТ"
+            | "АДВОКАТ"
+            | "ВРАЧ"
+            | "СУДЬЯ"
+            | "ДЕПУТАТ"
+            | "ГУБЕРНАТОР"
+            | "ГЕНЕРАЛ"
+            | "АКАДЕМИК"
+            | "РЕКТОР"
+            | "ДЕКАН"
+            | "НАЧАЛЬНИК"
+            | "РУКОВОДИТЕЛЬ"
+            | "ЗАМЕСТИТЕЛЬ"
+            | "СЕКРЕТАРЬ"
+            | "ТОВАРИЩ"
+            | "MR"
+            | "MRS"
+            | "MS"
+            | "DR"
     )
 }
 
@@ -973,24 +1209,34 @@ fn preceded_by_street_type(t: &TokenRef, sofa: &SourceOfAnalysis) -> bool {
     let pb = prev.borrow();
     if let TokenKind::Text(ref txt) = pb.kind {
         // Check surface term
-        if street_table::lookup_street_type(&txt.term).is_some() { return true; }
+        if street_table::lookup_street_type(&txt.term).is_some() {
+            return true;
+        }
         // Check morph normal forms (for declined forms like "проспекту")
         if pb.morph.items().iter().any(|wf| {
-            wf.normal_case.as_deref().map_or(false, |s| street_table::lookup_street_type(s).is_some())
-            || wf.normal_full.as_deref().map_or(false, |s| street_table::lookup_street_type(s).is_some())
+            wf.normal_case
+                .as_deref()
+                .map_or(false, |s| street_table::lookup_street_type(s).is_some())
+                || wf
+                    .normal_full
+                    .as_deref()
+                    .map_or(false, |s| street_table::lookup_street_type(s).is_some())
         }) {
             return true;
         }
     }
     // Also check if prev is a dot preceded by a street abbreviation (e.g. "ул." → [ул][.])
-    if let TokenKind::Text(_) = pb.kind {} else {
+    if let TokenKind::Text(_) = pb.kind {
+    } else {
         drop(pb);
         let pb2 = prev.borrow();
         if pb2.length_char() == 1 && sofa.char_at(pb2.begin_char) == '.' {
             if let Some(before_dot) = pb2.prev.as_ref().and_then(|w| w.upgrade()) {
                 let bb = before_dot.borrow();
                 if let TokenKind::Text(ref txt) = bb.kind {
-                    if street_table::lookup_street_type(&txt.term).is_some() { return true; }
+                    if street_table::lookup_street_type(&txt.term).is_some() {
+                        return true;
+                    }
                 }
             }
         }
@@ -1004,9 +1250,13 @@ fn followed_by_initials(t: &TokenRef, sofa: &SourceOfAnalysis) -> bool {
         None => return false,
     };
     let nb = next.borrow();
-    if nb.whitespaces_before_count(sofa) == 0 { return false; }
+    if nb.whitespaces_before_count(sofa) == 0 {
+        return false;
+    }
     let surface = sofa.substring(nb.begin_char, nb.end_char);
-    if surface.chars().count() != 1 { return false; }
+    if surface.chars().count() != 1 {
+        return false;
+    }
     let ch = match surface.chars().next() {
         Some(c) if c.is_uppercase() && c.is_alphabetic() => c,
         _ => return false,
@@ -1018,7 +1268,9 @@ fn followed_by_initials(t: &TokenRef, sofa: &SourceOfAnalysis) -> bool {
     };
     drop(nb);
     let db = dot.borrow();
-    db.whitespaces_before_count(sofa) == 0 && db.length_char() == 1 && sofa.char_at(db.begin_char) == '.'
+    db.whitespaces_before_count(sofa) == 0
+        && db.length_char() == 1
+        && sofa.char_at(db.begin_char) == '.'
 }
 
 /// Returns true if the token appears to be in a person-name context:
@@ -1028,7 +1280,9 @@ fn followed_by_initials(t: &TokenRef, sofa: &SourceOfAnalysis) -> bool {
 fn in_person_name_context(t: &TokenRef, sofa: &SourceOfAnalysis) -> bool {
     let is_ascii_name_candidate = |tok: &TokenRef| -> bool {
         let tb = tok.borrow();
-        if !matches!(tb.kind, TokenKind::Text(_)) { return false; }
+        if !matches!(tb.kind, TokenKind::Text(_)) {
+            return false;
+        }
         let s = sofa.substring(tb.begin_char, tb.end_char);
         // Use iterator instead of Vec<char> allocation
         let mut chars = s.chars();
@@ -1036,21 +1290,35 @@ fn in_person_name_context(t: &TokenRef, sofa: &SourceOfAnalysis) -> bool {
             Some(c) => c,
             None => return false,
         };
-        if !first.is_ascii_alphabetic() || !first.is_uppercase() { return false; }
+        if !first.is_ascii_alphabetic() || !first.is_uppercase() {
+            return false;
+        }
         // Need at least 2 chars total
         let second = match chars.next() {
             Some(c) => c,
             None => return false,
         };
-        if !second.is_ascii_alphabetic() { return false; }
-        if !chars.all(|c| c.is_ascii_alphabetic()) { return false; }
+        if !second.is_ascii_alphabetic() {
+            return false;
+        }
+        if !chars.all(|c| c.is_ascii_alphabetic()) {
+            return false;
+        }
         // term is already uppercase from morph engine — use it directly
-        let term = if let TokenKind::Text(txt) = &tb.kind { &txt.term } else { return true; };
+        let term = if let TokenKind::Text(txt) = &tb.kind {
+            &txt.term
+        } else {
+            return true;
+        };
         match geo_table::lookup_name(term) {
             None => true,
-            Some(entry) => matches!(entry.kind, GeoEntryKind::Region)
-                && matches!(entry.type_str.as_str(),
-                    "county" | "графство" | "район" | "уезд" | "волость" | "district"),
+            Some(entry) => {
+                matches!(entry.kind, GeoEntryKind::Region)
+                    && matches!(
+                        entry.type_str.as_str(),
+                        "county" | "графство" | "район" | "уезд" | "волость" | "district"
+                    )
+            }
         }
     };
 
@@ -1109,8 +1377,14 @@ fn in_person_name_context(t: &TokenRef, sofa: &SourceOfAnalysis) -> bool {
 
 fn try_adjective_plus_type(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Referent, TokenRef)> {
     let tb = t.borrow();
-    let is_adj = tb.morph.items().iter().any(|wf| wf.base.class.is_adjective());
-    if !is_adj { return None; }
+    let is_adj = tb
+        .morph
+        .items()
+        .iter()
+        .any(|wf| wf.base.class.is_adjective());
+    if !is_adj {
+        return None;
+    }
 
     // Collect adjective candidate strings
     let candidates = collect_candidates(t, sofa);
@@ -1175,10 +1449,14 @@ fn token_type_keyword(t: &TokenRef) -> Option<&'static str> {
         }
         for wf in tb.morph.items() {
             if let Some(nc) = &wf.normal_case {
-                if let Some((s, _)) = geo_table::type_keyword(nc) { return Some(s); }
+                if let Some((s, _)) = geo_table::type_keyword(nc) {
+                    return Some(s);
+                }
             }
             if let Some(nf) = &wf.normal_full {
-                if let Some((s, _)) = geo_table::type_keyword(nf) { return Some(s); }
+                if let Some((s, _)) = geo_table::type_keyword(nf) {
+                    return Some(s);
+                }
             }
         }
     }
@@ -1197,10 +1475,14 @@ fn collect_candidates(t: &TokenRef, sofa: &SourceOfAnalysis) -> Vec<String> {
         // morph normal forms (already uppercase)
         for wf in tb.morph.items() {
             if let Some(nc) = &wf.normal_case {
-                if !out.iter().any(|o| o == nc) { out.push(nc.clone()); }
+                if !out.iter().any(|o| o == nc) {
+                    out.push(nc.clone());
+                }
             }
             if let Some(nf) = &wf.normal_full {
-                if !out.iter().any(|o| o == nf) { out.push(nf.clone()); }
+                if !out.iter().any(|o| o == nf) {
+                    out.push(nf.clone());
+                }
             }
         }
     }
@@ -1253,14 +1535,18 @@ fn follows_person_initial(t: &TokenRef, sofa: &SourceOfAnalysis) -> bool {
         let tb = t.borrow();
         tb.prev.as_ref().and_then(|w| w.upgrade())
     };
-    let Some(prev_dot) = prev_dot else { return false };
+    let Some(prev_dot) = prev_dot else {
+        return false;
+    };
     let pdb = prev_dot.borrow();
     if pdb.length_char() != 1 || sofa.char_at(pdb.begin_char) != '.' {
         return false;
     }
     let prev_letter = pdb.prev.as_ref().and_then(|w| w.upgrade());
     drop(pdb);
-    let Some(prev_letter) = prev_letter else { return false };
+    let Some(prev_letter) = prev_letter else {
+        return false;
+    };
     let plb = prev_letter.borrow();
     if plb.end_char + 1 != prev_dot.borrow().begin_char {
         return false;
@@ -1268,7 +1554,11 @@ fn follows_person_initial(t: &TokenRef, sofa: &SourceOfAnalysis) -> bool {
     if let TokenKind::Text(_) = &plb.kind {
         let surface = sofa.substring(plb.begin_char, plb.end_char);
         return surface.chars().count() == 1
-            && surface.chars().next().map(|c| c.is_uppercase()).unwrap_or(false);
+            && surface
+                .chars()
+                .next()
+                .map(|c| c.is_uppercase())
+                .unwrap_or(false);
     }
     false
 }
@@ -1304,8 +1594,12 @@ fn collect_prefix_geo_name(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Str
 
     while let Some(tok) = cur.clone() {
         let tb = tok.borrow();
-        if !matches!(tb.kind, TokenKind::Text(_)) { break; }
-        if !Rc::ptr_eq(&tok, t) && tb.whitespaces_before_count(sofa) > 1 { break; }
+        if !matches!(tb.kind, TokenKind::Text(_)) {
+            break;
+        }
+        if !Rc::ptr_eq(&tok, t) && tb.whitespaces_before_count(sofa) > 1 {
+            break;
+        }
         let surface = sofa.substring(tb.begin_char, tb.end_char);
         let first = surface.chars().next().unwrap_or(' ');
         let term = match &tb.kind {
@@ -1332,7 +1626,9 @@ fn collect_prefix_geo_name(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Str
                 }
             }
         }
-        if parts.len() >= 4 { break; }
+        if parts.len() >= 4 {
+            break;
+        }
     }
 
     if parts.is_empty() {

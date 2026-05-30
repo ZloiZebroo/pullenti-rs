@@ -1,12 +1,11 @@
 /// DenominationReferent — alphanumeric code/designation (e.g. "C#", "A-320", "1С").
 /// Mirrors `DenominationReferent.cs`.
-
 use crate::referent::{Referent, SlotValue};
-use crate::token::{TokenRef, TokenKind};
 use crate::source_of_analysis::SourceOfAnalysis;
+use crate::token::{TokenKind, TokenRef};
 
 pub const OBJ_TYPENAME: &str = "DENOMINATION";
-pub const ATTR_VALUE:   &str = "VALUE";
+pub const ATTR_VALUE: &str = "VALUE";
 
 pub fn new_denomination_referent() -> Referent {
     Referent::new(OBJ_TYPENAME)
@@ -18,7 +17,12 @@ pub fn get_value(r: &Referent) -> Option<String> {
 
 /// Build the canonical value string by iterating tokens begin..=end,
 /// normalising separators and stripping hyphens between letter↔digit.
-pub fn add_value_from_tokens(r: &mut Referent, begin: &TokenRef, end: &TokenRef, sofa: &SourceOfAnalysis) {
+pub fn add_value_from_tokens(
+    r: &mut Referent,
+    begin: &TokenRef,
+    end: &TokenRef,
+    sofa: &SourceOfAnalysis,
+) {
     let mut tmp = String::new();
     let end_char = end.borrow().end_char;
 
@@ -26,7 +30,9 @@ pub fn add_value_from_tokens(r: &mut Referent, begin: &TokenRef, end: &TokenRef,
     while let Some(t) = cur {
         {
             let tb = t.borrow();
-            if tb.begin_char > end_char { break; }
+            if tb.begin_char > end_char {
+                break;
+            }
             match &tb.kind {
                 TokenKind::Number(_) => {
                     tmp.push_str(tb.get_source_text(sofa));
@@ -42,7 +48,9 @@ pub fn add_value_from_tokens(r: &mut Referent, begin: &TokenRef, end: &TokenRef,
             }
         }
         let next = t.borrow().next.clone();
-        if t.borrow().end_char >= end_char { break; }
+        if t.borrow().end_char >= end_char {
+            break;
+        }
         cur = next;
     }
 
@@ -57,9 +65,11 @@ pub fn add_value_from_tokens(r: &mut Referent, begin: &TokenRef, end: &TokenRef,
             let c0 = chars[i - 1];
             let c1 = chars[i + 1];
             if c0.is_ascii_digit() && !c1.is_ascii_digit() {
-                i += 1; continue; // digit-letter: remove
+                i += 1;
+                continue; // digit-letter: remove
             } else if c1.is_ascii_digit() && !c0.is_ascii_digit() {
-                i += 1; continue; // letter-digit: remove
+                i += 1;
+                continue; // letter-digit: remove
             }
         }
         out.push(c);

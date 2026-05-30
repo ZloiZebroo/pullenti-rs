@@ -1,5 +1,4 @@
 /// ChemicalFormulaReferent — mirrors `ChemicalFormulaReferent.cs`.
-
 use crate::referent::{Referent, SlotValue};
 
 pub const OBJ_TYPENAME: &str = "CHEMICALFORMULA";

@@ -1,28 +1,29 @@
-/// Bank data analyzer — ports BankAnalyzer.cs.
-
-use std::rc::Rc;
 use std::cell::RefCell;
+/// Bank data analyzer — ports BankAnalyzer.cs.
+use std::rc::Rc;
 
-use crate::analyzer::Analyzer;
 use crate::analysis_kit::AnalysisKit;
-use crate::referent::{Referent, SlotValue};
-use crate::token::{Token, TokenRef, TokenKind};
-use crate::source_of_analysis::SourceOfAnalysis;
+use crate::analyzer::Analyzer;
 use crate::bank::bank_referent as br;
+use crate::referent::{Referent, SlotValue};
+use crate::source_of_analysis::SourceOfAnalysis;
+use crate::token::{Token, TokenKind, TokenRef};
 use crate::uri::uri_referent as ur;
 
 pub struct BankAnalyzer;
 
 impl BankAnalyzer {
-    pub fn new() -> Self { BankAnalyzer }
+    pub fn new() -> Self {
+        BankAnalyzer
+    }
 }
 
 // ── Keyword detection ─────────────────────────────────────────────────────────
 
 fn try_keyword(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(TokenRef, TokenRef)> {
     // Two-word: БАНКОВСКИЕ/ПЛАТЕЖНЫЕ РЕКВИЗИТЫ
-    let is_prefix = t.borrow().is_value("БАНКОВСКИЕ", None)
-        || t.borrow().is_value("ПЛАТЕЖНЫЕ", None);
+    let is_prefix =
+        t.borrow().is_value("БАНКОВСКИЕ", None) || t.borrow().is_value("ПЛАТЕЖНЫЕ", None);
     if is_prefix {
         let n1 = t.borrow().next.clone()?;
         if n1.borrow().is_value("РЕКВИЗИТЫ", None) {
@@ -54,8 +55,12 @@ fn skip_colon(t: Option<TokenRef>, sofa: &SourceOfAnalysis) -> Option<TokenRef> 
 // ── Analyzer impl ─────────────────────────────────────────────────────────────
 
 impl Analyzer for BankAnalyzer {
-    fn name(&self) -> &'static str { "BANKDATA" }
-    fn caption(&self) -> &'static str { "Банковские данные" }
+    fn name(&self) -> &'static str {
+        "BANKDATA"
+    }
+    fn caption(&self) -> &'static str {
+        "Банковские данные"
+    }
 
     fn process(&self, kit: &mut AnalysisKit) {
         let sofa = kit.sofa.clone();
@@ -113,7 +118,13 @@ impl Analyzer for BankAnalyzer {
 macro_rules! advance {
     ($t:ident) => {{
         let _next = $t.borrow().next.clone();
-        match _next { None => break, Some(x) => { $t = x; continue; } }
+        match _next {
+            None => break,
+            Some(x) => {
+                $t = x;
+                continue;
+            }
+        }
     }};
 }
 
@@ -135,7 +146,9 @@ fn try_attach(
 
     loop {
         // Table-control char breaks (except at the start)
-        if !Rc::ptr_eq(&t, t_start) && t.borrow().is_table_control_char(sofa) { break; }
+        if !Rc::ptr_eq(&t, t_start) && t.borrow().is_table_control_char(sofa) {
+            break;
+        }
 
         // Skip commas and slashes
         if t.borrow().is_char(',', sofa) || t.borrow().is_char_of("/\\", sofa) {
@@ -144,9 +157,15 @@ fn try_attach(
 
         // Skip prepositions
         if matches!(&t.borrow().kind, TokenKind::Text(_)) {
-            let is_prep = t.borrow().morph.items().iter()
+            let is_prep = t
+                .borrow()
+                .morph
+                .items()
+                .iter()
                 .any(|wf| wf.base.class.is_preposition());
-            if is_prep { advance!(t); }
+            if is_prep {
+                advance!(t);
+            }
         }
 
         // Skip "ПОЛНЫЙ НАИМЕНОВАНИЕ/НАЗВАНИЕ"
@@ -157,7 +176,10 @@ fn try_attach(
                     || n1.borrow().is_value("НАЗВАНИЕ", None)
                 {
                     let nn = n1.borrow().next.clone();
-                    t = match nn { None => break, Some(x) => x };
+                    t = match nn {
+                        None => break,
+                        Some(x) => x,
+                    };
                     continue;
                 }
             }
@@ -181,9 +203,13 @@ fn try_attach(
                     org = Some(r_rc.clone());
                     t1 = t.clone();
                     org_is_bank = is_bank;
-                    if is_bank { advance!(t); }
+                    if is_bank {
+                        advance!(t);
+                    }
                 }
-                if uris.is_empty() && !keyword_mode { return None; }
+                if uris.is_empty() && !keyword_mode {
+                    return None;
+                }
                 advance!(t);
             }
 
@@ -192,15 +218,30 @@ fn try_attach(
                     let rb = r_rc.borrow();
                     ur::get_scheme(&rb).map(|s| s.to_string())
                 };
-                let scheme = match scheme { None => { advance!(t); } Some(s) => s };
+                let scheme = match scheme {
+                    None => {
+                        advance!(t);
+                    }
+                    Some(s) => s,
+                };
 
                 if uris.is_empty() {
-                    if !br::is_bank_req_scheme(&scheme) { return None; }
-                    if scheme == "ИНН" && t.borrow().is_newline_after(sofa) { return None; }
+                    if !br::is_bank_req_scheme(&scheme) {
+                        return None;
+                    }
+                    if scheme == "ИНН" && t.borrow().is_newline_after(sofa) {
+                        return None;
+                    }
                 } else {
-                    if !br::is_bank_req_scheme(&scheme) { break; }
-                    if uri_schemes.contains(&scheme) { break; }
-                    if scheme == "ИНН" && empty > 0 { break; }
+                    if !br::is_bank_req_scheme(&scheme) {
+                        break;
+                    }
+                    if uri_schemes.contains(&scheme) {
+                        break;
+                    }
+                    if scheme == "ИНН" && empty > 0 {
+                        break;
+                    }
                 }
 
                 last_uri_scheme = Some(scheme.clone());
@@ -224,11 +265,17 @@ fn try_attach(
             let is_name_word = t.borrow().is_value("ПОЛНЫЙ", None)
                 || t.borrow().is_value("НАИМЕНОВАНИЕ", None)
                 || t.borrow().is_value("НАЗВАНИЕ", None);
-            if is_name_word { advance!(t); }
+            if is_name_word {
+                advance!(t);
+            }
             if t.borrow().chars.is_letter() {
                 empty += 1;
-                if t.borrow().is_newline_before(sofa) && next_is_colon_newline(&t, sofa) { break; }
-                if uris.is_empty() { break; }
+                if t.borrow().is_newline_before(sofa) && next_is_colon_newline(&t, sofa) {
+                    break;
+                }
+                if uris.is_empty() {
+                    break;
+                }
             }
         }
 
@@ -239,22 +286,35 @@ fn try_attach(
                     let next = t.borrow().next.clone();
                     next.map_or(true, |n| !n.borrow().chars.is_letter())
                 };
-                if nxt_non_letter { break; }
+                if nxt_non_letter {
+                    break;
+                }
             }
         }
 
-        if empty > 2 { break; }
-        if empty > 0 && t.borrow().is_char(':', sofa) && t.borrow().is_newline_after(sofa) { break; }
+        if empty > 2 {
+            break;
+        }
+        if empty > 0 && t.borrow().is_char(':', sofa) && t.borrow().is_newline_after(sofa) {
+            break;
+        }
 
         let next = t.borrow().next.clone();
-        t = match next { None => break, Some(x) => x };
+        t = match next {
+            None => break,
+            Some(x) => x,
+        };
     }
 
-    if uris.is_empty() { return None; }
+    if uris.is_empty() {
+        return None;
+    }
     if !uri_schemes.contains(&"Р/С".to_string()) && !uri_schemes.contains(&"Л/С".to_string()) {
         return None;
     }
-    if uris.len() < 2 && org.is_none() { return None; }
+    if uris.len() < 2 && org.is_none() {
+        return None;
+    }
 
     let mut bdr = br::new_bank_data_referent();
     for uri in uris {
@@ -281,7 +341,8 @@ fn get_referent(t: &TokenRef) -> Option<Rc<RefCell<Referent>>> {
 }
 
 fn is_bank_org(r_rc: &Rc<RefCell<Referent>>) -> bool {
-    r_rc.borrow().get_string_value("KIND")
+    r_rc.borrow()
+        .get_string_value("KIND")
         .map_or(false, |k| k.eq_ignore_ascii_case("bank"))
 }
 
@@ -289,7 +350,9 @@ fn next_is_colon_newline(t: &TokenRef, sofa: &SourceOfAnalysis) -> bool {
     let mut cur = t.borrow().next.clone();
     let mut steps = 0;
     while let Some(n) = cur {
-        if steps > 8 { break; }
+        if steps > 8 {
+            break;
+        }
         if n.borrow().is_char(':', sofa) && n.borrow().is_newline_after(sofa) {
             return true;
         }

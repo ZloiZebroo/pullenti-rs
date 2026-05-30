@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 /// URI Analyzer — port of UriAnalyzer.cs
 ///
 /// Scheme tag integers (matching C# Tag values):
@@ -10,24 +11,21 @@
 ///   6  = bank account numbers (Р/С, Л/С, …)
 ///   7  = Cadastre number (КАДАСТРОВЫЙ НОМЕР)
 ///   10 = HTTP / HTTPS / FTP
-
 use std::rc::Rc;
-use std::cell::RefCell;
 use std::sync::{Arc, OnceLock};
 
-use crate::analyzer::Analyzer;
 use crate::analysis_kit::AnalysisKit;
-use crate::token::{Token, TokenRef, TokenKind, NumberSpellingType};
+use crate::analyzer::Analyzer;
+use crate::core::{Termin, TerminCollection};
 use crate::referent::Referent;
 use crate::source_of_analysis::SourceOfAnalysis;
-use crate::core::{Termin, TerminCollection};
+use crate::token::{NumberSpellingType, Token, TokenKind, TokenRef};
 
-use super::uri_referent::{self as ur_ref};
 use super::uri_item_token::{
-    attach_domain_name, attach_uri_content, attach_url,
-    attach_isbn, attach_bbk, attach_skype, attach_icq_content,
-    attach_iso_content, attach_mail_users,
+    attach_bbk, attach_domain_name, attach_icq_content, attach_isbn, attach_iso_content,
+    attach_mail_users, attach_skype, attach_uri_content, attach_url,
 };
+use super::uri_referent::{self as ur_ref};
 
 // ── Scheme term collection ────────────────────────────────────────────────────
 
@@ -48,7 +46,9 @@ fn build_schemes() -> TerminCollection {
     let csv = include_str!("../../resources/UriSchemes.csv");
     for line0 in csv.split('\n') {
         let line = line0.trim();
-        if line.is_empty() { continue; }
+        if line.is_empty() {
+            continue;
+        }
         let mut t = Termin::new_canonic(line.to_ascii_uppercase(), line.to_ascii_lowercase());
         t.tag = tag(0);
         tc.add(t);
@@ -68,7 +68,8 @@ fn build_schemes() -> TerminCollection {
     }
     {
         let mut t = Termin::new_canonic(
-            "Общероссийский классификатор организационно правовых форм", "ОКОПФ",
+            "Общероссийский классификатор организационно правовых форм",
+            "ОКОПФ",
         );
         t.add_variant("ОКОПФ");
         t.tag = tag(1);
@@ -159,16 +160,15 @@ fn build_schemes() -> TerminCollection {
         tc.add(t);
     }
     {
-        let mut t = Termin::new_canonic(
-            "Страховой номер индивидуального лицевого счёта", "СНИЛС",
-        );
+        let mut t = Termin::new_canonic("Страховой номер индивидуального лицевого счёта", "СНИЛС");
         t.add_variant("СНИЛС");
         t.tag = tag(5);
         tc.add(t);
     }
     {
         let mut t = Termin::new_canonic(
-            "Общероссийский классификатор предприятий и организаций", "ОКПО",
+            "Общероссийский классификатор предприятий и организаций",
+            "ОКПО",
         );
         t.add_variant("ОКПО");
         t.tag = tag(5);
@@ -176,7 +176,8 @@ fn build_schemes() -> TerminCollection {
     }
     {
         let mut t = Termin::new_canonic(
-            "Общероссийский классификатор объектов административно-территориального деления", "ОКАТО",
+            "Общероссийский классификатор объектов административно-территориального деления",
+            "ОКАТО",
         );
         t.add_variant("ОКАТО");
         t.tag = tag(5);
@@ -184,7 +185,8 @@ fn build_schemes() -> TerminCollection {
     }
     {
         let mut t = Termin::new_canonic(
-            "Общероссийский классификатор территорий муниципальных образований", "ОКТМО",
+            "Общероссийский классификатор территорий муниципальных образований",
+            "ОКТМО",
         );
         t.add_variant("ОКТМО");
         t.tag = tag(5);
@@ -245,7 +247,9 @@ struct UriDedup {
 }
 
 impl UriDedup {
-    fn new() -> Self { UriDedup { items: Vec::new() } }
+    fn new() -> Self {
+        UriDedup { items: Vec::new() }
+    }
 
     fn register(&mut self, r: Rc<RefCell<Referent>>) -> Rc<RefCell<Referent>> {
         for existing in &self.items {
@@ -291,17 +295,27 @@ fn try_bank_account_prefix<'a>(
         tb.term().map(|s| s.to_string())?
     };
     // len() is byte count; Cyrillic chars are 2 bytes each
-    if term.chars().count() != 1 { return None; }
+    if term.chars().count() != 1 {
+        return None;
+    }
     let ch = term.chars().next()?;
     // Next must be "/" with no whitespace
     let slash = t.borrow().next.clone()?;
-    if slash.borrow().whitespaces_before_count(sofa) > 0 { return None; }
-    if !slash.borrow().is_char('/', sofa) { return None; }
+    if slash.borrow().whitespaces_before_count(sofa) > 0 {
+        return None;
+    }
+    if !slash.borrow().is_char('/', sofa) {
+        return None;
+    }
     // Then "С" or "с" with no whitespace
     let s_tok = slash.borrow().next.clone()?;
-    if s_tok.borrow().whitespaces_before_count(sofa) > 0 { return None; }
+    if s_tok.borrow().whitespaces_before_count(sofa) > 0 {
+        return None;
+    }
     let s_term = s_tok.borrow().term().map(|s| s.to_string())?;
-    if s_term != "С" { return None; }
+    if s_term != "С" {
+        return None;
+    }
 
     match ch {
         'Р' => Some(("Р/С", s_tok)),
@@ -333,7 +347,9 @@ fn site_before(t: Option<TokenRef>, sofa: &SourceOfAnalysis) -> Option<TokenRef>
     };
     let _ = val_www;
 
-    if val_website || val_web { return Some(t); }
+    if val_website || val_web {
+        return Some(t);
+    }
 
     let mut t0: Option<TokenRef> = None;
     let is_site = t.borrow().is_value("САЙТ", None) || t.borrow().is_value("SITE", None);
@@ -347,9 +363,15 @@ fn site_before(t: Option<TokenRef>, sofa: &SourceOfAnalysis) -> Option<TokenRef>
         let hiphen_prev: Option<Option<TokenRef>> = if let Some(ref p) = tt {
             if p.borrow().is_hiphen(sofa) {
                 Some(p.borrow().prev.as_ref().and_then(|w| w.upgrade()))
-            } else { None }
-        } else { None };
-        if let Some(v) = hiphen_prev { tt = v; }
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        if let Some(v) = hiphen_prev {
+            tt = v;
+        }
         if let Some(ref p) = tt {
             if p.borrow().is_value("WEB", None) || p.borrow().is_value("ВЕБ", None) {
                 t0 = Some(p.clone());
@@ -363,16 +385,32 @@ fn site_before(t: Option<TokenRef>, sofa: &SourceOfAnalysis) -> Option<TokenRef>
 
 // ── Telegram-before helper ────────────────────────────────────────────────────
 
-fn telegram_before(rt_begin: &mut TokenRef, rt_end: &mut TokenRef, val: &str, sofa: &SourceOfAnalysis) {
+fn telegram_before(
+    rt_begin: &mut TokenRef,
+    rt_end: &mut TokenRef,
+    val: &str,
+    sofa: &SourceOfAnalysis,
+) {
     // Extend to surrounding parens
     {
-        let prev_is_open = rt_begin.borrow().prev.as_ref()
+        let prev_is_open = rt_begin
+            .borrow()
+            .prev
+            .as_ref()
             .and_then(|w| w.upgrade())
             .map_or(false, |p| p.borrow().is_char('(', sofa));
-        let next_is_close = rt_end.borrow().next.clone()
+        let next_is_close = rt_end
+            .borrow()
+            .next
+            .clone()
             .map_or(false, |n| n.borrow().is_char(')', sofa));
         if prev_is_open && next_is_close {
-            let nb = rt_begin.borrow().prev.as_ref().and_then(|w| w.upgrade()).unwrap();
+            let nb = rt_begin
+                .borrow()
+                .prev
+                .as_ref()
+                .and_then(|w| w.upgrade())
+                .unwrap();
             *rt_begin = nb;
             let ne = rt_end.borrow().next.clone().unwrap();
             *rt_end = ne;
@@ -385,18 +423,26 @@ fn telegram_before(rt_begin: &mut TokenRef, rt_end: &mut TokenRef, val: &str, so
     let mut cur = rt_begin.borrow().prev.as_ref().and_then(|w| w.upgrade());
     while let Some(t) = cur.take() {
         cou -= 1;
-        if cou <= 0 { break; }
+        if cou <= 0 {
+            break;
+        }
         if let Some(term) = t.borrow().term() {
             if term == te {
                 let end_char = t.borrow().end_char;
                 let begin_char_rt = rt_begin.borrow().begin_char;
                 if begin_char_rt - end_char < 10 {
                     *rt_begin = t.clone();
-                    if rt_begin.borrow().prev.as_ref()
+                    if rt_begin
+                        .borrow()
+                        .prev
+                        .as_ref()
                         .and_then(|w| w.upgrade())
                         .map_or(false, |p| p.borrow().is_char('@', sofa))
                     {
-                        let nb = rt_begin.borrow().prev.as_ref()
+                        let nb = rt_begin
+                            .borrow()
+                            .prev
+                            .as_ref()
                             .and_then(|w| w.upgrade())
                             .unwrap_or_else(|| rt_begin.clone());
                         *rt_begin = nb;
@@ -411,20 +457,30 @@ fn telegram_before(rt_begin: &mut TokenRef, rt_end: &mut TokenRef, val: &str, so
 
 // ── Kadastr helper ────────────────────────────────────────────────────────────
 
-fn try_attach_kadastr(t0: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(String, TokenRef, TokenRef)> {
+fn try_attach_kadastr(
+    t0: &TokenRef,
+    sofa: &SourceOfAnalysis,
+) -> Option<(String, TokenRef, TokenRef)> {
     // Must start with a short digit number (1-2 chars)
     {
         let tb = t0.borrow();
-        if !matches!(&tb.kind, TokenKind::Number(n) if n.spelling_type == NumberSpellingType::Digit) {
+        if !matches!(&tb.kind, TokenKind::Number(n) if n.spelling_type == NumberSpellingType::Digit)
+        {
             return None;
         }
-        if tb.length_char() > 2 { return None; }
+        if tb.length_char() > 2 {
+            return None;
+        }
         // Must have whitespace before or previous comma
         let ws = tb.is_whitespace_before(sofa);
-        let prev_comma = tb.prev.as_ref()
+        let prev_comma = tb
+            .prev
+            .as_ref()
             .and_then(|w| w.upgrade())
             .map_or(false, |p| p.borrow().is_char(',', sofa));
-        if !ws && !prev_comma { return None; }
+        if !ws && !prev_comma {
+            return None;
+        }
     }
 
     let mut vals: Vec<String> = Vec::new();
@@ -435,23 +491,32 @@ fn try_attach_kadastr(t0: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(String,
         let (is_num, num_val, is_colon, next_is_num, next) = {
             let tb = t.borrow();
             let is_num = matches!(&tb.kind, TokenKind::Number(n) if n.spelling_type == NumberSpellingType::Digit);
-            let num_val = if is_num { Some(tb.number_value().unwrap_or("").to_string()) } else { None };
+            let num_val = if is_num {
+                Some(tb.number_value().unwrap_or("").to_string())
+            } else {
+                None
+            };
             let next = tb.next.clone();
             let (is_colon, next_is_num) = match &next {
                 None => (false, false),
                 Some(n) => {
                     let n_is_colon = n.borrow().is_char(':', sofa);
                     let nn_is_num = if n_is_colon {
-                        n.borrow().next.clone()
-                            .map_or(false, |nn| matches!(&nn.borrow().kind, TokenKind::Number(_)))
-                    } else { false };
+                        n.borrow().next.clone().map_or(false, |nn| {
+                            matches!(&nn.borrow().kind, TokenKind::Number(_))
+                        })
+                    } else {
+                        false
+                    };
                     (n_is_colon, nn_is_num)
                 }
             };
             (is_num, num_val, is_colon, next_is_num, next)
         };
 
-        if !is_num { break; }
+        if !is_num {
+            break;
+        }
         let val = num_val.unwrap();
         vals.push(val);
         rt_end = t.clone();
@@ -460,14 +525,19 @@ fn try_attach_kadastr(t0: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(String,
             let colon_tok = next.clone().unwrap();
             if !colon_tok.borrow().is_whitespace_after(sofa) {
                 let after_colon = colon_tok.borrow().next.clone();
-                t = match after_colon { None => break, Some(n) => n };
+                t = match after_colon {
+                    None => break,
+                    Some(n) => n,
+                };
                 continue;
             }
         }
         break;
     }
 
-    if vals.len() != 4 { return None; }
+    if vals.len() != 4 {
+        return None;
+    }
 
     let value = format!("{}:{}:{}:{}", vals[0], vals[1], vals[2], vals[3]);
 
@@ -475,7 +545,10 @@ fn try_attach_kadastr(t0: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(String,
     let mut rt_begin = t0.clone();
     let mut prev = rt_begin.borrow().prev.as_ref().and_then(|w| w.upgrade());
     loop {
-        let p = match prev.take() { None => break, Some(x) => x };
+        let p = match prev.take() {
+            None => break,
+            Some(x) => x,
+        };
         let (is_hp, is_char_dot, term) = {
             let pb = p.borrow();
             let is_hp = pb.is_hiphen(sofa);
@@ -508,13 +581,21 @@ fn try_attach_kadastr(t0: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(String,
 pub struct UriAnalyzer;
 
 impl UriAnalyzer {
-    pub fn new() -> Self { UriAnalyzer }
+    pub fn new() -> Self {
+        UriAnalyzer
+    }
 }
 
 impl Analyzer for UriAnalyzer {
-    fn name(&self) -> &'static str { "URI" }
-    fn caption(&self) -> &'static str { "URI" }
-    fn progress_weight(&self) -> i32 { 2 }
+    fn name(&self) -> &'static str {
+        "URI"
+    }
+    fn caption(&self) -> &'static str {
+        "URI"
+    }
+    fn progress_weight(&self) -> i32 {
+        2
+    }
 
     fn process(&self, kit: &mut AnalysisKit) {
         let sofa = kit.sofa.clone();
@@ -524,7 +605,9 @@ impl Analyzer for UriAnalyzer {
         while let Some(t) = cur.clone() {
             cur = t.borrow().next.clone();
 
-            if t.borrow().is_ignored(&sofa) { continue; }
+            if t.borrow().is_ignored(&sofa) {
+                continue;
+            }
 
             // ── Bank account X/С multi-token prefix (Р/С, К/С, Л/С) ─────────
             // These abbreviations are three tokens: Letter + "/" + "С".
@@ -539,10 +622,15 @@ impl Analyzer for UriAnalyzer {
                         let next = nb.next.clone();
                         (skip, next)
                     };
-                    if skip { t0 = next; } else { break; }
+                    if skip {
+                        t0 = next;
+                    } else {
+                        break;
+                    }
                 }
                 if let Some(ref t0) = t0 {
-                    if matches!(&t0.borrow().kind, TokenKind::Number(n) if n.spelling_type == NumberSpellingType::Digit) {
+                    if matches!(&t0.borrow().kind, TokenKind::Number(n) if n.spelling_type == NumberSpellingType::Digit)
+                    {
                         let val = t0.borrow().get_source_text(&sofa).to_string();
                         if val.len() >= 5 {
                             let rt = embed_uri(kit, &mut dedup, sch, &val, t.clone(), t0.clone());
@@ -555,7 +643,10 @@ impl Analyzer for UriAnalyzer {
 
             // ── Scheme keyword match ─────────────────────────────────────────
             if let Some(tok) = schemes().try_parse(&t) {
-                let scheme_tag: i32 = tok.termin.tag.as_ref()
+                let scheme_tag: i32 = tok
+                    .termin
+                    .tag
+                    .as_ref()
                     .and_then(|a| a.downcast_ref::<i32>())
                     .copied()
                     .unwrap_or(0);
@@ -565,16 +656,25 @@ impl Analyzer for UriAnalyzer {
 
                 // Handle "SCHEME(SCHEME)" pattern
                 {
-                    let next_is_open = tt.borrow().next.clone()
+                    let next_is_open = tt
+                        .borrow()
+                        .next
+                        .clone()
                         .map_or(false, |n| n.borrow().is_char('(', &sofa));
                     if next_is_open {
-                        let inner = tt.borrow().next.clone()
+                        let inner = tt
+                            .borrow()
+                            .next
+                            .clone()
                             .and_then(|n| n.borrow().next.clone());
                         if let Some(inner_t) = inner {
                             if let Some(tok1) = schemes().try_parse(&inner_t) {
                                 if tok1.termin.canonic_text == tok.termin.canonic_text {
                                     let close = tok1.end_token.borrow().next.clone();
-                                    if close.as_ref().map_or(false, |c| c.borrow().is_char(')', &sofa)) {
+                                    if close
+                                        .as_ref()
+                                        .map_or(false, |c| c.borrow().is_char(')', &sofa))
+                                    {
                                         tt = close.unwrap();
                                     }
                                 }
@@ -593,27 +693,46 @@ impl Analyzer for UriAnalyzer {
                                 && !nb.is_whitespace_before(&sofa)
                                 && nb.whitespaces_before_count(&sofa) <= 2
                         });
-                        if !ok { continue; }
+                        if !ok {
+                            continue;
+                        }
 
                         let sep = next.unwrap();
                         let mut t1 = sep.borrow().next.clone();
                         while let Some(ref n) = t1.clone() {
                             if n.borrow().is_char_of("/\\", &sofa) {
                                 t1 = n.borrow().next.clone();
-                            } else { break; }
+                            } else {
+                                break;
+                            }
                         }
-                        let t1 = match t1 { None => continue, Some(x) => x };
-                        if t1.borrow().whitespaces_before_count(&sofa) > 2 { continue; }
+                        let t1 = match t1 {
+                            None => continue,
+                            Some(x) => x,
+                        };
+                        if t1.borrow().whitespaces_before_count(&sofa) > 2 {
+                            continue;
+                        }
 
-                        let ut = match attach_uri_content(&t1, &sofa, false) { None => continue, Some(x) => x };
+                        let ut = match attach_uri_content(&t1, &sofa, false) {
+                            None => continue,
+                            Some(x) => x,
+                        };
                         let scheme_lc = scheme_canonic.to_ascii_lowercase();
                         let mut begin = t.clone();
                         let mut end = ut.end_token.clone();
 
-                        if let Some(sb) = site_before(t.borrow().prev.as_ref().and_then(|w| w.upgrade()), &sofa) {
+                        if let Some(sb) =
+                            site_before(t.borrow().prev.as_ref().and_then(|w| w.upgrade()), &sofa)
+                        {
                             begin = sb;
                         }
-                        if end.borrow().next.clone().map_or(false, |n| n.borrow().is_char_of("/\\", &sofa)) {
+                        if end
+                            .borrow()
+                            .next
+                            .clone()
+                            .map_or(false, |n| n.borrow().is_char_of("/\\", &sofa))
+                        {
                             let ne = end.borrow().next.clone().unwrap();
                             end = ne;
                         }
@@ -625,15 +744,27 @@ impl Analyzer for UriAnalyzer {
                     // ── i=10: HTTP/HTTPS/FTP ─────────────────────────────────
                     10 => {
                         let next = tt.borrow().next.clone();
-                        let ok = next.as_ref().map_or(false, |n| n.borrow().is_char(':', &sofa));
-                        if !ok { continue; }
+                        let ok = next
+                            .as_ref()
+                            .map_or(false, |n| n.borrow().is_char(':', &sofa));
+                        if !ok {
+                            continue;
+                        }
                         let mut t1 = next.unwrap().borrow().next.clone();
                         while let Some(ref n) = t1.clone() {
-                            if n.borrow().is_char_of("/\\", &sofa) { t1 = n.borrow().next.clone(); }
-                            else { break; }
+                            if n.borrow().is_char_of("/\\", &sofa) {
+                                t1 = n.borrow().next.clone();
+                            } else {
+                                break;
+                            }
                         }
-                        let t1 = match t1 { None => continue, Some(x) => x };
-                        if t1.borrow().is_newline_before(&sofa) { continue; }
+                        let t1 = match t1 {
+                            None => continue,
+                            Some(x) => x,
+                        };
+                        if t1.borrow().is_newline_before(&sofa) {
+                            continue;
+                        }
 
                         // Optional: skip "www."
                         let mut t1 = t1;
@@ -643,31 +774,49 @@ impl Analyzer for UriAnalyzer {
                             let t1_next = t1.borrow().next.clone();
                             if let Some(dot) = t1_next {
                                 if dot.borrow().is_char('.', &sofa) {
-                                    t1 = match dot.borrow().next.clone() { None => continue, Some(x) => x };
+                                    t1 = match dot.borrow().next.clone() {
+                                        None => continue,
+                                        Some(x) => x,
+                                    };
                                 }
                             }
                         }
-                        if t1.borrow().is_newline_before(&sofa) { continue; }
+                        if t1.borrow().is_newline_before(&sofa) {
+                            continue;
+                        }
 
-                        let ut = match attach_uri_content(&t1, &sofa, true) { None => continue, Some(x) => x };
-                        if ut.value.len() < 4 { continue; }
+                        let ut = match attach_uri_content(&t1, &sofa, true) {
+                            None => continue,
+                            Some(x) => x,
+                        };
+                        if ut.value.len() < 4 {
+                            continue;
+                        }
 
                         // Telegram t.me/... detection
-                        let (scheme_use, value_use) = if ut.value.to_ascii_lowercase().starts_with("t.me/") {
-                            ("telegram".to_string(), ut.value[5..].to_string())
-                        } else {
-                            (scheme_canonic.to_ascii_lowercase(), ut.value.clone())
-                        };
+                        let (scheme_use, value_use) =
+                            if ut.value.to_ascii_lowercase().starts_with("t.me/") {
+                                ("telegram".to_string(), ut.value[5..].to_string())
+                            } else {
+                                (scheme_canonic.to_ascii_lowercase(), ut.value.clone())
+                            };
 
                         let mut begin = t.clone();
                         let mut end = ut.end_token.clone();
 
                         if scheme_use == "telegram" {
                             telegram_before(&mut begin, &mut end, &value_use, &sofa);
-                        } else if let Some(sb) = site_before(t.borrow().prev.as_ref().and_then(|w| w.upgrade()), &sofa) {
+                        } else if let Some(sb) =
+                            site_before(t.borrow().prev.as_ref().and_then(|w| w.upgrade()), &sofa)
+                        {
                             begin = sb;
                         }
-                        if end.borrow().next.clone().map_or(false, |n| n.borrow().is_char_of("/\\", &sofa)) {
+                        if end
+                            .borrow()
+                            .next
+                            .clone()
+                            .map_or(false, |n| n.borrow().is_char_of("/\\", &sofa))
+                        {
                             let ne = end.borrow().next.clone().unwrap();
                             end = ne;
                         }
@@ -680,22 +829,40 @@ impl Analyzer for UriAnalyzer {
                     2 => {
                         let dot = tt.borrow().next.clone();
                         let ok = dot.as_ref().map_or(false, |n| {
-                            n.borrow().is_char('.', &sofa) && !n.borrow().is_whitespace_before(&sofa)
+                            n.borrow().is_char('.', &sofa)
+                                && !n.borrow().is_whitespace_before(&sofa)
                         });
-                        if !ok { continue; }
+                        if !ok {
+                            continue;
+                        }
                         let dot = dot.unwrap();
                         let dot_ws_after = dot.borrow().is_whitespace_after(&sofa);
-                        if dot_ws_after && scheme_canonic != "WWW" { continue; }
+                        if dot_ws_after && scheme_canonic != "WWW" {
+                            continue;
+                        }
 
-                        let after_dot = match dot.borrow().next.clone() { None => continue, Some(x) => x };
-                        let ut = match attach_uri_content(&after_dot, &sofa, true) { None => continue, Some(x) => x };
+                        let after_dot = match dot.borrow().next.clone() {
+                            None => continue,
+                            Some(x) => x,
+                        };
+                        let ut = match attach_uri_content(&after_dot, &sofa, true) {
+                            None => continue,
+                            Some(x) => x,
+                        };
 
                         let mut begin = t.clone();
                         let mut end = ut.end_token.clone();
-                        if let Some(sb) = site_before(t.borrow().prev.as_ref().and_then(|w| w.upgrade()), &sofa) {
+                        if let Some(sb) =
+                            site_before(t.borrow().prev.as_ref().and_then(|w| w.upgrade()), &sofa)
+                        {
                             begin = sb;
                         }
-                        if end.borrow().next.clone().map_or(false, |n| n.borrow().is_char_of("/\\", &sofa)) {
+                        if end
+                            .borrow()
+                            .next
+                            .clone()
+                            .map_or(false, |n| n.borrow().is_char_of("/\\", &sofa))
+                        {
                             let ne = end.borrow().next.clone().unwrap();
                             end = ne;
                         }
@@ -711,36 +878,52 @@ impl Analyzer for UriAnalyzer {
 
                         let ut_opt = match sch {
                             "ISBN" => after_kw.as_ref().and_then(|a| attach_isbn(a, &sofa)),
-                            "RFC" | "ISO" | "ОКФС" | "ОКОПФ" =>
-                                after_kw.as_ref().and_then(|a| attach_iso_content(a, &sofa, ":")),
-                            "ГОСТ" =>
-                                after_kw.as_ref().and_then(|a| attach_iso_content(a, &sofa, "-.")),
+                            "RFC" | "ISO" | "ОКФС" | "ОКОПФ" => after_kw
+                                .as_ref()
+                                .and_then(|a| attach_iso_content(a, &sofa, ":")),
+                            "ГОСТ" => after_kw
+                                .as_ref()
+                                .and_then(|a| attach_iso_content(a, &sofa, "-.")),
                             "ТУ" => {
                                 if t.borrow().chars.is_all_upper() {
                                     after_kw.as_ref().and_then(|a| {
-                                        attach_iso_content(a, &sofa, "-.").filter(|u| u.value.len() >= 10)
+                                        attach_iso_content(a, &sofa, "-.")
+                                            .filter(|u| u.value.len() >= 10)
                                     })
-                                } else { None }
+                                } else {
+                                    None
+                                }
                             }
                             _ => after_kw.as_ref().and_then(|a| attach_bbk(a, &sofa)),
                         };
 
-                        let ut = match ut_opt { None => continue, Some(x) => x };
+                        let ut = match ut_opt {
+                            None => continue,
+                            Some(x) => x,
+                        };
 
                         let (begin, end) = if ut.begin_char() < t.borrow().begin_char {
                             let b = ut.begin_token.clone();
-                            let e = if t.borrow().next.clone()
+                            let e = if t
+                                .borrow()
+                                .next
+                                .clone()
                                 .map_or(false, |n| n.borrow().is_char(')', &sofa))
                             {
                                 t.borrow().next.clone().unwrap()
-                            } else { t.clone() };
+                            } else {
+                                t.clone()
+                            };
                             (b, e)
                         } else {
                             (t.clone(), ut.end_token.clone())
                         };
 
                         // Extend begin to "КОД" if present
-                        let begin = t.borrow().prev.clone()
+                        let begin = t
+                            .borrow()
+                            .prev
+                            .clone()
                             .and_then(|_| t.borrow().prev.as_ref().and_then(|w| w.upgrade()))
                             .filter(|p| p.borrow().is_value("КОД", None))
                             .unwrap_or(begin);
@@ -761,11 +944,19 @@ impl Analyzer for UriAnalyzer {
                                 || n.borrow().is_hiphen(&sofa)
                             {
                                 t0 = n.borrow().next.clone();
-                            } else { break; }
+                            } else {
+                                break;
+                            }
                         }
-                        let t0 = match t0 { None => continue, Some(x) => x };
+                        let t0 = match t0 {
+                            None => continue,
+                            Some(x) => x,
+                        };
 
-                        let ut = match attach_skype(&t0, &sofa, is_tg) { None => continue, Some(x) => x };
+                        let ut = match attach_skype(&t0, &sofa, is_tg) {
+                            None => continue,
+                            Some(x) => x,
+                        };
 
                         let scheme_use = if scheme_canonic.to_ascii_uppercase() == "SKYPE" {
                             "skype".to_string()
@@ -773,7 +964,14 @@ impl Analyzer for UriAnalyzer {
                             scheme_canonic.clone()
                         };
 
-                        let rt = embed_uri(kit, &mut dedup, &scheme_use, &ut.value.to_ascii_lowercase(), t.clone(), ut.end_token.clone());
+                        let rt = embed_uri(
+                            kit,
+                            &mut dedup,
+                            &scheme_use,
+                            &ut.value.to_ascii_lowercase(),
+                            t.clone(),
+                            ut.end_token.clone(),
+                        );
                         cur = rt.borrow().next.clone();
                     }
 
@@ -785,8 +983,14 @@ impl Analyzer for UriAnalyzer {
                                 t0 = n.borrow().next.clone();
                             }
                         }
-                        let t0 = match t0 { None => continue, Some(x) => x };
-                        let ut = match attach_icq_content(&t0, &sofa) { None => continue, Some(x) => x };
+                        let t0 = match t0 {
+                            None => continue,
+                            Some(x) => x,
+                        };
+                        let ut = match attach_icq_content(&t0, &sofa) {
+                            None => continue,
+                            Some(x) => x,
+                        };
                         let rt = embed_uri(kit, &mut dedup, "ICQ", &ut.value, t.clone(), t0);
                         cur = rt.borrow().next.clone();
                     }
@@ -806,12 +1010,20 @@ impl Analyzer for UriAnalyzer {
                                 let next = nb.next.clone();
                                 (skip, next)
                             };
-                            if skip { t0 = next; } else { break; }
+                            if skip {
+                                t0 = next;
+                            } else {
+                                break;
+                            }
                         }
-                        let t0 = match t0 { None => continue, Some(x) => x };
+                        let t0 = match t0 {
+                            None => continue,
+                            Some(x) => x,
+                        };
 
                         // Must start with a digit
-                        if !matches!(&t0.borrow().kind, TokenKind::Number(n) if n.spelling_type == NumberSpellingType::Digit) {
+                        if !matches!(&t0.borrow().kind, TokenKind::Number(n) if n.spelling_type == NumberSpellingType::Digit)
+                        {
                             continue;
                         }
 
@@ -829,7 +1041,9 @@ impl Analyzer for UriAnalyzer {
                                     let next = tb.next.clone();
                                     (is_num, src, next)
                                 };
-                                if !is_num { break; }
+                                if !is_num {
+                                    break;
+                                }
                                 val.push_str(&src);
                                 t_end = tc.clone();
                                 let (is_hyp, nxt_is_num, next2) = match &next {
@@ -846,12 +1060,20 @@ impl Analyzer for UriAnalyzer {
                                 };
                                 if is_hyp && nxt_is_num {
                                     if !tc.borrow().is_whitespace_after(&sofa) {
-                                        tc = match next2 { None => break, Some(n) => n };
+                                        tc = match next2 {
+                                            None => break,
+                                            Some(n) => n,
+                                        };
                                         continue;
                                     }
                                 }
-                                tc = match next { None => break, Some(n) => n };
-                                if tc.borrow().whitespaces_before_count(&sofa) > 1 { break; }
+                                tc = match next {
+                                    None => break,
+                                    Some(n) => n,
+                                };
+                                if tc.borrow().whitespaces_before_count(&sofa) > 1 {
+                                    break;
+                                }
                             }
                         }
 
@@ -862,19 +1084,34 @@ impl Analyzer for UriAnalyzer {
                             "СНИЛС" | "ОГРН" => val.len() >= 11,
                             _ => val.len() >= 9,
                         };
-                        if !valid || val.len() < 5 { continue; }
+                        if !valid || val.len() < 5 {
+                            continue;
+                        }
 
                         // Extend begin to "НОМЕР" or "КОД" if present
                         let mut begin = t.clone();
                         let mut prev = t.borrow().prev.as_ref().and_then(|w| w.upgrade());
                         loop {
-                            let p = match prev.take() { None => break, Some(x) => x };
-                            if p.borrow().is_table_control_char(&sofa) { break; }
-                            if p.borrow().morph.items().iter()
-                                .any(|wf| !wf.base.class.is_undefined()) { break; }
+                            let p = match prev.take() {
+                                None => break,
+                                Some(x) => x,
+                            };
+                            if p.borrow().is_table_control_char(&sofa) {
+                                break;
+                            }
+                            if p.borrow()
+                                .morph
+                                .items()
+                                .iter()
+                                .any(|wf| !wf.base.class.is_undefined())
+                            {
+                                break;
+                            }
                             let is_num_or_kod = p.borrow().is_value("НОМЕР", None)
                                 || p.borrow().is_value("КОД", None);
-                            if is_num_or_kod { begin = p.clone(); }
+                            if is_num_or_kod {
+                                begin = p.clone();
+                            }
                             break;
                         }
 
@@ -895,14 +1132,26 @@ impl Analyzer for UriAnalyzer {
                                 let next = nb.next.clone();
                                 (skip, next)
                             };
-                            if skip { t0 = next; } else { break; }
+                            if skip {
+                                t0 = next;
+                            } else {
+                                break;
+                            }
                         }
-                        let t0 = match t0 { None => continue, Some(x) => x };
+                        let t0 = match t0 {
+                            None => continue,
+                            Some(x) => x,
+                        };
                         if !matches!(&t0.borrow().kind, TokenKind::Number(n)
-                            if n.spelling_type == NumberSpellingType::Digit) { continue; }
+                            if n.spelling_type == NumberSpellingType::Digit)
+                        {
+                            continue;
+                        }
 
                         let val = t0.borrow().get_source_text(&sofa).to_string();
-                        if val.len() < 5 { continue; }
+                        if val.len() < 5 {
+                            continue;
+                        }
 
                         let rt = embed_uri(kit, &mut dedup, sch, &val, t.clone(), t0);
                         cur = rt.borrow().next.clone();
@@ -920,9 +1169,16 @@ impl Analyzer for UriAnalyzer {
                                 let next = nb.next.clone();
                                 (skip, next)
                             };
-                            if skip { t0 = next; } else { break; }
+                            if skip {
+                                t0 = next;
+                            } else {
+                                break;
+                            }
                         }
-                        let t0 = match t0 { None => continue, Some(x) => x };
+                        let t0 = match t0 {
+                            None => continue,
+                            Some(x) => x,
+                        };
                         if let Some((val, _begin, end)) = try_attach_kadastr(&t0, &sofa) {
                             let rt = embed_uri(kit, &mut dedup, "КАДАСТР", &val, t.clone(), end);
                             cur = rt.borrow().next.clone();
@@ -942,7 +1198,10 @@ impl Analyzer for UriAnalyzer {
                     Some(u) => u,
                 };
                 let after_at = t.borrow().next.clone();
-                let u2 = match after_at.as_ref().and_then(|a| attach_domain_name(a, &sofa, false, true)) {
+                let u2 = match after_at
+                    .as_ref()
+                    .and_then(|a| attach_domain_name(a, &sofa, false, true))
+                {
                     None => continue,
                     Some(u) => u,
                 };
@@ -985,18 +1244,30 @@ impl Analyzer for UriAnalyzer {
                 let (is_ws, prev_is_comma_open) = {
                     let tb = t.borrow();
                     let ws = tb.is_whitespace_before(&sofa);
-                    let prev_co = tb.prev.as_ref()
+                    let prev_co = tb
+                        .prev
+                        .as_ref()
                         .and_then(|w| w.upgrade())
                         .map_or(false, |p| p.borrow().is_char_of(",(", &sofa));
                     (ws, prev_co)
                 };
                 if is_ws || prev_is_comma_open {
                     if let Some(u1) = attach_url(&t, &sofa) {
-                        let not_mail = u1.end_token.borrow().next.clone()
+                        let not_mail = u1
+                            .end_token
+                            .borrow()
+                            .next
+                            .clone()
                             .map_or(true, |n| !n.borrow().is_char('@', &sofa));
                         if not_mail {
-                            let (mut begin, mut end) = (u1.begin_token.clone(), u1.end_token.clone());
-                            if end.borrow().next.clone().map_or(false, |n| n.borrow().is_char_of("/\\", &sofa)) {
+                            let (mut begin, mut end) =
+                                (u1.begin_token.clone(), u1.end_token.clone());
+                            if end
+                                .borrow()
+                                .next
+                                .clone()
+                                .map_or(false, |n| n.borrow().is_char_of("/\\", &sofa))
+                            {
                                 // check if next slash leads to more content
                                 let slash_after = end.borrow().next.clone().unwrap();
                                 if let Some(more) = attach_uri_content_inner_pub(&t, &sofa) {
@@ -1035,11 +1306,17 @@ impl Analyzer for UriAnalyzer {
                             let has_at = ut.value.contains('@');
                             if has_dot && !has_at {
                                 let mut end = ut.end_token.clone();
-                                if end.borrow().next.clone().map_or(false, |n| n.borrow().is_char_of("/\\", &sofa)) {
+                                if end
+                                    .borrow()
+                                    .next
+                                    .clone()
+                                    .map_or(false, |n| n.borrow().is_char_of("/\\", &sofa))
+                                {
                                     let ne = end.borrow().next.clone().unwrap();
                                     end = ne;
                                 }
-                                let rt = embed_uri(kit, &mut dedup, "http", &ut.value, sb.unwrap(), end);
+                                let rt =
+                                    embed_uri(kit, &mut dedup, "http", &ut.value, sb.unwrap(), end);
                                 cur = rt.borrow().next.clone();
                                 continue;
                             }
@@ -1055,7 +1332,9 @@ impl Analyzer for UriAnalyzer {
                     let is_lat = tb.chars.is_latin_letter() && !tb.chars.is_all_lower();
                     let is_up = tb.chars.is_all_upper();
                     let has_next = tb.next.is_some();
-                    let slash = tb.next.as_ref()
+                    let slash = tb
+                        .next
+                        .as_ref()
                         .map_or(false, |n| n.borrow().is_char('/', &sofa));
                     (is_lat, is_up, has_next, slash)
                 };
@@ -1074,7 +1353,10 @@ impl Analyzer for UriAnalyzer {
                     let tb = t.borrow();
                     matches!(&tb.kind, TokenKind::Number(n) if n.spelling_type == NumberSpellingType::Digit)
                         && t.borrow().length_char() < 3
-                        && t.borrow().next.clone().map_or(false, |n| n.borrow().is_char(':', &sofa))
+                        && t.borrow()
+                            .next
+                            .clone()
+                            .map_or(false, |n| n.borrow().is_char(':', &sofa))
                         && !t.borrow().is_whitespace_after(&sofa)
                         && t.borrow().next.clone().map_or(false, |n| {
                             !n.borrow().is_whitespace_after(&sofa)
@@ -1104,31 +1386,61 @@ impl Analyzer for UriAnalyzer {
                             if let Some(close) = close_opt {
                                 if close.borrow().is_char(')', &sofa) {
                                     Some(close.borrow().next.clone())
-                                } else { None }
-                            } else { None }
-                        } else { None }
-                    } else { None }
-                } else { None };
-                if let Some(v) = skip_paren { tt = v; }
+                                } else {
+                                    None
+                                }
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+                if let Some(v) = skip_paren {
+                    tt = v;
+                }
                 // Skip "НОМЕР" / "НОМ." prefix
                 let skip_nomor: Option<Option<TokenRef>> = if let Some(ref n) = tt {
-                    if n.borrow().is_value("НОМЕР", None) || n.borrow().is_value("НОМ", None) {
+                    if n.borrow().is_value("НОМЕР", None) || n.borrow().is_value("НОМ", None)
+                    {
                         let next_tt = n.borrow().next.clone();
                         // skip trailing dot
-                        let next_tt = if next_tt.as_ref().map_or(false, |nd| nd.borrow().is_char('.', &sofa)) {
+                        let next_tt = if next_tt
+                            .as_ref()
+                            .map_or(false, |nd| nd.borrow().is_char('.', &sofa))
+                        {
                             next_tt.as_ref().and_then(|nd| nd.borrow().next.clone())
-                        } else { next_tt };
+                        } else {
+                            next_tt
+                        };
                         Some(next_tt)
-                    } else { None }
-                } else { None };
-                if let Some(v) = skip_nomor { tt = v; }
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+                if let Some(v) = skip_nomor {
+                    tt = v;
+                }
                 // Skip hyphen or table char
                 let skip_hiphen: Option<Option<TokenRef>> = if let Some(ref n) = tt {
                     if n.borrow().is_hiphen(&sofa) || n.borrow().is_table_control_char(&sofa) {
                         Some(n.borrow().next.clone())
-                    } else { None }
-                } else { None };
-                if let Some(v) = skip_hiphen { tt = v; }
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+                if let Some(v) = skip_hiphen {
+                    tt = v;
+                }
                 if let Some(ref t1) = tt {
                     if let Some((val, _, end)) = try_attach_kadastr(t1, &sofa) {
                         let rt = embed_uri(kit, &mut dedup, "КАДАСТР", &val, t.clone(), end);
@@ -1141,7 +1453,10 @@ impl Analyzer for UriAnalyzer {
 }
 
 /// Public wrapper for the inner content parser (used by the analyzer's plain-URL path)
-fn attach_uri_content_inner_pub(t0: &TokenRef, sofa: &SourceOfAnalysis) -> Option<super::uri_item_token::UriItemToken> {
+fn attach_uri_content_inner_pub(
+    t0: &TokenRef,
+    sofa: &SourceOfAnalysis,
+) -> Option<super::uri_item_token::UriItemToken> {
     attach_uri_content(t0, sofa, false)
 }
 
@@ -1174,20 +1489,34 @@ fn try_attach_lotus(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(String, To
                 }
                 break;
             }
-            if !is_text || !is_letter || is_all_lower { return None; }
-            let term = match term { None => return None, Some(s) => s };
+            if !is_text || !is_letter || is_all_lower {
+                return None;
+            }
+            let term = match term {
+                None => return None,
+                Some(s) => s,
+            };
             tails.push(term);
             t1 = cur.clone();
 
             let ws_after = cur.borrow().is_whitespace_after(sofa);
-            if ws_after || next_tok.is_none() { break; }
+            if ws_after || next_tok.is_none() {
+                break;
+            }
             let slash_tok = next_tok.unwrap();
-            if !slash_tok.borrow().is_char('/', sofa) { break; }
+            if !slash_tok.borrow().is_char('/', sofa) {
+                break;
+            }
             let after = slash_tok.borrow().next.clone();
-            cur = match after { None => break, Some(n) => n };
+            cur = match after {
+                None => break,
+                Some(n) => n,
+            };
         }
     }
-    if tails.len() < 3 { return None; }
+    if tails.len() < 3 {
+        return None;
+    }
 
     // Collect head segments (uppercase tokens before the first '/')
     let mut heads: Vec<String> = Vec::new();
@@ -1197,20 +1526,32 @@ fn try_attach_lotus(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(String, To
 
     for k in 0..2i32 {
         let prev = t0.borrow().prev.as_ref().and_then(|w| w.upgrade());
-        let p = match prev { None => break, Some(x) => x };
+        let p = match prev {
+            None => break,
+            Some(x) => x,
+        };
         let (is_text, same_chars, is_single_upper, ws_count, next_is_slash) = {
             let pb = p.borrow();
             let is_text = matches!(&pb.kind, TokenKind::Text(_));
             let same = pb.chars.is_all_upper() == t.borrow().chars.is_all_upper();
-            let single_upper = pb.chars.is_latin_letter() && pb.chars.is_all_upper() && pb.length_char() == 1;
+            let single_upper =
+                pb.chars.is_latin_letter() && pb.chars.is_all_upper() && pb.length_char() == 1;
             let ws = t0.borrow().whitespaces_before_count(sofa);
             let slash = !t0.borrow().is_whitespace_before(sofa)
-                && t0.borrow().prev.as_ref().and_then(|w| w.upgrade())
+                && t0
+                    .borrow()
+                    .prev
+                    .as_ref()
+                    .and_then(|w| w.upgrade())
                     .map_or(false, |pp| pp.borrow().is_char('/', sofa));
             (is_text, same, single_upper, ws, slash)
         };
-        if !is_text { break; }
-        if next_is_slash { break; }
+        if !is_text {
+            break;
+        }
+        if next_is_slash {
+            break;
+        }
         if same_chars && (ws_count == 1 || (ws_count == 10 && k == 0)) {
             let pt = p.borrow().term().map(|s| s.to_string()).unwrap_or_default();
             heads.insert(0, pt);
@@ -1219,12 +1560,16 @@ fn try_attach_lotus(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(String, To
             let pt = p.borrow().term().map(|s| s.to_string()).unwrap_or_default();
             heads.insert(0, pt);
             t0 = p;
-        } else { break; }
+        } else {
+            break;
+        }
     }
 
     let mut val = String::new();
     for (i, h) in heads.iter().enumerate() {
-        if i > 0 { val.push(' '); }
+        if i > 0 {
+            val.push(' ');
+        }
         // Capitalize first char
         let mut c = h.chars();
         if let Some(f) = c.next() {

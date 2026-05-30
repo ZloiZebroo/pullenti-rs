@@ -1,6 +1,6 @@
-use std::rc::Rc;
-use std::cell::RefCell;
 use crate::referent::{Referent, SlotValue};
+use std::cell::RefCell;
+use std::rc::Rc;
 
 pub const OBJ_TYPENAME: &str = "URI";
 pub const ATTR_VALUE: &str = "VALUE";
@@ -30,7 +30,9 @@ pub fn set_detail(r: &mut Referent, detail: &str) {
 }
 
 pub fn can_be_equals(a: &Referent, b: &Referent) -> bool {
-    if a.type_name != OBJ_TYPENAME || b.type_name != OBJ_TYPENAME { return false; }
+    if a.type_name != OBJ_TYPENAME || b.type_name != OBJ_TYPENAME {
+        return false;
+    }
     let av = get_value(a).unwrap_or("");
     let bv = get_value(b).unwrap_or("");
     av.eq_ignore_ascii_case(bv)

@@ -1,8 +1,8 @@
-use std::sync::OnceLock;
-use pullenti_morph::MorphLang;
-use crate::source_of_analysis::SourceOfAnalysis;
-use crate::token::{Token, TokenRef, TokenKind};
 use crate::date::date_pointer_type::DatePointerType;
+use crate::source_of_analysis::SourceOfAnalysis;
+use crate::token::{Token, TokenKind, TokenRef};
+use pullenti_morph::MorphLang;
+use std::sync::OnceLock;
 
 // ── DateItemType ─────────────────────────────────────────────────────────────
 
@@ -32,66 +32,141 @@ pub enum DateItemType {
 // Each entry: (surface_uppercase, day_value)
 static ORDINAL_DAYS_RU: &[(&str, i32)] = &[
     // 1
-    ("ПЕРВОГО", 1), ("ПЕРВЫЙ", 1), ("ПЕРВОЕ", 1), ("ПЕРВАЯ", 1),
+    ("ПЕРВОГО", 1),
+    ("ПЕРВЫЙ", 1),
+    ("ПЕРВОЕ", 1),
+    ("ПЕРВАЯ", 1),
     // 2
-    ("ВТОРОГО", 2), ("ВТОРОЙ", 2), ("ВТОРОЕ", 2), ("ВТОРАЯ", 2),
+    ("ВТОРОГО", 2),
+    ("ВТОРОЙ", 2),
+    ("ВТОРОЕ", 2),
+    ("ВТОРАЯ", 2),
     // 3
-    ("ТРЕТЬЕГО", 3), ("ТРЕТИЙ", 3), ("ТРЕТЬЕ", 3), ("ТРЕТЬЯ", 3),
+    ("ТРЕТЬЕГО", 3),
+    ("ТРЕТИЙ", 3),
+    ("ТРЕТЬЕ", 3),
+    ("ТРЕТЬЯ", 3),
     // 4
-    ("ЧЕТВЁРТОГО", 4), ("ЧЕТВЕРТОГО", 4), ("ЧЕТВЁРТЫЙ", 4), ("ЧЕТВЕРТЫЙ", 4),
+    ("ЧЕТВЁРТОГО", 4),
+    ("ЧЕТВЕРТОГО", 4),
+    ("ЧЕТВЁРТЫЙ", 4),
+    ("ЧЕТВЕРТЫЙ", 4),
     // 5
-    ("ПЯТОГО", 5), ("ПЯТЫЙ", 5), ("ПЯТОЕ", 5), ("ПЯТАЯ", 5),
+    ("ПЯТОГО", 5),
+    ("ПЯТЫЙ", 5),
+    ("ПЯТОЕ", 5),
+    ("ПЯТАЯ", 5),
     // 6
-    ("ШЕСТОГО", 6), ("ШЕСТОЙ", 6), ("ШЕСТОЕ", 6), ("ШЕСТАЯ", 6),
+    ("ШЕСТОГО", 6),
+    ("ШЕСТОЙ", 6),
+    ("ШЕСТОЕ", 6),
+    ("ШЕСТАЯ", 6),
     // 7
-    ("СЕДЬМОГО", 7), ("СЕДЬМОЙ", 7), ("СЕДЬМОЕ", 7), ("СЕДЬМАЯ", 7),
+    ("СЕДЬМОГО", 7),
+    ("СЕДЬМОЙ", 7),
+    ("СЕДЬМОЕ", 7),
+    ("СЕДЬМАЯ", 7),
     // 8
-    ("ВОСЬМОГО", 8), ("ВОСЬМОЙ", 8), ("ВОСЬМОЕ", 8), ("ВОСЬМАЯ", 8),
+    ("ВОСЬМОГО", 8),
+    ("ВОСЬМОЙ", 8),
+    ("ВОСЬМОЕ", 8),
+    ("ВОСЬМАЯ", 8),
     // 9
-    ("ДЕВЯТОГО", 9), ("ДЕВЯТЫЙ", 9), ("ДЕВЯТОЕ", 9), ("ДЕВЯТАЯ", 9),
+    ("ДЕВЯТОГО", 9),
+    ("ДЕВЯТЫЙ", 9),
+    ("ДЕВЯТОЕ", 9),
+    ("ДЕВЯТАЯ", 9),
     // 10
-    ("ДЕСЯТОГО", 10), ("ДЕСЯТЫЙ", 10), ("ДЕСЯТОЕ", 10), ("ДЕСЯТАЯ", 10),
+    ("ДЕСЯТОГО", 10),
+    ("ДЕСЯТЫЙ", 10),
+    ("ДЕСЯТОЕ", 10),
+    ("ДЕСЯТАЯ", 10),
     // 11
-    ("ОДИННАДЦАТОГО", 11), ("ОДИННАДЦАТЫЙ", 11), ("ОДИННАДЦАТОЕ", 11),
+    ("ОДИННАДЦАТОГО", 11),
+    ("ОДИННАДЦАТЫЙ", 11),
+    ("ОДИННАДЦАТОЕ", 11),
     // 12
-    ("ДВЕНАДЦАТОГО", 12), ("ДВЕНАДЦАТЫЙ", 12), ("ДВЕНАДЦАТОЕ", 12),
+    ("ДВЕНАДЦАТОГО", 12),
+    ("ДВЕНАДЦАТЫЙ", 12),
+    ("ДВЕНАДЦАТОЕ", 12),
     // 13
-    ("ТРИНАДЦАТОГО", 13), ("ТРИНАДЦАТЫЙ", 13), ("ТРИНАДЦАТОЕ", 13),
+    ("ТРИНАДЦАТОГО", 13),
+    ("ТРИНАДЦАТЫЙ", 13),
+    ("ТРИНАДЦАТОЕ", 13),
     // 14
-    ("ЧЕТЫРНАДЦАТОГО", 14), ("ЧЕТЫРНАДЦАТЫЙ", 14), ("ЧЕТЫРНАДЦАТОЕ", 14),
+    ("ЧЕТЫРНАДЦАТОГО", 14),
+    ("ЧЕТЫРНАДЦАТЫЙ", 14),
+    ("ЧЕТЫРНАДЦАТОЕ", 14),
     // 15
-    ("ПЯТНАДЦАТОГО", 15), ("ПЯТНАДЦАТЫЙ", 15), ("ПЯТНАДЦАТОЕ", 15),
+    ("ПЯТНАДЦАТОГО", 15),
+    ("ПЯТНАДЦАТЫЙ", 15),
+    ("ПЯТНАДЦАТОЕ", 15),
     // 16
-    ("ШЕСТНАДЦАТОГО", 16), ("ШЕСТНАДЦАТЫЙ", 16), ("ШЕСТНАДЦАТОЕ", 16),
+    ("ШЕСТНАДЦАТОГО", 16),
+    ("ШЕСТНАДЦАТЫЙ", 16),
+    ("ШЕСТНАДЦАТОЕ", 16),
     // 17
-    ("СЕМНАДЦАТОГО", 17), ("СЕМНАДЦАТЫЙ", 17), ("СЕМНАДЦАТОЕ", 17),
+    ("СЕМНАДЦАТОГО", 17),
+    ("СЕМНАДЦАТЫЙ", 17),
+    ("СЕМНАДЦАТОЕ", 17),
     // 18
-    ("ВОСЕМНАДЦАТОГО", 18), ("ВОСЕМНАДЦАТЫЙ", 18), ("ВОСЕМНАДЦАТОЕ", 18),
+    ("ВОСЕМНАДЦАТОГО", 18),
+    ("ВОСЕМНАДЦАТЫЙ", 18),
+    ("ВОСЕМНАДЦАТОЕ", 18),
     // 19
-    ("ДЕВЯТНАДЦАТОГО", 19), ("ДЕВЯТНАДЦАТЫЙ", 19), ("ДЕВЯТНАДЦАТОЕ", 19),
+    ("ДЕВЯТНАДЦАТОГО", 19),
+    ("ДЕВЯТНАДЦАТЫЙ", 19),
+    ("ДЕВЯТНАДЦАТОЕ", 19),
     // 20
-    ("ДВАДЦАТОГО", 20), ("ДВАДЦАТЫЙ", 20), ("ДВАДЦАТОЕ", 20), ("ДВАДЦАТАЯ", 20),
+    ("ДВАДЦАТОГО", 20),
+    ("ДВАДЦАТЫЙ", 20),
+    ("ДВАДЦАТОЕ", 20),
+    ("ДВАДЦАТАЯ", 20),
     // 21
     ("ДВАДЦАТЬ", 21), // handled as compound "ДВАДЦАТЬ ПЕРВОГО" via two-token lookup
     // 22-29 (compounds handled by two-token lookup)
     // 30
-    ("ТРИДЦАТОГО", 30), ("ТРИДЦАТЫЙ", 30), ("ТРИДЦАТОЕ", 30), ("ТРИДЦАТАЯ", 30),
+    ("ТРИДЦАТОГО", 30),
+    ("ТРИДЦАТЫЙ", 30),
+    ("ТРИДЦАТОЕ", 30),
+    ("ТРИДЦАТАЯ", 30),
     // 31 (compound "ТРИДЦАТЬ ПЕРВОГО" handled by two-token lookup)
 ];
 
 // Two-token ordinal: "ДВАДЦАТЬ ПЕРВОГО", "ТРИДЦАТЬ ПЕРВОГО", etc.
 // (prefix, suffix, value)
 static ORDINAL_DAYS_RU_COMPOUND: &[(&str, &str, i32)] = &[
-    ("ДВАДЦАТЬ", "ПЕРВОГО", 21), ("ДВАДЦАТЬ", "ПЕРВЫЙ", 21), ("ДВАДЦАТЬ", "ПЕРВОЕ", 21),
-    ("ДВАДЦАТЬ", "ВТОРОГО", 22), ("ДВАДЦАТЬ", "ВТОРОЙ", 22), ("ДВАДЦАТЬ", "ВТОРОЕ", 22),
-    ("ДВАДЦАТЬ", "ТРЕТЬЕГО", 23), ("ДВАДЦАТЬ", "ТРЕТИЙ", 23), ("ДВАДЦАТЬ", "ТРЕТЬЕ", 23),
-    ("ДВАДЦАТЬ", "ЧЕТВЁРТОГО", 24), ("ДВАДЦАТЬ", "ЧЕТВЕРТОГО", 24), ("ДВАДЦАТЬ", "ЧЕТВЁРТЫЙ", 24), ("ДВАДЦАТЬ", "ЧЕТВЕРТЫЙ", 24),
-    ("ДВАДЦАТЬ", "ПЯТОГО", 25), ("ДВАДЦАТЬ", "ПЯТЫЙ", 25), ("ДВАДЦАТЬ", "ПЯТОЕ", 25),
-    ("ДВАДЦАТЬ", "ШЕСТОГО", 26), ("ДВАДЦАТЬ", "ШЕСТОЙ", 26), ("ДВАДЦАТЬ", "ШЕСТОЕ", 26),
-    ("ДВАДЦАТЬ", "СЕДЬМОГО", 27), ("ДВАДЦАТЬ", "СЕДЬМОЙ", 27), ("ДВАДЦАТЬ", "СЕДЬМОЕ", 27),
-    ("ДВАДЦАТЬ", "ВОСЬМОГО", 28), ("ДВАДЦАТЬ", "ВОСЬМОЙ", 28), ("ДВАДЦАТЬ", "ВОСЬМОЕ", 28),
-    ("ДВАДЦАТЬ", "ДЕВЯТОГО", 29), ("ДВАДЦАТЬ", "ДЕВЯТЫЙ", 29), ("ДВАДЦАТЬ", "ДЕВЯТОЕ", 29),
-    ("ТРИДЦАТЬ", "ПЕРВОГО", 31), ("ТРИДЦАТЬ", "ПЕРВЫЙ", 31), ("ТРИДЦАТЬ", "ПЕРВОЕ", 31),
+    ("ДВАДЦАТЬ", "ПЕРВОГО", 21),
+    ("ДВАДЦАТЬ", "ПЕРВЫЙ", 21),
+    ("ДВАДЦАТЬ", "ПЕРВОЕ", 21),
+    ("ДВАДЦАТЬ", "ВТОРОГО", 22),
+    ("ДВАДЦАТЬ", "ВТОРОЙ", 22),
+    ("ДВАДЦАТЬ", "ВТОРОЕ", 22),
+    ("ДВАДЦАТЬ", "ТРЕТЬЕГО", 23),
+    ("ДВАДЦАТЬ", "ТРЕТИЙ", 23),
+    ("ДВАДЦАТЬ", "ТРЕТЬЕ", 23),
+    ("ДВАДЦАТЬ", "ЧЕТВЁРТОГО", 24),
+    ("ДВАДЦАТЬ", "ЧЕТВЕРТОГО", 24),
+    ("ДВАДЦАТЬ", "ЧЕТВЁРТЫЙ", 24),
+    ("ДВАДЦАТЬ", "ЧЕТВЕРТЫЙ", 24),
+    ("ДВАДЦАТЬ", "ПЯТОГО", 25),
+    ("ДВАДЦАТЬ", "ПЯТЫЙ", 25),
+    ("ДВАДЦАТЬ", "ПЯТОЕ", 25),
+    ("ДВАДЦАТЬ", "ШЕСТОГО", 26),
+    ("ДВАДЦАТЬ", "ШЕСТОЙ", 26),
+    ("ДВАДЦАТЬ", "ШЕСТОЕ", 26),
+    ("ДВАДЦАТЬ", "СЕДЬМОГО", 27),
+    ("ДВАДЦАТЬ", "СЕДЬМОЙ", 27),
+    ("ДВАДЦАТЬ", "СЕДЬМОЕ", 27),
+    ("ДВАДЦАТЬ", "ВОСЬМОГО", 28),
+    ("ДВАДЦАТЬ", "ВОСЬМОЙ", 28),
+    ("ДВАДЦАТЬ", "ВОСЬМОЕ", 28),
+    ("ДВАДЦАТЬ", "ДЕВЯТОГО", 29),
+    ("ДВАДЦАТЬ", "ДЕВЯТЫЙ", 29),
+    ("ДВАДЦАТЬ", "ДЕВЯТОЕ", 29),
+    ("ТРИДЦАТЬ", "ПЕРВОГО", 31),
+    ("ТРИДЦАТЬ", "ПЕРВЫЙ", 31),
+    ("ТРИДЦАТЬ", "ПЕРВОЕ", 31),
 ];
 
 /// Try to match a Russian ordinal day word at token `t`.
@@ -118,7 +193,10 @@ fn try_match_ordinal_day_ru(t: &TokenRef) -> Option<(i32, TokenRef)> {
         let tb = t.borrow();
         if let TokenKind::Text(_) = &tb.kind {
             for wf in tb.morph.items() {
-                for nc in [wf.normal_case.as_deref(), wf.normal_full.as_deref()].iter().flatten() {
+                for nc in [wf.normal_case.as_deref(), wf.normal_full.as_deref()]
+                    .iter()
+                    .flatten()
+                {
                     let nc_up = nc.to_uppercase();
                     for &(word, day) in ORDINAL_DAYS_RU {
                         if word == nc_up {
@@ -151,27 +229,77 @@ fn try_match_ordinal_day_ru(t: &TokenRef) -> Option<(i32, TokenRef)> {
 // ── Static month lookup tables ────────────────────────────────────────────────
 
 static MONTHS_RU: &[&str] = &[
-    "ЯНВАРЬ",  "ФЕВРАЛЬ", "МАРТ",     "АПРЕЛЬ",   "МАЙ",     "ИЮНЬ",
-    "ИЮЛЬ",    "АВГУСТ",  "СЕНТЯБРЬ", "ОКТЯБРЬ",  "НОЯБРЬ",  "ДЕКАБРЬ",
+    "ЯНВАРЬ",
+    "ФЕВРАЛЬ",
+    "МАРТ",
+    "АПРЕЛЬ",
+    "МАЙ",
+    "ИЮНЬ",
+    "ИЮЛЬ",
+    "АВГУСТ",
+    "СЕНТЯБРЬ",
+    "ОКТЯБРЬ",
+    "НОЯБРЬ",
+    "ДЕКАБРЬ",
 ];
 static MONTHS_UA: &[&str] = &[
-    "СІЧЕНЬ",  "ЛЮТИЙ",  "БЕРЕЗЕНЬ", "КВІТЕНЬ",  "ТРАВЕНЬ", "ЧЕРВЕНЬ",
-    "ЛИПЕНЬ",  "СЕРПЕНЬ","ВЕРЕСЕНЬ", "ЖОВТЕНЬ",  "ЛИСТОПАД","ГРУДЕНЬ",
+    "СІЧЕНЬ",
+    "ЛЮТИЙ",
+    "БЕРЕЗЕНЬ",
+    "КВІТЕНЬ",
+    "ТРАВЕНЬ",
+    "ЧЕРВЕНЬ",
+    "ЛИПЕНЬ",
+    "СЕРПЕНЬ",
+    "ВЕРЕСЕНЬ",
+    "ЖОВТЕНЬ",
+    "ЛИСТОПАД",
+    "ГРУДЕНЬ",
 ];
 static MONTHS_EN: &[&str] = &[
-    "JANUARY", "FEBRUARY","MARCH",   "APRIL",    "MAY",     "JUNE",
-    "JULY",    "AUGUST",  "SEPTEMBER","OCTOBER", "NOVEMBER","DECEMBER",
+    "JANUARY",
+    "FEBRUARY",
+    "MARCH",
+    "APRIL",
+    "MAY",
+    "JUNE",
+    "JULY",
+    "AUGUST",
+    "SEPTEMBER",
+    "OCTOBER",
+    "NOVEMBER",
+    "DECEMBER",
 ];
 // Common abbreviations (index into MONTHS_* arrays, 0-based)
 static MONTH_ABRIDGES_RU: &[(&str, usize)] = &[
-    ("ЯНВ",0),("ФЕВ",1),("ФЕВР",1),("МАР",2),("АПР",3),
-    ("ИЮН",5),("ИЮЛ",6),("АВГ",7),("СЕН",8),("СЕНТ",8),
-    ("ОКТ",9),("НОЯ",10),("НОЯБ",10),("ДЕК",11),
+    ("ЯНВ", 0),
+    ("ФЕВ", 1),
+    ("ФЕВР", 1),
+    ("МАР", 2),
+    ("АПР", 3),
+    ("ИЮН", 5),
+    ("ИЮЛ", 6),
+    ("АВГ", 7),
+    ("СЕН", 8),
+    ("СЕНТ", 8),
+    ("ОКТ", 9),
+    ("НОЯ", 10),
+    ("НОЯБ", 10),
+    ("ДЕК", 11),
 ];
 static MONTH_ABRIDGES_EN: &[(&str, usize)] = &[
-    ("JAN",0),("FEB",1),("MAR",2),("APR",3),
-    ("JUN",5),("JUL",6),("AUG",7),("SEP",8),("SEPT",8),
-    ("OCT",9),("NOV",10),("DEC",11),
+    ("JAN", 0),
+    ("FEB", 1),
+    ("MAR", 2),
+    ("APR", 3),
+    ("JUN", 5),
+    ("JUL", 6),
+    ("AUG", 7),
+    ("SEP", 8),
+    ("SEPT", 8),
+    ("OCT", 9),
+    ("NOV", 10),
+    ("DEC", 11),
 ];
 
 /// Current year approximation (for 2-digit year disambiguation)
@@ -189,20 +317,30 @@ fn match_month(tok: &Token) -> Option<(i32, MorphLang)> {
 
     // Direct match against primary forms
     for (i, &m) in MONTHS_RU.iter().enumerate() {
-        if term.as_str() == m { return Some(((i + 1) as i32, MorphLang::RU)); }
+        if term.as_str() == m {
+            return Some(((i + 1) as i32, MorphLang::RU));
+        }
     }
     for (i, &m) in MONTHS_UA.iter().enumerate() {
-        if term.as_str() == m { return Some(((i + 1) as i32, MorphLang::UA)); }
+        if term.as_str() == m {
+            return Some(((i + 1) as i32, MorphLang::UA));
+        }
     }
     for (i, &m) in MONTHS_EN.iter().enumerate() {
-        if term.as_str() == m { return Some(((i + 1) as i32, MorphLang::EN)); }
+        if term.as_str() == m {
+            return Some(((i + 1) as i32, MorphLang::EN));
+        }
     }
     // Abbreviations
     for &(abbr, idx) in MONTH_ABRIDGES_RU {
-        if term.as_str() == abbr { return Some(((idx + 1) as i32, MorphLang::RU)); }
+        if term.as_str() == abbr {
+            return Some(((idx + 1) as i32, MorphLang::RU));
+        }
     }
     for &(abbr, idx) in MONTH_ABRIDGES_EN {
-        if term.as_str() == abbr { return Some(((idx + 1) as i32, MorphLang::EN)); }
+        if term.as_str() == abbr {
+            return Some(((idx + 1) as i32, MorphLang::EN));
+        }
     }
 
     // Check morph word-form nominative/base forms (handles inflected "января"→"ЯНВАРЬ")
@@ -210,15 +348,23 @@ fn match_month(tok: &Token) -> Option<(i32, MorphLang)> {
         let nc = wf.normal_case.as_deref().unwrap_or("");
         let nf = wf.normal_full.as_deref().unwrap_or("");
         for &candidate in &[nc, nf] {
-            if candidate.is_empty() { continue; }
+            if candidate.is_empty() {
+                continue;
+            }
             for (i, &m) in MONTHS_RU.iter().enumerate() {
-                if candidate == m { return Some(((i + 1) as i32, MorphLang::RU)); }
+                if candidate == m {
+                    return Some(((i + 1) as i32, MorphLang::RU));
+                }
             }
             for (i, &m) in MONTHS_UA.iter().enumerate() {
-                if candidate == m { return Some(((i + 1) as i32, MorphLang::UA)); }
+                if candidate == m {
+                    return Some(((i + 1) as i32, MorphLang::UA));
+                }
             }
             for (i, &m) in MONTHS_EN.iter().enumerate() {
-                if candidate == m { return Some(((i + 1) as i32, MorphLang::EN)); }
+                if candidate == m {
+                    return Some(((i + 1) as i32, MorphLang::EN));
+                }
             }
         }
     }
@@ -233,17 +379,29 @@ fn match_season(tok: &Token) -> Option<DatePointerType> {
     let candidates: Vec<&str> = {
         let mut v = vec![term];
         for wf in tok.morph.items() {
-            if let Some(s) = wf.normal_case.as_deref() { v.push(s); }
-            if let Some(s) = wf.normal_full.as_deref() { v.push(s); }
+            if let Some(s) = wf.normal_case.as_deref() {
+                v.push(s);
+            }
+            if let Some(s) = wf.normal_full.as_deref() {
+                v.push(s);
+            }
         }
         v
     };
     for c in candidates {
         match c {
-            "ЗИМА" | "ЗИМОЙ" | "ЗИМОЮ" | "ЗИМЕ" | "ЗИМУ" => return Some(DatePointerType::Winter),
-            "ВЕСНА" | "ВЕСНОЙ" | "ВЕСНОЮ" | "ВЕСНЕ" | "ВЕСНУ" => return Some(DatePointerType::Spring),
-            "ЛЕТО" | "ЛЕТОМ" | "ЛЕТА" | "ЛЕТУ" => return Some(DatePointerType::Summer),
-            "ОСЕНЬ" | "ОСЕНЬЮ" | "ОСЕНИ" | "AUTUMN" | "FALL" => return Some(DatePointerType::Autumn),
+            "ЗИМА" | "ЗИМОЙ" | "ЗИМОЮ" | "ЗИМЕ" | "ЗИМУ" => {
+                return Some(DatePointerType::Winter)
+            }
+            "ВЕСНА" | "ВЕСНОЙ" | "ВЕСНОЮ" | "ВЕСНЕ" | "ВЕСНУ" => {
+                return Some(DatePointerType::Spring)
+            }
+            "ЛЕТО" | "ЛЕТОМ" | "ЛЕТА" | "ЛЕТУ" => {
+                return Some(DatePointerType::Summer)
+            }
+            "ОСЕНЬ" | "ОСЕНЬЮ" | "ОСЕНИ" | "AUTUMN" | "FALL" => {
+                return Some(DatePointerType::Autumn)
+            }
             "WINTER" => return Some(DatePointerType::Winter),
             "SPRING" => return Some(DatePointerType::Spring),
             "SUMMER" => return Some(DatePointerType::Summer),
@@ -260,7 +418,8 @@ fn match_season(tok: &Token) -> Option<DatePointerType> {
 pub fn test_year_rus_word(t0: &TokenRef) -> Option<TokenRef> {
     let term = t0.borrow().term().map(|s| s.to_string())?;
     match term.as_str() {
-        "ГОД" | "ГОДОВ" | "ГОДУ" | "ГОДА" | "РІК" | "РОКУ" | "РОКИ" | "РОКІВ" => {
+        "ГОД" | "ГОДОВ" | "ГОДУ" | "ГОДА" | "РІК" | "РОКУ" | "РОКИ" | "РОКІВ" =>
+        {
             return Some(t0.clone());
         }
         "ГГ" | "Г" | "Р" | "РР" => {
@@ -268,7 +427,9 @@ pub fn test_year_rus_word(t0: &TokenRef) -> Option<TokenRef> {
             let next = t0.borrow().next.clone();
             if let Some(n) = next {
                 let is_dot = n.borrow().term().map_or(false, |t| t == ".");
-                if is_dot { return Some(n); }
+                if is_dot {
+                    return Some(n);
+                }
             }
             return Some(t0.clone());
         }
@@ -281,17 +442,17 @@ pub fn test_year_rus_word(t0: &TokenRef) -> Option<TokenRef> {
 
 #[derive(Clone)]
 pub struct DateItemToken {
-    pub typ:          DateItemType,
+    pub typ: DateItemType,
     pub string_value: String,
-    pub int_value:    i32,
-    pub ptr:          DatePointerType,
-    pub lang:         MorphLang,
-    pub new_age:      i32,   // -1 = BC, 0 = normal, 1 = AD explicit
-    pub relate:       bool,
-    pub begin_token:  TokenRef,
-    pub end_token:    TokenRef,
+    pub int_value: i32,
+    pub ptr: DatePointerType,
+    pub lang: MorphLang,
+    pub new_age: i32, // -1 = BC, 0 = normal, 1 = AD explicit
+    pub relate: bool,
+    pub begin_token: TokenRef,
+    pub end_token: TokenRef,
     /// Overridden year value (set when we explicitly resolved the year from a 2-digit number)
-    year_override:    i32,   // -1 = not set
+    year_override: i32, // -1 = not set
 }
 
 impl DateItemToken {
@@ -316,46 +477,89 @@ impl DateItemToken {
 
     /// Resolved year value (handles 2-digit disambiguation)
     pub fn year(&self) -> i32 {
-        if self.year_override >= 0 { return self.year_override; }
+        if self.year_override >= 0 {
+            return self.year_override;
+        }
         let v = self.int_value;
-        if v == 0 { return 0; }
+        if v == 0 {
+            return 0;
+        }
         if self.new_age == 0 {
-            if v < 16 { return 2000 + v; }
-            if v <= (APPROX_CUR_YEAR - 2000 + 5) { return 2000 + v; }
-            if v < 100 { return 1900 + v; }
+            if v < 16 {
+                return 2000 + v;
+            }
+            if v <= (APPROX_CUR_YEAR - 2000 + 5) {
+                return 2000 + v;
+            }
+            if v < 100 {
+                return 1900 + v;
+            }
         }
         v
     }
 
     pub fn can_be_year(&self) -> bool {
-        if matches!(self.typ, DateItemType::Year) { return true; }
-        if matches!(self.typ,
-            DateItemType::Month | DateItemType::Quartal |
-            DateItemType::Halfyear | DateItemType::Pointer |
-            DateItemType::Delim | DateItemType::Hour |
-            DateItemType::Minute | DateItemType::Second |
-            DateItemType::Century | DateItemType::Tenyears) { return false; }
+        if matches!(self.typ, DateItemType::Year) {
+            return true;
+        }
+        if matches!(
+            self.typ,
+            DateItemType::Month
+                | DateItemType::Quartal
+                | DateItemType::Halfyear
+                | DateItemType::Pointer
+                | DateItemType::Delim
+                | DateItemType::Hour
+                | DateItemType::Minute
+                | DateItemType::Second
+                | DateItemType::Century
+                | DateItemType::Tenyears
+        ) {
+            return false;
+        }
         let v = self.int_value;
-        if v >= 50 && v < 100 { return self.length_char() == 2; }
-        if v < 1000 || v > 2100 { return false; }
+        if v >= 50 && v < 100 {
+            return self.length_char() == 2;
+        }
+        if v < 1000 || v > 2100 {
+            return false;
+        }
         true
     }
 
     pub fn can_by_month(&self) -> bool {
-        if matches!(self.typ, DateItemType::Month) { return true; }
-        if matches!(self.typ,
-            DateItemType::Quartal | DateItemType::Halfyear |
-            DateItemType::Pointer | DateItemType::Delim |
-            DateItemType::Hour | DateItemType::Minute | DateItemType::Second) { return false; }
+        if matches!(self.typ, DateItemType::Month) {
+            return true;
+        }
+        if matches!(
+            self.typ,
+            DateItemType::Quartal
+                | DateItemType::Halfyear
+                | DateItemType::Pointer
+                | DateItemType::Delim
+                | DateItemType::Hour
+                | DateItemType::Minute
+                | DateItemType::Second
+        ) {
+            return false;
+        }
         self.int_value > 0 && self.int_value <= 12
     }
 
     pub fn can_be_day(&self) -> bool {
-        if matches!(self.typ,
-            DateItemType::Month | DateItemType::Quartal |
-            DateItemType::Halfyear | DateItemType::Pointer |
-            DateItemType::Delim | DateItemType::Hour |
-            DateItemType::Minute | DateItemType::Second) { return false; }
+        if matches!(
+            self.typ,
+            DateItemType::Month
+                | DateItemType::Quartal
+                | DateItemType::Halfyear
+                | DateItemType::Pointer
+                | DateItemType::Delim
+                | DateItemType::Hour
+                | DateItemType::Minute
+                | DateItemType::Second
+        ) {
+            return false;
+        }
         self.int_value > 0 && self.int_value <= 31
     }
 
@@ -400,7 +604,9 @@ pub fn try_parse(
 
     // ── NumberToken ──
     if let TokenKind::Number(n) = &tok.kind {
-        if n.is_real { return None; }
+        if n.is_real {
+            return None;
+        }
         let v: i32 = n.value.parse().ok()?;
         drop(tok);
 
@@ -449,7 +655,8 @@ pub fn try_parse(
                         item.end_token = nt.clone();
                         return Some(item);
                     }
-                    "ДЕСЯТИЛЕТИЕ" | "ДЕСЯТИЛІТТЯ" | "ДЕКАДА" if v < 10 => {
+                    "ДЕСЯТИЛЕТИЕ" | "ДЕСЯТИЛІТТЯ" | "ДЕКАДА" if v < 10 =>
+                    {
                         item.typ = DateItemType::Tenyears;
                         item.end_token = nt.clone();
                         return Some(item);
@@ -587,15 +794,22 @@ pub fn try_parse_list(
     };
 
     while let Some(cur) = tt.clone() {
-        if max_count > 0 && res.len() >= max_count { break; }
+        if max_count > 0 && res.len() >= max_count {
+            break;
+        }
 
         // Stop at newlines unless it's a known continuation
         let is_nl = cur.borrow().is_newline_before(sofa);
         if is_nl {
             // Allow: month followed by year on next line
             let last_typ = res.last().unwrap().typ;
-            let can_continue = matches!(last_typ, DateItemType::Month | DateItemType::Number | DateItemType::Year);
-            if !can_continue { break; }
+            let can_continue = matches!(
+                last_typ,
+                DateItemType::Month | DateItemType::Number | DateItemType::Year
+            );
+            if !can_continue {
+                break;
+            }
         }
 
         // Skip certain empty words that appear inside date expressions ("В", "OF", "THE", "IN")
@@ -625,9 +839,13 @@ pub fn try_parse_list(
         let p0 = match try_parse(&cur, &res, sofa) {
             None => {
                 // Can't parse; stop
-                if cur.borrow().is_newline_before(sofa) { break; }
+                if cur.borrow().is_newline_before(sofa) {
+                    break;
+                }
                 // Skip latin letters (breaks date context)
-                if cur.borrow().chars.is_latin_letter() { break; }
+                if cur.borrow().chars.is_latin_letter() {
+                    break;
+                }
                 break;
             }
             Some(p) => p,
@@ -636,7 +854,10 @@ pub fn try_parse_list(
         // Mark if previously last token was Month and now we have a year candidate
         if p0.can_be_year() && matches!(p0.typ, DateItemType::Number) {
             let last_typ = res.last().map(|r| r.typ);
-            if matches!(last_typ, Some(DateItemType::Halfyear) | Some(DateItemType::Quartal)) {
+            if matches!(
+                last_typ,
+                Some(DateItemType::Halfyear) | Some(DateItemType::Quartal)
+            ) {
                 let mut p2 = p0;
                 p2.typ = DateItemType::Year;
                 tt = p2.end_token.borrow().next.clone();
@@ -650,20 +871,33 @@ pub fn try_parse_list(
     }
 
     // Trim trailing delimiters
-    while res.last().map_or(false, |r| matches!(r.typ, DateItemType::Delim)) {
+    while res
+        .last()
+        .map_or(false, |r| matches!(r.typ, DateItemType::Delim))
+    {
         res.pop();
     }
 
-    if res.is_empty() { return None; }
+    if res.is_empty() {
+        return None;
+    }
     if res.len() == 1 {
         // Single item — only useful if it's a Year, Month, Pointer, Century, Tenyears, Halfyear, Quartal
-        let ok = matches!(res[0].typ,
-            DateItemType::Year | DateItemType::Month | DateItemType::Pointer |
-            DateItemType::Century | DateItemType::Tenyears |
-            DateItemType::Halfyear | DateItemType::Quartal |
-            DateItemType::Hour | DateItemType::Number
+        let ok = matches!(
+            res[0].typ,
+            DateItemType::Year
+                | DateItemType::Month
+                | DateItemType::Pointer
+                | DateItemType::Century
+                | DateItemType::Tenyears
+                | DateItemType::Halfyear
+                | DateItemType::Quartal
+                | DateItemType::Hour
+                | DateItemType::Number
         );
-        if !ok { return None; }
+        if !ok {
+            return None;
+        }
     }
 
     Some(res)

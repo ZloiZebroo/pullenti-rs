@@ -2,7 +2,6 @@
 ///
 /// Scores a list of `PersonItemToken`s against two candidate FIO orderings
 /// (Фамилия–Имя–Отчество and Имя–Отчество–Фамилия) and returns the best.
-
 use super::person_item_token::PersonItemToken;
 use super::person_normal_data::PersonNormalData;
 use super::person_normal_result::PersonNormalResult;
@@ -10,34 +9,45 @@ use super::person_normal_result::PersonNormalResult;
 // ── Slot type ─────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, PartialEq)]
-enum SlotType { Last, First, Middle }
+enum SlotType {
+    Last,
+    First,
+    Middle,
+}
 
 // ── PersonNormalItem ──────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone)]
 struct PersonNormalItem {
-    typ:    SlotType,
-    ind0:   i32,  // start index in src (inclusive)
-    ind1:   i32,  // end index in src (inclusive); ind1 < ind0 → slot empty (Middle only)
-    rnd0:   i32,  // best-so-far start
-    rnd1:   i32,  // best-so-far end
-    gender: i32,  // 1=masculine, 2=feminine being tested
-    render: i32,  // gender of best-so-far assignment
+    typ: SlotType,
+    ind0: i32,   // start index in src (inclusive)
+    ind1: i32,   // end index in src (inclusive); ind1 < ind0 → slot empty (Middle only)
+    rnd0: i32,   // best-so-far start
+    rnd1: i32,   // best-so-far end
+    gender: i32, // 1=masculine, 2=feminine being tested
+    render: i32, // gender of best-so-far assignment
 }
 
 impl PersonNormalItem {
     fn new(typ: SlotType) -> Self {
         PersonNormalItem {
-            typ, ind0: 0, ind1: -1,
-            rnd0: -1, rnd1: -1,
-            gender: 0, render: 0,
+            typ,
+            ind0: 0,
+            ind1: -1,
+            rnd0: -1,
+            rnd1: -1,
+            gender: 0,
+            render: 0,
         }
     }
 
     fn init(&mut self) {
-        self.ind0 = 0; self.ind1 = -1;
-        self.rnd0 = -1; self.rnd1 = -1;
-        self.gender = 0; self.render = 0;
+        self.ind0 = 0;
+        self.ind1 = -1;
+        self.rnd0 = -1;
+        self.rnd1 = -1;
+        self.gender = 0;
+        self.render = 0;
     }
 
     fn fix(&mut self) {
@@ -51,13 +61,19 @@ impl PersonNormalItem {
     fn calc_coef(&self, src: &[PersonItemToken]) -> f64 {
         if self.ind1 < self.ind0 {
             // Empty slot: allowed only for Middle
-            return if self.typ == SlotType::Middle { 1.0 } else { 0.0 };
+            return if self.typ == SlotType::Middle {
+                1.0
+            } else {
+                0.0
+            };
         }
 
         // Gap check: if any adjacent tokens have large whitespace, reject
         for i in self.ind0..self.ind1 {
             if i + 1 < src.len() as i32 {
-                if src[i as usize].whitespaces_before > 4 { return 0.0; }
+                if src[i as usize].whitespaces_before > 4 {
+                    return 0.0;
+                }
             }
         }
 
@@ -72,9 +88,11 @@ impl PersonNormalItem {
                         // Initial — neutral
                     } else if let Some(fn_m) = &pit.firstname {
                         // Gender match bonus/penalty
-                        if self.gender == 2 && fn_m.gender == 2 {}
-                        else if self.gender == 1 && fn_m.gender == 1 {}
-                        else { co *= 0.98; }
+                        if self.gender == 2 && fn_m.gender == 2 {
+                        } else if self.gender == 1 && fn_m.gender == 1 {
+                        } else {
+                            co *= 0.98;
+                        }
                     } else if pit.middlename.is_some() {
                         co *= 0.8;
                     } else if let Some(ln) = &pit.lastname {
@@ -95,9 +113,11 @@ impl PersonNormalItem {
                     if self.ind0 == self.ind1 && pit.value.chars().count() == 1 {
                         // Initial — neutral
                     } else if let Some(mn_m) = &pit.middlename {
-                        if self.gender == 2 && mn_m.gender == 2 {}
-                        else if self.gender == 1 && mn_m.gender == 1 {}
-                        else { co *= 0.7; }
+                        if self.gender == 2 && mn_m.gender == 2 {
+                        } else if self.gender == 1 && mn_m.gender == 1 {
+                        } else {
+                            co *= 0.7;
+                        }
                     } else if pit.value.ends_with("ВНА") && self.gender == 2 {
                         // Feminine patronymic tail — good
                     } else if pit.value.ends_with("ЧНА") && self.gender == 2 {
@@ -106,7 +126,11 @@ impl PersonNormalItem {
                     } else if pit.firstname.is_some() {
                         co *= 0.98;
                     } else if let Some(ln) = &pit.lastname {
-                        if ln.is_in_dictionary { co *= 0.8; } else { co *= 0.7; }
+                        if ln.is_in_dictionary {
+                            co *= 0.8;
+                        } else {
+                            co *= 0.7;
+                        }
                     } else {
                         co *= 0.7;
                     }
@@ -121,12 +145,18 @@ impl PersonNormalItem {
                             co *= 0.3;
                         }
                     } else if pit.value.ends_with("ИЧ") {
-                        co *= if self.ind0 == 0 || self.gender == 2 { 1.0 } else { 0.85 };
+                        co *= if self.ind0 == 0 || self.gender == 2 {
+                            1.0
+                        } else {
+                            0.85
+                        };
                     } else if let Some(ln) = &pit.lastname {
                         if ln.is_in_dictionary || ln.is_lastname_has_std_tail {
-                            if self.gender == 2 && ln.gender == 2 {}
-                            else if self.gender == 1 && ln.gender == 1 {}
-                            else { co *= 0.98; }
+                            if self.gender == 2 && ln.gender == 2 {
+                            } else if self.gender == 1 && ln.gender == 1 {
+                            } else {
+                                co *= 0.98;
+                            }
                         } else if pit.firstname.is_some() || pit.middlename.is_some() {
                             co *= 0.8;
                         } else {
@@ -151,7 +181,9 @@ impl PersonNormalItem {
     /// - `alt` is the short form that appeared in the text (set only for First slot
     ///   when ShortName expansion was performed)
     fn result_with_alt(&self, src: &[PersonItemToken]) -> (Option<String>, Option<String>) {
-        if self.rnd0 < 0 || self.rnd1 < self.rnd0 { return (None, None); }
+        if self.rnd0 < 0 || self.rnd1 < self.rnd0 {
+            return (None, None);
+        }
 
         // If First slot has range [i, i+1] with one being an initial → pick the full name
         if self.typ == SlotType::First && self.rnd1 == self.rnd0 + 1 {
@@ -222,10 +254,14 @@ impl PersonNormalNode {
 
     /// Score this node against `src`.  Returns best combined coefficient [0..1].
     pub fn process(&mut self, src: &[PersonItemToken]) -> f64 {
-        for item in &mut self.items { item.init(); }
+        for item in &mut self.items {
+            item.init();
+        }
 
         let n = src.len() as i32;
-        if n == 0 { return 0.0; }
+        if n == 0 {
+            return 0.0;
+        }
 
         let mut best = 0.0f64;
 
@@ -238,7 +274,9 @@ impl PersonNormalNode {
                 self.items[0].ind1 = i0;
                 self.items[0].gender = gender;
                 let c0 = self.items[0].calc_coef(src);
-                if c0 <= 0.0 { continue; }
+                if c0 <= 0.0 {
+                    continue;
+                }
 
                 // items[1] and items[2] share the remaining tokens
                 for i1 in (i0 + 1)..n {
@@ -246,7 +284,9 @@ impl PersonNormalNode {
                     self.items[1].ind1 = i1;
                     self.items[1].gender = gender;
                     let c1 = self.items[1].calc_coef(src);
-                    if c0 * c1 <= best { continue; }
+                    if c0 * c1 <= best {
+                        continue;
+                    }
 
                     // items[2] gets the rest; if empty and it's Middle → OK
                     {
@@ -255,14 +295,18 @@ impl PersonNormalNode {
                         self.items[2].gender = gender;
                         // Middle can also be empty (ind1 < ind0)
                         if self.items[2].ind0 > self.items[2].ind1 {
-                            if self.items[2].typ != SlotType::Middle { continue; }
+                            if self.items[2].typ != SlotType::Middle {
+                                continue;
+                            }
                             self.items[2].ind1 = self.items[2].ind0 - 1; // flag: empty
                         }
                         let c2 = self.items[2].calc_coef(src);
                         let total = c0 * c1 * c2;
                         if total > best {
                             best = total;
-                            for item in &mut self.items { item.fix(); }
+                            for item in &mut self.items {
+                                item.fix();
+                            }
                         }
                     }
                 }
@@ -270,7 +314,11 @@ impl PersonNormalNode {
                 // 2-token fallback: items[0]=[0..i0], items[1 or 2]=[i0+1..n-1],
                 // remaining Middle slot empty
                 if n == 2 || (n == 1 && i0 == 0) {
-                    let k = if self.items[1].typ == SlotType::Middle { 2 } else { 1 };
+                    let k = if self.items[1].typ == SlotType::Middle {
+                        2
+                    } else {
+                        1
+                    };
                     if k < self.items.len() {
                         self.items[k].ind0 = i0 + 1;
                         self.items[k].ind1 = n - 1;
@@ -284,7 +332,9 @@ impl PersonNormalNode {
                         let total = c0 * ck;
                         if total > best {
                             best = total;
-                            for item in &mut self.items { item.fix(); }
+                            for item in &mut self.items {
+                                item.fix();
+                            }
                         }
                     }
                 }
@@ -302,9 +352,16 @@ impl PersonNormalNode {
         for item in &self.items {
             let (val, alt) = item.result_with_alt(src);
             match item.typ {
-                SlotType::First  => { res.firstname = val; res.firstname_alt = alt; }
-                SlotType::Middle => { res.middlename = val; }
-                SlotType::Last   => { res.lastname = val; }
+                SlotType::First => {
+                    res.firstname = val;
+                    res.firstname_alt = alt;
+                }
+                SlotType::Middle => {
+                    res.middlename = val;
+                }
+                SlotType::Last => {
+                    res.lastname = val;
+                }
             }
         }
     }
@@ -318,25 +375,28 @@ pub fn score_and_build(
     pits: &[PersonItemToken],
     threshold: f64,
 ) -> Option<(PersonNormalData, f64)> {
-    if pits.is_empty() { return None; }
+    if pits.is_empty() {
+        return None;
+    }
 
     let mut node_fio = PersonNormalNode::new(false); // Last First Middle
-    let mut node_iof = PersonNormalNode::new(true);  // First Middle Last
+    let mut node_iof = PersonNormalNode::new(true); // First Middle Last
 
     let coef_fio = node_fio.process(pits);
     let coef_iof = node_iof.process(pits);
 
     let (best_coef, best_node) = if coef_fio >= coef_iof {
-        (coef_fio, &mut node_fio as *mut PersonNormalNode)
+        (coef_fio, &mut node_fio)
     } else {
-        (coef_iof, &mut node_iof as *mut PersonNormalNode)
+        (coef_iof, &mut node_iof)
     };
 
-    if best_coef < threshold { return None; }
+    if best_coef < threshold {
+        return None;
+    }
 
     let mut res = PersonNormalData::new();
-    // SAFETY: we don't alias the two nodes simultaneously
-    unsafe { (*best_node).create_result(pits, &mut res); }
+    best_node.create_result(pits, &mut res);
 
     // Set coef as 0–100 percentage
     res.coef = (best_coef * 100.0) as i32;

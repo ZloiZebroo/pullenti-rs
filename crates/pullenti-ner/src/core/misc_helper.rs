@@ -1,17 +1,23 @@
+use crate::source_of_analysis::SourceOfAnalysis;
 /// MiscHelper — a subset of MiscHelper.cs needed by the semantic layer.
 ///
 /// Specifically: `can_be_start_of_sentence()` and `is_eng_article()`.
-
-use crate::token::{Token, TokenRef, TokenKind};
-use crate::source_of_analysis::SourceOfAnalysis;
+use crate::token::{Token, TokenKind, TokenRef};
 
 // ── is_eng_article ─────────────────────────────────────────────────────────
 
 pub fn is_eng_article(t: &TokenRef) -> bool {
     let tb = t.borrow();
-    if !tb.chars.is_latin_letter() { return false; }
-    let TokenKind::Text(ref txt) = tb.kind else { return false; };
-    matches!(txt.term.as_str(), "THE" | "A" | "AN" | "DER" | "DIE" | "DAS")
+    if !tb.chars.is_latin_letter() {
+        return false;
+    }
+    let TokenKind::Text(ref txt) = tb.kind else {
+        return false;
+    };
+    matches!(
+        txt.term.as_str(),
+        "THE" | "A" | "AN" | "DER" | "DIE" | "DAS"
+    )
 }
 
 // ── can_be_start_of_sentence ───────────────────────────────────────────────
@@ -67,8 +73,8 @@ pub fn can_be_start_of_sentence(t: &TokenRef, sofa: &SourceOfAnalysis) -> bool {
         }
     }
 
-    let ws_count   = tb.whitespaces_before_count(sofa);
-    let nl_count   = tb.newlines_before_count(sofa);
+    let ws_count = tb.whitespaces_before_count(sofa);
+    let nl_count = tb.newlines_before_count(sofa);
     drop(tb);
     drop(pb);
 
@@ -139,14 +145,19 @@ pub fn can_be_start_of_sentence(t: &TokenRef, sofa: &SourceOfAnalysis) -> bool {
                 _ => pb.is_char('.', sofa),
             }
         };
-        if !is_period { return false; }
+        if !is_period {
+            return false;
+        }
 
         if ws_count > 1 {
             return true;
         }
 
         // Check next.isChar('.')
-        let next_is_period = t.borrow().next.as_ref()
+        let next_is_period = t
+            .borrow()
+            .next
+            .as_ref()
             .and_then(|n| Some(n.borrow().is_char('.', sofa)))
             .unwrap_or(false);
         if next_is_period {
@@ -161,7 +172,7 @@ pub fn can_be_start_of_sentence(t: &TokenRef, sofa: &SourceOfAnalysis) -> bool {
                             let ppb = pp.borrow();
                             ppb.chars.is_all_lower() && ppb.chars.is_letter()
                         }
-                    }
+                    },
                 }
             };
             if ppb_all_lower {

@@ -8,7 +8,6 @@
 ///       and returns the entry (regions only).
 ///   3.  `type_keyword(s)` → classifies a token as a territory type keyword
 ///       and returns its canonical lowercase form.
-
 use std::collections::HashMap;
 use std::sync::OnceLock;
 
@@ -25,15 +24,15 @@ pub enum GeoEntryKind {
 
 #[derive(Debug, Clone)]
 pub struct GeoEntry {
-    pub kind:           GeoEntryKind,
+    pub kind: GeoEntryKind,
     /// Canonical type string (lowercase), e.g. "государство", "область", "город"
-    pub type_str:       String,
+    pub type_str: String,
     /// ISO 3166-1 alpha-2 code (uppercase), countries only.
-    pub alpha2:         Option<String>,
+    pub alpha2: Option<String>,
     /// Shortest canonical display name (uppercase).
     pub canonical_name: String,
     /// All name forms stored in the entry (uppercase).
-    pub all_names:      Vec<String>,
+    pub all_names: Vec<String>,
 }
 
 // ── Static tables ─────────────────────────────────────────────────────────────
@@ -42,8 +41,8 @@ struct Tables {
     /// name/acronym → entry index
     name_map: HashMap<String, usize>,
     /// adjective form → entry index  (regions only)
-    adj_map:  HashMap<String, usize>,
-    entries:  Vec<GeoEntry>,
+    adj_map: HashMap<String, usize>,
+    entries: Vec<GeoEntry>,
 }
 
 static TABLES: OnceLock<Tables> = OnceLock::new();
@@ -89,12 +88,32 @@ pub fn type_keyword(s: &str) -> Option<(&'static str, bool)> {
 pub fn is_city_prefix(s: &str) -> bool {
     // Standalone "С" and "П" are accepted only as abbreviations; the parser
     // validates the following dot before consuming them as locality prefixes.
-    matches!(s, "Г" | "Г." | "ГОР." | "ГОРОД" |
-        "П" | "П." | "ПОС." | "ПГТ" | "ПГТ." |
-        "С" | "С." | "СЕЛ." | "СЕЛО" |
-        "Д" | "Д." | "ДЕР." | "ДЕРЕВНЯ" |
-        "К" | "К." | "КЛХ" | "КЛХ." |
-        "СТ" | "СТ." | "СТАНИЦА")
+    matches!(
+        s,
+        "Г" | "Г."
+            | "ГОР."
+            | "ГОРОД"
+            | "П"
+            | "П."
+            | "ПОС."
+            | "ПГТ"
+            | "ПГТ."
+            | "С"
+            | "С."
+            | "СЕЛ."
+            | "СЕЛО"
+            | "Д"
+            | "Д."
+            | "ДЕР."
+            | "ДЕРЕВНЯ"
+            | "К"
+            | "К."
+            | "КЛХ"
+            | "КЛХ."
+            | "СТ"
+            | "СТ."
+            | "СТАНИЦА"
+    )
 }
 
 /// Returns true if `s` is an ABBREVIATED city prefix (not a full word).
@@ -102,10 +121,28 @@ pub fn is_city_prefix(s: &str) -> bool {
 /// separator that should be skipped. Full-word prefixes ("город", "деревня")
 /// must NOT skip a trailing period — it is sentence-ending punctuation.
 pub fn is_city_prefix_abbrev(s: &str) -> bool {
-    matches!(s, "Г" | "Г." | "ГОР." |
-        "П" | "П." | "ПОС." | "ПГТ" | "ПГТ." |
-        "С" | "С." | "СЕЛ." | "Д" | "Д." | "ДЕР." |
-        "К" | "К." | "КЛХ" | "КЛХ." | "СТ" | "СТ.")
+    matches!(
+        s,
+        "Г" | "Г."
+            | "ГОР."
+            | "П"
+            | "П."
+            | "ПОС."
+            | "ПГТ"
+            | "ПГТ."
+            | "С"
+            | "С."
+            | "СЕЛ."
+            | "Д"
+            | "Д."
+            | "ДЕР."
+            | "К"
+            | "К."
+            | "КЛХ"
+            | "КЛХ."
+            | "СТ"
+            | "СТ."
+    )
 }
 
 // ── Territory type keywords ───────────────────────────────────────────────────
@@ -114,65 +151,63 @@ pub fn is_city_prefix_abbrev(s: &str) -> bool {
 
 static TYPE_KEYWORDS: &[(&str, &str, bool)] = &[
     // States / countries
-    ("ГОСУДАРСТВО",     "государство",     false),
-    ("ДЕРЖАВА",         "государство",     false),
-    ("СТРАНА",          "страна",          false),
-    ("COUNTRY",         "country",         false),
-    ("ИМПЕРИЯ",         "империя",         false),
-    ("КОРОЛЕВСТВО",     "королевство",     false),
-    ("ИМПЕРИЯ",         "империя",         false),
-    ("KINGDOM",         "kingdom",         false),
-    ("DUCHY",           "duchy",           false),
-    ("СОЮЗ",            "союз",            false),
-    ("UNION",           "union",           false),
-    ("ФЕДЕРАЦИЯ",       "федерация",       false),
-    ("FEDERATION",      "federation",      false),
-    ("REPUBLIC",        "republic",        false),
-
+    ("ГОСУДАРСТВО", "государство", false),
+    ("ДЕРЖАВА", "государство", false),
+    ("СТРАНА", "страна", false),
+    ("COUNTRY", "country", false),
+    ("ИМПЕРИЯ", "империя", false),
+    ("КОРОЛЕВСТВО", "королевство", false),
+    ("ИМПЕРИЯ", "империя", false),
+    ("KINGDOM", "kingdom", false),
+    ("DUCHY", "duchy", false),
+    ("СОЮЗ", "союз", false),
+    ("UNION", "union", false),
+    ("ФЕДЕРАЦИЯ", "федерация", false),
+    ("FEDERATION", "federation", false),
+    ("REPUBLIC", "republic", false),
     // Regions
-    ("РЕСПУБЛИКА",      "республика",      true),
-    ("REPUBLIC",        "republic",        true),
-    ("ОБЛАСТЬ",         "область",         false),
-    ("ОБЛ.",            "область",         false),
-    ("REGION",          "region",          false),
-    ("РАЙОН",           "район",           false),
-    ("Р-Н",             "район",           false),
-    ("DISTRICT",        "district",        false),
-    ("КРАЙ",            "край",            false),
-    ("KRAI",            "край",            false),
-    ("ОКРУГ",           "округ",           false),
-    ("ОКRUG",           "округ",           false),
-    ("ШТАТ",            "штат",            true),
-    ("STATE",           "state",           false),
-    ("ПРОВИНЦИЯ",       "провинция",       true),
-    ("PROVINCE",        "province",        true),
-    ("ПРЕФЕКТУРА",      "префектура",      true),
-    ("PREFECTURE",      "prefecture",      true),
-    ("ГРАФСТВО",        "графство",        true),
-    ("COUNTY",          "county",          false),
-    ("АВТОНОМИЯ",       "автономия",       false),
-    ("AUTONOMY",        "autonomy",        false),
-    ("ГУБЕРНИЯ",        "губерния",        false),
-    ("УЕЗД",            "уезд",            false),
-    ("ВОЛОСТЬ",         "волость",         false),
-    ("РЕГИОН",          "регион",          false),
-
+    ("РЕСПУБЛИКА", "республика", true),
+    ("REPUBLIC", "republic", true),
+    ("ОБЛАСТЬ", "область", false),
+    ("ОБЛ.", "область", false),
+    ("REGION", "region", false),
+    ("РАЙОН", "район", false),
+    ("Р-Н", "район", false),
+    ("DISTRICT", "district", false),
+    ("КРАЙ", "край", false),
+    ("KRAI", "край", false),
+    ("ОКРУГ", "округ", false),
+    ("ОКRUG", "округ", false),
+    ("ШТАТ", "штат", true),
+    ("STATE", "state", false),
+    ("ПРОВИНЦИЯ", "провинция", true),
+    ("PROVINCE", "province", true),
+    ("ПРЕФЕКТУРА", "префектура", true),
+    ("PREFECTURE", "prefecture", true),
+    ("ГРАФСТВО", "графство", true),
+    ("COUNTY", "county", false),
+    ("АВТОНОМИЯ", "автономия", false),
+    ("AUTONOMY", "autonomy", false),
+    ("ГУБЕРНИЯ", "губерния", false),
+    ("УЕЗД", "уезд", false),
+    ("ВОЛОСТЬ", "волость", false),
+    ("РЕГИОН", "регион", false),
     // Cities
-    ("ГОРОД",           "город",           true),
-    ("ГОРОД",           "город",           true),
-    ("МІСТО",           "город",           true),
-    ("CITY",            "city",            true),
-    ("TOWN",            "town",            true),
-    ("ПОСЕЛОК",         "поселок",         true),
-    ("ПОСЁЛОК",         "поселок",         true),
-    ("ПОС.",            "поселок",         true),
-    ("СЕЛО",            "село",            true),
-    ("ДЕРЕВНЯ",         "деревня",         true),
-    ("СТАНИЦА",         "станица",         true),
-    ("АУЛ",             "аул",             true),
-    ("MUNICIPALITY",    "municipality",    false),
-    ("LOCALITY",        "locality",        false),
-    ("VILLAGE",         "village",         true),
+    ("ГОРОД", "город", true),
+    ("ГОРОД", "город", true),
+    ("МІСТО", "город", true),
+    ("CITY", "city", true),
+    ("TOWN", "town", true),
+    ("ПОСЕЛОК", "поселок", true),
+    ("ПОСЁЛОК", "поселок", true),
+    ("ПОС.", "поселок", true),
+    ("СЕЛО", "село", true),
+    ("ДЕРЕВНЯ", "деревня", true),
+    ("СТАНИЦА", "станица", true),
+    ("АУЛ", "аул", true),
+    ("MUNICIPALITY", "municipality", false),
+    ("LOCALITY", "locality", false),
+    ("VILLAGE", "village", true),
 ];
 
 // ── XML parser & table builder ────────────────────────────────────────────────
@@ -193,7 +228,11 @@ fn build_tables() -> Tables {
     let c_xml = MorphDeserializer::deflate_gzip(C_DAT);
     parse_c_dat(&c_xml, &mut entries, &mut name_map);
 
-    Tables { name_map, adj_map, entries }
+    Tables {
+        name_map,
+        adj_map,
+        entries,
+    }
 }
 
 /// Simple line-by-line XML parser for t.dat format.
@@ -206,7 +245,11 @@ fn parse_t_dat(
     let text = std::str::from_utf8(xml).unwrap_or("");
 
     #[derive(PartialEq)]
-    enum State { Outside, InState, InReg }
+    enum State {
+        Outside,
+        InState,
+        InReg,
+    }
 
     let mut state = State::Outside;
     let mut cur_entry: Option<GeoEntry> = None;
@@ -302,11 +345,7 @@ fn parse_t_dat(
 }
 
 /// Simple line-by-line XML parser for c.dat format.
-fn parse_c_dat(
-    xml: &[u8],
-    entries: &mut Vec<GeoEntry>,
-    name_map: &mut HashMap<String, usize>,
-) {
+fn parse_c_dat(xml: &[u8], entries: &mut Vec<GeoEntry>, name_map: &mut HashMap<String, usize>) {
     let text = std::str::from_utf8(xml).unwrap_or("");
 
     let mut in_city = false;
@@ -332,7 +371,8 @@ fn parse_c_dat(
                 for n in &entry.all_names {
                     // Cities override pre-existing county/district region entries
                     // (e.g. "MIAMI" is both a US county in t.dat and a city in c.dat).
-                    let should_override = name_map.get(n)
+                    let should_override = name_map
+                        .get(n)
                         .map(|&i| {
                             matches!(entries[i].kind, GeoEntryKind::Region)
                                 && matches!(
@@ -372,38 +412,38 @@ fn parse_c_dat(
 /// academic texts as language / country shorthand) resolve to their country.
 pub fn nationality_to_country(term: &str) -> Option<&'static str> {
     match term {
-        "CHINESE"               => Some("КИТАЙ"),
-        "JAPANESE"              => Some("ЯПОНИЯ"),
-        "RUSSIAN"               => Some("РОССИЯ"),
-        "FRENCH"                => Some("ФРАНЦИЯ"),
-        "GERMAN"                => Some("ГЕРМАНИЯ"),
-        "SPANISH"               => Some("ИСПАНИЯ"),
-        "ENGLISH" | "BRITISH"   => Some("ВЕЛИКОБРИТАНИЯ"),
-        "KOREAN"                => Some("КОРЕЯ"),
-        "FINNISH"               => Some("ФИНЛЯНДИЯ"),
-        "ITALIAN"               => Some("ИТАЛИЯ"),
-        "POLISH"                => Some("ПОЛЬША"),
-        "PORTUGUESE"            => Some("ПОРТУГАЛИЯ"),
-        "THAI"                  => Some("ТАИЛАНД"),
-        "IRANIAN" | "PERSIAN"   => Some("ИРАН"),
-        "DOMINICAN"             => Some("ДОМИНИКАНА"),
-        "AMERICAN"              => Some("США"),
-        "UKRAINIAN"             => Some("УКРАИНА"),
-        "TURKISH"               => Some("ТУРЦИЯ"),
-        "ARABIC" | "ARAB"       => Some("САУДОВСКАЯ АРАВИЯ"),
-        "SWEDISH"               => Some("ШВЕЦИЯ"),
-        "NORWEGIAN"             => Some("НОРВЕГИЯ"),
-        "DANISH"                => Some("ДАНИЯ"),
-        "DUTCH"                 => Some("НИДЕРЛАНДЫ"),
-        "CZECH"                 => Some("ЧЕХИЯ"),
-        "HUNGARIAN"             => Some("ВЕНГРИЯ"),
-        "ROMANIAN"              => Some("РУМЫНИЯ"),
-        "GREEK"                 => Some("ГРЕЦИЯ"),
-        "BULGARIAN"             => Some("БОЛГАРИЯ"),
-        "SERBIAN"               => Some("СЕРБИЯ"),
-        "CROATIAN"              => Some("ХОРВАТИЯ"),
-        "SLOVAK"                => Some("СЛОВАКИЯ"),
-        "SLOVENIAN"             => Some("СЛОВЕНИЯ"),
+        "CHINESE" => Some("КИТАЙ"),
+        "JAPANESE" => Some("ЯПОНИЯ"),
+        "RUSSIAN" => Some("РОССИЯ"),
+        "FRENCH" => Some("ФРАНЦИЯ"),
+        "GERMAN" => Some("ГЕРМАНИЯ"),
+        "SPANISH" => Some("ИСПАНИЯ"),
+        "ENGLISH" | "BRITISH" => Some("ВЕЛИКОБРИТАНИЯ"),
+        "KOREAN" => Some("КОРЕЯ"),
+        "FINNISH" => Some("ФИНЛЯНДИЯ"),
+        "ITALIAN" => Some("ИТАЛИЯ"),
+        "POLISH" => Some("ПОЛЬША"),
+        "PORTUGUESE" => Some("ПОРТУГАЛИЯ"),
+        "THAI" => Some("ТАИЛАНД"),
+        "IRANIAN" | "PERSIAN" => Some("ИРАН"),
+        "DOMINICAN" => Some("ДОМИНИКАНА"),
+        "AMERICAN" => Some("США"),
+        "UKRAINIAN" => Some("УКРАИНА"),
+        "TURKISH" => Some("ТУРЦИЯ"),
+        "ARABIC" | "ARAB" => Some("САУДОВСКАЯ АРАВИЯ"),
+        "SWEDISH" => Some("ШВЕЦИЯ"),
+        "NORWEGIAN" => Some("НОРВЕГИЯ"),
+        "DANISH" => Some("ДАНИЯ"),
+        "DUTCH" => Some("НИДЕРЛАНДЫ"),
+        "CZECH" => Some("ЧЕХИЯ"),
+        "HUNGARIAN" => Some("ВЕНГРИЯ"),
+        "ROMANIAN" => Some("РУМЫНИЯ"),
+        "GREEK" => Some("ГРЕЦИЯ"),
+        "BULGARIAN" => Some("БОЛГАРИЯ"),
+        "SERBIAN" => Some("СЕРБИЯ"),
+        "CROATIAN" => Some("ХОРВАТИЯ"),
+        "SLOVAK" => Some("СЛОВАКИЯ"),
+        "SLOVENIAN" => Some("СЛОВЕНИЯ"),
         _ => None,
     }
 }
@@ -430,21 +470,27 @@ fn adj_feminine_to_masculine(fem: &str) -> Option<String> {
     // Collect chars to work with Cyrillic properly
     let chars: Vec<char> = fem.chars().collect();
     let n = chars.len();
-    if n < 3 { return None; }
+    if n < 3 {
+        return None;
+    }
 
     // Check for "-АЯ" ending (2 Cyrillic chars = 2 chars)
-    if chars[n-2] == 'А' && chars[n-1] == 'Я' {
-        let stem_chars = &chars[..n-2];
+    if chars[n - 2] == 'А' && chars[n - 1] == 'Я' {
+        let stem_chars = &chars[..n - 2];
         let last = *stem_chars.last()?;
         // After К, Ж, Ш, Щ, Ч the adjective ending is "ИЙ"; otherwise "ЫЙ"
-        let ending = if matches!(last, 'К' | 'Ж' | 'Ш' | 'Щ' | 'Ч') { "ИЙ" } else { "ЫЙ" };
+        let ending = if matches!(last, 'К' | 'Ж' | 'Ш' | 'Щ' | 'Ч') {
+            "ИЙ"
+        } else {
+            "ЫЙ"
+        };
         let stem: String = stem_chars.iter().collect();
         return Some(format!("{}{}", stem, ending));
     }
 
     // Check for "-ЯЯ" ending (soft adjectives like "СИНЯЯ")
-    if chars[n-2] == 'Я' && chars[n-1] == 'Я' {
-        let stem: String = chars[..n-2].iter().collect();
+    if chars[n - 2] == 'Я' && chars[n - 1] == 'Я' {
+        let stem: String = chars[..n - 2].iter().collect();
         return Some(format!("{}ИЙ", stem));
     }
 

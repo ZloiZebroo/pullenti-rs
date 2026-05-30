@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 /// TransportAnalyzer — simplified port of TransportAnalyzer.cs.
 ///
 /// Recognizes patterns like:
@@ -6,15 +7,13 @@
 ///   "теплоход «Победа»"        → TRANSPORT kind=Ship, type=теплоход, name=ПОБЕДА
 ///   "Toyota Camry"             → TRANSPORT kind=Auto, brand=Toyota  (brand-only pattern)
 ///   "Ford"                     → TRANSPORT kind=Auto, brand=Ford    (brand alone)
-
 use std::rc::Rc;
-use std::cell::RefCell;
 
-use crate::analyzer::Analyzer;
 use crate::analysis_kit::AnalysisKit;
+use crate::analyzer::Analyzer;
 use crate::referent::Referent;
-use crate::token::{Token, TokenRef, TokenKind};
 use crate::source_of_analysis::SourceOfAnalysis;
+use crate::token::{Token, TokenKind, TokenRef};
 use crate::transport::transport_referent as tr_ref;
 use crate::transport::transport_referent::TransportKind;
 use crate::transport::transport_table;
@@ -22,12 +21,18 @@ use crate::transport::transport_table;
 pub struct TransportAnalyzer;
 
 impl TransportAnalyzer {
-    pub fn new() -> Self { TransportAnalyzer }
+    pub fn new() -> Self {
+        TransportAnalyzer
+    }
 }
 
 impl Analyzer for TransportAnalyzer {
-    fn name(&self) -> &'static str { "TRANSPORT" }
-    fn caption(&self) -> &'static str { "Транспорт" }
+    fn name(&self) -> &'static str {
+        "TRANSPORT"
+    }
+    fn caption(&self) -> &'static str {
+        "Транспорт"
+    }
 
     fn process(&self, kit: &mut AnalysisKit) {
         let sofa = kit.sofa.clone();
@@ -38,13 +43,13 @@ impl Analyzer for TransportAnalyzer {
                 continue;
             }
             match try_parse(&t, &sofa) {
-                None => { cur = t.borrow().next.clone(); }
+                None => {
+                    cur = t.borrow().next.clone();
+                }
                 Some((referent, end)) => {
                     let r_rc = Rc::new(RefCell::new(referent));
                     let r_rc = kit.add_entity(r_rc);
-                    let tok = Rc::new(RefCell::new(
-                        Token::new_referent(t.clone(), end, r_rc)
-                    ));
+                    let tok = Rc::new(RefCell::new(Token::new_referent(t.clone(), end, r_rc)));
                     kit.embed_token(tok.clone());
                     cur = tok.borrow().next.clone();
                 }
@@ -57,9 +62,15 @@ impl Analyzer for TransportAnalyzer {
 
 fn try_parse(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Referent, TokenRef)> {
     let tb = t.borrow();
-    let TokenKind::Text(_) = &tb.kind else { return None; };
+    let TokenKind::Text(_) = &tb.kind else {
+        return None;
+    };
     let surface = sofa.substring(tb.begin_char, tb.end_char);
-    let starts_upper = surface.chars().next().map(|c| c.is_uppercase()).unwrap_or(false);
+    let starts_upper = surface
+        .chars()
+        .next()
+        .map(|c| c.is_uppercase())
+        .unwrap_or(false);
     let uppers = collect_upper_forms(&tb);
     drop(tb);
 
@@ -67,7 +78,9 @@ fn try_parse(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Referent, TokenRe
     // Type keywords can appear lowercase mid-sentence (e.g. "на теплоходе «Победа»")
     for up in &uppers {
         if let Some(entry) = transport_table::lookup_type(up) {
-            if let Some(result) = try_type_then_details(t, up, entry.canonical, entry.kind.clone(), sofa) {
+            if let Some(result) =
+                try_type_then_details(t, up, entry.canonical, entry.kind.clone(), sofa)
+            {
                 return Some(result);
             }
         }
@@ -75,7 +88,9 @@ fn try_parse(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Referent, TokenRe
 
     // Pattern 2: brand alone or brand + model
     // Brands must start uppercase to avoid false positives
-    if !starts_upper { return None; }
+    if !starts_upper {
+        return None;
+    }
     for up in &uppers {
         if let Some(entry) = transport_table::lookup_brand(up) {
             if let Some(result) = try_brand_pattern(t, entry.canonical, entry.kind.clone(), sofa) {
@@ -185,9 +200,16 @@ fn skip_punct(t: &TokenRef, sofa: &SourceOfAnalysis) -> TokenRef {
 /// Returns (canonical_brand, end_token) or None.
 fn try_brand_token(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(String, TokenRef)> {
     let tb = t.borrow();
-    let TokenKind::Text(_) = &tb.kind else { return None; };
+    let TokenKind::Text(_) = &tb.kind else {
+        return None;
+    };
     let surface = sofa.substring(tb.begin_char, tb.end_char);
-    if !surface.chars().next().map(|c| c.is_uppercase()).unwrap_or(false) {
+    if !surface
+        .chars()
+        .next()
+        .map(|c| c.is_uppercase())
+        .unwrap_or(false)
+    {
         return None;
     }
     let uppers = collect_upper_forms(&tb);
@@ -203,9 +225,13 @@ fn try_brand_token(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(String, Tok
     // Two-token brand (e.g. "Land Rover", "Rolls-Royce")
     let next = t.borrow().next.clone()?;
     let nb = next.borrow();
-    let TokenKind::Text(_) = &nb.kind else { return None; };
+    let TokenKind::Text(_) = &nb.kind else {
+        return None;
+    };
     // Must be immediately adjacent or single space
-    if nb.whitespaces_before_count(sofa) > 1 { return None; }
+    if nb.whitespaces_before_count(sofa) > 1 {
+        return None;
+    }
     let surf2 = sofa.substring(nb.begin_char, nb.end_char);
     drop(nb);
 
@@ -219,10 +245,15 @@ fn try_brand_token(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(String, Tok
 
 /// Try to read a model designation (number or short mixed token) after a brand.
 /// Models look like: "737", "Camry", "A320", "X5", "2103"
-fn try_model_after_brand(brand_tok: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(String, TokenRef)> {
+fn try_model_after_brand(
+    brand_tok: &TokenRef,
+    sofa: &SourceOfAnalysis,
+) -> Option<(String, TokenRef)> {
     let next = brand_tok.borrow().next.clone()?;
     let nb = next.borrow();
-    if nb.whitespaces_before_count(sofa) > 1 { return None; }
+    if nb.whitespaces_before_count(sofa) > 1 {
+        return None;
+    }
 
     match &nb.kind {
         TokenKind::Number(n) => {
@@ -242,7 +273,10 @@ fn try_model_after_brand(brand_tok: &TokenRef, sofa: &SourceOfAnalysis) -> Optio
             {
                 // Exclude transport type keywords
                 let up = surf.to_uppercase();
-                if transport_table::lookup_type(&up).is_some() { drop(nb); return None; }
+                if transport_table::lookup_type(&up).is_some() {
+                    drop(nb);
+                    return None;
+                }
                 let val = surf.to_uppercase();
                 let end = next.clone();
                 drop(nb);
@@ -252,16 +286,24 @@ fn try_model_after_brand(brand_tok: &TokenRef, sofa: &SourceOfAnalysis) -> Optio
                 None
             }
         }
-        _ => { drop(nb); None }
+        _ => {
+            drop(nb);
+            None
+        }
     }
 }
 
 /// Try to consume a quoted name («NAME» or "NAME") right after a type keyword.
 /// Returns (uppercase_name, end_token) or None.
-fn try_quoted_name(start: &Option<TokenRef>, sofa: &SourceOfAnalysis) -> Option<(String, TokenRef)> {
+fn try_quoted_name(
+    start: &Option<TokenRef>,
+    sofa: &SourceOfAnalysis,
+) -> Option<(String, TokenRef)> {
     let t = start.as_ref()?;
     let tb = t.borrow();
-    if tb.length_char() != 1 { return None; }
+    if tb.length_char() != 1 {
+        return None;
+    }
     let open_ch = sofa.char_at(tb.begin_char);
     let close_ch = matching_close(open_ch)?;
     let name_start = tb.next.clone()?;
@@ -275,7 +317,9 @@ fn try_quoted_name(start: &Option<TokenRef>, sofa: &SourceOfAnalysis) -> Option<
         if cb.length_char() == 1 && sofa.char_at(cb.begin_char) == close_ch {
             let end = cur.clone();
             drop(cb);
-            if parts.is_empty() { return None; }
+            if parts.is_empty() {
+                return None;
+            }
             return Some((parts.join(" "), end));
         }
         match &cb.kind {
@@ -286,12 +330,17 @@ fn try_quoted_name(start: &Option<TokenRef>, sofa: &SourceOfAnalysis) -> Option<
             TokenKind::Number(n) => {
                 parts.push(n.value.clone());
             }
-            _ => { drop(cb); return None; }
+            _ => {
+                drop(cb);
+                return None;
+            }
         }
         let next = cb.next.clone();
         drop(cb);
         cur = next?;
-        if parts.len() > 5 { return None; }
+        if parts.len() > 5 {
+            return None;
+        }
     }
 }
 
@@ -313,8 +362,12 @@ fn collect_upper_forms(tb: &Token) -> Vec<String> {
         v.push(txt.term.to_uppercase());
     }
     for wf in tb.morph.items() {
-        if let Some(nc) = &wf.normal_case { v.push(nc.to_uppercase()); }
-        if let Some(nf) = &wf.normal_full { v.push(nf.to_uppercase()); }
+        if let Some(nc) = &wf.normal_case {
+            v.push(nc.to_uppercase());
+        }
+        if let Some(nf) = &wf.normal_full {
+            v.push(nf.to_uppercase());
+        }
     }
     v.dedup();
     v

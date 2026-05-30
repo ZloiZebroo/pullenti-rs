@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 /// BookLinkAnalyzer — simplified port of BookLinkAnalyzer.cs.
 ///
 /// Recognizes bibliographic references in two main forms:
@@ -13,31 +14,37 @@
 /// Produces:
 ///   BOOKLINK  — the bibliographic entry itself (ATTR_AUTHOR, ATTR_NAME, ATTR_YEAR, ...)
 ///   BOOKLINKREF — an in-text citation pointing to a BOOKLINK
-
 use std::rc::Rc;
-use std::cell::RefCell;
 
-use crate::analyzer::Analyzer;
-use crate::analysis_kit::AnalysisKit;
-use crate::referent::{Referent, SlotValue};
-use crate::token::{Token, TokenRef, TokenKind};
-use crate::source_of_analysis::SourceOfAnalysis;
 use super::booklink_referent as br;
 use super::booklink_referent::BookLinkRefType;
+use crate::analysis_kit::AnalysisKit;
+use crate::analyzer::Analyzer;
+use crate::referent::{Referent, SlotValue};
+use crate::source_of_analysis::SourceOfAnalysis;
+use crate::token::{Token, TokenKind, TokenRef};
 
 pub struct BookLinkAnalyzer;
 
 impl BookLinkAnalyzer {
-    pub fn new() -> Self { BookLinkAnalyzer }
+    pub fn new() -> Self {
+        BookLinkAnalyzer
+    }
 }
 
 impl Default for BookLinkAnalyzer {
-    fn default() -> Self { BookLinkAnalyzer }
+    fn default() -> Self {
+        BookLinkAnalyzer
+    }
 }
 
 impl Analyzer for BookLinkAnalyzer {
-    fn name(&self) -> &'static str { "BOOKLINK" }
-    fn caption(&self) -> &'static str { "Ссылки на литературу" }
+    fn name(&self) -> &'static str {
+        "BOOKLINK"
+    }
+    fn caption(&self) -> &'static str {
+        "Ссылки на литературу"
+    }
 
     fn process(&self, kit: &mut AnalysisKit) {
         let sofa = kit.sofa.clone();
@@ -68,7 +75,11 @@ impl Analyzer for BookLinkAnalyzer {
                     lit_block = (lit_block - 1).max(0);
                     cur = t.borrow().next.clone();
                 }
-                Some(ParseResult { ref_ref, book_ref, ref_end }) => {
+                Some(ParseResult {
+                    ref_ref,
+                    book_ref,
+                    ref_end,
+                }) => {
                     // Get number before we move ref_ref into Rc
                     let num_str = br::get_ref_number(&ref_ref);
 
@@ -88,20 +99,26 @@ impl Analyzer for BookLinkAnalyzer {
 
                     // Embed BOOKLINK token (if exists), spanning the full range
                     if let Some(ref bk_rc) = book_rc_opt {
-                        let bl_tok = Rc::new(RefCell::new(
-                            Token::new_referent(t.clone(), ref_end.clone(), bk_rc.clone())
-                        ));
+                        let bl_tok = Rc::new(RefCell::new(Token::new_referent(
+                            t.clone(),
+                            ref_end.clone(),
+                            bk_rc.clone(),
+                        )));
                         kit.embed_token(bl_tok.clone());
                     }
 
                     // Embed BOOKLINKREF token spanning the full range
-                    let bref_tok = Rc::new(RefCell::new(
-                        Token::new_referent(t.clone(), ref_end.clone(), ref_rc.clone())
-                    ));
+                    let bref_tok = Rc::new(RefCell::new(Token::new_referent(
+                        t.clone(),
+                        ref_end.clone(),
+                        ref_rc.clone(),
+                    )));
                     kit.embed_token(bref_tok.clone());
                     cur = bref_tok.borrow().next.clone();
 
-                    if lit_block < 5 { lit_block += 1; }
+                    if lit_block < 5 {
+                        lit_block += 1;
+                    }
 
                     if let Some(num) = num_str {
                         refs_by_num.push((num, ref_rc.clone()));
@@ -128,13 +145,23 @@ impl Analyzer for BookLinkAnalyzer {
 
                 // Try to find the BOOKLINKREF that has this number and link the book
                 let book_to_link: Option<Rc<RefCell<Referent>>> = num_str.as_ref().and_then(|n| {
-                    refs_by_num.iter()
+                    refs_by_num
+                        .iter()
                         .find(|(k, _)| k == n)
                         .and_then(|(_, bref_rc)| {
-                            bref_rc.borrow().slots.iter()
+                            bref_rc
+                                .borrow()
+                                .slots
+                                .iter()
                                 .find(|s| s.type_name == br::REF_ATTR_BOOK)
                                 .and_then(|s| s.value.as_ref())
-                                .and_then(|v| if let SlotValue::Referent(r) = v { Some(r.clone()) } else { None })
+                                .and_then(|v| {
+                                    if let SlotValue::Referent(r) = v {
+                                        Some(r.clone())
+                                    } else {
+                                        None
+                                    }
+                                })
                         })
                 });
 
@@ -146,9 +173,7 @@ impl Analyzer for BookLinkAnalyzer {
                 br::set_ref_type(&mut final_ref, BookLinkRefType::Inline);
                 let r_rc = Rc::new(RefCell::new(final_ref));
                 let r_rc = kit.add_entity(r_rc);
-                let tok = Rc::new(RefCell::new(
-                    Token::new_referent(t.clone(), end_tok, r_rc)
-                ));
+                let tok = Rc::new(RefCell::new(Token::new_referent(t.clone(), end_tok, r_rc)));
                 kit.embed_token(tok.clone());
                 cur2 = tok.borrow().next.clone();
             } else {
@@ -257,7 +282,8 @@ fn try_parse_list_entry(
     let (year, pages, _city, cur_end) = collect_biblio_fields(&cur_after_title, sofa);
 
     // ── Determine final end token ─────────────────────────────────────────────
-    let end_tok = cur_end.clone()
+    let end_tok = cur_end
+        .clone()
         .or_else(|| cur_after_title.clone())
         .unwrap_or_else(|| title_start.clone());
 
@@ -323,9 +349,10 @@ fn collect_authors(
         };
 
         // Check for PERSON referent token
-        let person_rc = probe.borrow().get_referent().filter(|r| {
-            r.borrow().type_name == "PERSON"
-        });
+        let person_rc = probe
+            .borrow()
+            .get_referent()
+            .filter(|r| r.borrow().type_name == "PERSON");
         if let Some(rc) = person_rc {
             let bc = probe.borrow().begin_char;
             let ec = probe.borrow().end_char;
@@ -337,8 +364,7 @@ fn collect_authors(
         }
 
         // "и др." / "et al." — stop
-        let is_and = probe.borrow().is_value("И", Some("І"))
-            || probe.borrow().is_value("ET", None);
+        let is_and = probe.borrow().is_value("И", Some("І")) || probe.borrow().is_value("ET", None);
         if is_and {
             let next = probe.borrow().next.clone();
             if let Some(ref n) = next {
@@ -383,16 +409,15 @@ fn collect_authors(
 ///
 /// Heuristic: a capitalized word followed by 1-2 uppercase+dot abbreviations,
 /// or vice versa.  Returns (display_text, end_token).
-fn try_parse_author_pattern(
-    t: &TokenRef,
-    sofa: &SourceOfAnalysis,
-) -> Option<(String, TokenRef)> {
+fn try_parse_author_pattern(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(String, TokenRef)> {
     // Must start with a capital letter text token
     {
         let tb = t.borrow();
         match &tb.kind {
             TokenKind::Text(_) => {
-                if !tb.chars.is_capital_upper() { return None; }
+                if !tb.chars.is_capital_upper() {
+                    return None;
+                }
             }
             _ => return None,
         }
@@ -451,8 +476,8 @@ fn try_parse_author_pattern(
                 }
             }
             // Still have initials but no trailing surname — "I.I." pattern
-            let end_tok = find_last_initials_tok(&Some(next.clone()), sofa)
-                .unwrap_or_else(|| t.clone());
+            let end_tok =
+                find_last_initials_tok(&Some(next.clone()), sofa).unwrap_or_else(|| t.clone());
             let end_ec = end_tok.borrow().end_char;
             let text = sofa.substring(start_bc, end_ec).to_string();
             return Some((text, end_tok));
@@ -464,10 +489,7 @@ fn try_parse_author_pattern(
 
 /// Consume a sequence of uppercase-letter+dot abbreviations (initials like "И.").
 /// Returns (token_after_initials, found_any).
-fn consume_initials(
-    start: &Option<TokenRef>,
-    sofa: &SourceOfAnalysis,
-) -> (Option<TokenRef>, bool) {
+fn consume_initials(start: &Option<TokenRef>, sofa: &SourceOfAnalysis) -> (Option<TokenRef>, bool) {
     let first = match start {
         Some(t) => t.clone(),
         None => return (None, false),
@@ -478,7 +500,11 @@ fn consume_initials(
     loop {
         let (ch, length, next_opt) = {
             let tb = cur.borrow();
-            (sofa.char_at(tb.begin_char), tb.length_char(), tb.next.clone())
+            (
+                sofa.char_at(tb.begin_char),
+                tb.length_char(),
+                tb.next.clone(),
+            )
         };
 
         // Single uppercase letter — expect a dot after
@@ -492,7 +518,9 @@ fn consume_initials(
                     if dot_ch == '.' {
                         found = true;
                         match dot_next {
-                            Some(after) => { cur = after; }
+                            Some(after) => {
+                                cur = after;
+                            }
                             None => return (None, found),
                         }
                     } else {
@@ -508,13 +536,12 @@ fn consume_initials(
 }
 
 /// Find the last token of an initials sequence starting from `start`.
-fn find_last_initials_tok(
-    start: &Option<TokenRef>,
-    sofa: &SourceOfAnalysis,
-) -> Option<TokenRef> {
+fn find_last_initials_tok(start: &Option<TokenRef>, sofa: &SourceOfAnalysis) -> Option<TokenRef> {
     let first = start.as_ref()?.clone();
     let (after_opt, found) = consume_initials(start, sofa);
-    if !found { return None; }
+    if !found {
+        return None;
+    }
 
     // Walk from first forward stopping just before `after_opt`
     let mut last = first.clone();
@@ -524,7 +551,9 @@ fn find_last_initials_tok(
             Some(a) => Rc::ptr_eq(a, &cur),
             None => false,
         };
-        if is_stop { break; }
+        if is_stop {
+            break;
+        }
         let next = cur.borrow().next.clone();
         match next {
             Some(n) => {
@@ -541,10 +570,7 @@ fn find_last_initials_tok(
 
 /// Collect title text from current position until a bibliographic terminator.
 /// Returns (title_string, token_after_title).
-fn collect_title(
-    start: &TokenRef,
-    sofa: &SourceOfAnalysis,
-) -> (Option<String>, Option<TokenRef>) {
+fn collect_title(start: &TokenRef, sofa: &SourceOfAnalysis) -> (Option<String>, Option<TokenRef>) {
     let mut cur = start.clone();
 
     // Skip leading punctuation
@@ -566,7 +592,12 @@ fn collect_title(
     loop {
         let (begin_char, end_char, is_nl, ch) = {
             let tb = cur.borrow();
-            (tb.begin_char, tb.end_char, tb.is_newline_before(sofa), sofa.char_at(tb.begin_char))
+            (
+                tb.begin_char,
+                tb.end_char,
+                tb.is_newline_before(sofa),
+                sofa.char_at(tb.begin_char),
+            )
         };
 
         // Stop at newline if we have content
@@ -693,7 +724,12 @@ fn is_biblio_terminator(t: &TokenRef, sofa: &SourceOfAnalysis) -> bool {
 fn collect_biblio_fields(
     start: &Option<TokenRef>,
     sofa: &SourceOfAnalysis,
-) -> (Option<i32>, Option<String>, Option<String>, Option<TokenRef>) {
+) -> (
+    Option<i32>,
+    Option<String>,
+    Option<String>,
+    Option<TokenRef>,
+) {
     let start_t = match start {
         Some(t) => t.clone(),
         None => return (None, None, None, None),
@@ -708,7 +744,9 @@ fn collect_biblio_fields(
 
     loop {
         iterations += 1;
-        if iterations > 200 { break; }
+        if iterations > 200 {
+            break;
+        }
 
         let (begin_char, is_nl) = {
             let tb = cur.borrow();
@@ -726,16 +764,31 @@ fn collect_biblio_fields(
         let ch = sofa.char_at(begin_char);
 
         // Skip common separators
-        if ch == '.' || ch == ',' || ch == ';' || ch == ':' || ch == '–'
-            || ch == '-' || ch == '(' || ch == ')' || ch == ' ' {
+        if ch == '.'
+            || ch == ','
+            || ch == ';'
+            || ch == ':'
+            || ch == '–'
+            || ch == '-'
+            || ch == '('
+            || ch == ')'
+            || ch == ' '
+        {
             let next = cur.borrow().next.clone();
-            match next { Some(n) => { cur = n; continue; } None => break }
+            match next {
+                Some(n) => {
+                    cur = n;
+                    continue;
+                }
+                None => break,
+            }
         }
 
         // GEO referent → city
-        let geo_opt = cur.borrow().get_referent().filter(|r| {
-            r.borrow().type_name == "GEO"
-        });
+        let geo_opt = cur
+            .borrow()
+            .get_referent()
+            .filter(|r| r.borrow().type_name == "GEO");
         if let Some(geo_rc) = geo_opt {
             if city.is_none() {
                 let name = {
@@ -754,7 +807,13 @@ fn collect_biblio_fields(
                 last_end = Some(cur.clone());
             }
             let next = cur.borrow().next.clone();
-            match next { Some(n) => { cur = n; continue; } None => break }
+            match next {
+                Some(n) => {
+                    cur = n;
+                    continue;
+                }
+                None => break,
+            }
         }
 
         // Inspect token kind
@@ -774,7 +833,13 @@ fn collect_biblio_fields(
                 year = Some(v);
                 last_end = Some(cur.clone());
             }
-            match next_tok { Some(n) => { cur = n; continue; } None => break }
+            match next_tok {
+                Some(n) => {
+                    cur = n;
+                    continue;
+                }
+                None => break,
+            }
         }
 
         if let Some(term) = kind_term {
@@ -795,7 +860,13 @@ fn collect_biblio_fields(
                             pages = Some(page_str);
                             last_end = Some(page_end.clone());
                             let after = page_end.borrow().next.clone();
-                            match after { Some(n) => { cur = n; continue; } None => break }
+                            match after {
+                                Some(n) => {
+                                    cur = n;
+                                    continue;
+                                }
+                                None => break,
+                            }
                         }
                     }
                 }
@@ -807,12 +878,23 @@ fn collect_biblio_fields(
                 last_end = Some(cur.clone());
             }
 
-            match next_tok { Some(n) => { cur = n; continue; } None => break }
+            match next_tok {
+                Some(n) => {
+                    cur = n;
+                    continue;
+                }
+                None => break,
+            }
         }
 
         // Anything else — just advance
         let next = cur.borrow().next.clone();
-        match next { Some(n) => { cur = n; } None => break }
+        match next {
+            Some(n) => {
+                cur = n;
+            }
+            None => break,
+        }
     }
 
     (year, pages, city, last_end)
@@ -868,7 +950,9 @@ fn try_parse_inline_citation(
         (sofa.char_at(tb.begin_char), tb.next.clone())
     };
 
-    if first_ch != '[' { return None; }
+    if first_ch != '[' {
+        return None;
+    }
 
     let inner = next_opt?;
     let (num_str, after_num_opt) = {

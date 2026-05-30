@@ -1,9 +1,9 @@
-use std::sync::{Arc, OnceLock};
-use crate::core::{Termin, TerminCollection};
-use crate::token::TokenRef;
-use crate::source_of_analysis::SourceOfAnalysis;
-use super::phone_kind::PhoneKind;
 use super::phone_helper;
+use super::phone_kind::PhoneKind;
+use crate::core::{Termin, TerminCollection};
+use crate::source_of_analysis::SourceOfAnalysis;
+use crate::token::TokenRef;
+use std::sync::{Arc, OnceLock};
 
 /// Type of a single phone item token component
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -42,17 +42,27 @@ impl PhoneItemToken {
         }
     }
 
-    pub fn begin_char(&self) -> i32 { self.begin.borrow().begin_char }
-    pub fn end_char(&self) -> i32 { self.end.borrow().end_char }
-    pub fn length_char(&self) -> i32 { self.end_char() - self.begin_char() + 1 }
+    pub fn begin_char(&self) -> i32 {
+        self.begin.borrow().begin_char
+    }
+    pub fn end_char(&self) -> i32 {
+        self.end.borrow().end_char
+    }
+    pub fn length_char(&self) -> i32 {
+        self.end_char() - self.begin_char() + 1
+    }
 
     /// Whether this item's value is a valid country code prefix
     pub fn can_be_country_prefix(&self, sofa: &SourceOfAnalysis) -> bool {
         if let Some(prefix) = phone_helper::get_country_prefix(&self.value) {
             if prefix == self.value {
-                if self.value.len() != 3 { return true; }
+                if self.value.len() != 3 {
+                    return true;
+                }
                 // 3-digit value: return false if token begins with '('
-                if self.begin.borrow().is_char('(', sofa) { return false; }
+                if self.begin.borrow().is_char('(', sofa) {
+                    return false;
+                }
                 return true;
             }
         }
@@ -248,17 +258,32 @@ fn _try_attach(t0: &TokenRef, sofa: &SourceOfAnalysis) -> Option<PhoneItemToken>
     if t0b.is_number_token() {
         let val = t0b.number_value().unwrap_or("").to_string();
         drop(t0b);
-        return Some(PhoneItemToken::new(t0.clone(), t0.clone(), PhoneItemType::Number, val));
+        return Some(PhoneItemToken::new(
+            t0.clone(),
+            t0.clone(),
+            PhoneItemType::Number,
+            val,
+        ));
     }
 
     // Single punctuation checks
     if t0b.is_char('.', sofa) {
         drop(t0b);
-        return Some(PhoneItemToken::new(t0.clone(), t0.clone(), PhoneItemType::Delim, ".".to_string()));
+        return Some(PhoneItemToken::new(
+            t0.clone(),
+            t0.clone(),
+            PhoneItemType::Delim,
+            ".".to_string(),
+        ));
     }
     if t0b.is_hiphen(sofa) {
         drop(t0b);
-        return Some(PhoneItemToken::new(t0.clone(), t0.clone(), PhoneItemType::Delim, "-".to_string()));
+        return Some(PhoneItemToken::new(
+            t0.clone(),
+            t0.clone(),
+            PhoneItemType::Delim,
+            "-".to_string(),
+        ));
     }
 
     // '+' followed by a digit token → country code
@@ -272,8 +297,15 @@ fn _try_attach(t0: &TokenRef, sofa: &SourceOfAnalysis) -> Option<PhoneItemToken>
                 drop(nb);
                 // Strip leading zeros
                 let val = val.trim_start_matches('0').to_string();
-                if val.is_empty() { return None; }
-                return Some(PhoneItemToken::new(t0.clone(), next.clone(), PhoneItemType::CountryCode, val));
+                if val.is_empty() {
+                    return None;
+                }
+                return Some(PhoneItemToken::new(
+                    t0.clone(),
+                    next.clone(),
+                    PhoneItemType::CountryCode,
+                    val,
+                ));
             }
         }
         return None;
@@ -289,7 +321,12 @@ fn _try_attach(t0: &TokenRef, sofa: &SourceOfAnalysis) -> Option<PhoneItemToken>
                 let nb = next.borrow();
                 if nb.is_number_token() && nb.length_char() == 2 {
                     drop(nb);
-                    return Some(PhoneItemToken::new(t0.clone(), t0.clone(), PhoneItemType::Delim, "-".to_string()));
+                    return Some(PhoneItemToken::new(
+                        t0.clone(),
+                        t0.clone(),
+                        PhoneItemType::Delim,
+                        "-".to_string(),
+                    ));
                 }
             }
             return None;
@@ -309,7 +346,9 @@ fn _try_attach(t0: &TokenRef, sofa: &SourceOfAnalysis) -> Option<PhoneItemToken>
                 let mut et = next.clone();
                 loop {
                     let etb = et.borrow();
-                    if etb.is_char(')', sofa) { break; }
+                    if etb.is_char(')', sofa) {
+                        break;
+                    }
                     if etb.is_number_token() {
                         val.push_str(etb.number_value().unwrap_or(""));
                     } else if !etb.is_hiphen(sofa) && !etb.is_char('.', sofa) {
@@ -323,8 +362,11 @@ fn _try_attach(t0: &TokenRef, sofa: &SourceOfAnalysis) -> Option<PhoneItemToken>
                         None => return None,
                     }
                 }
-                if val.is_empty() { return None; }
-                let mut item = PhoneItemToken::new(t0.clone(), et.clone(), PhoneItemType::CityCode, val);
+                if val.is_empty() {
+                    return None;
+                }
+                let mut item =
+                    PhoneItemToken::new(t0.clone(), et.clone(), PhoneItemType::CityCode, val);
                 item.is_in_brackets = true;
                 return Some(item);
             } else {
@@ -369,7 +411,12 @@ fn _try_attach(t0: &TokenRef, sofa: &SourceOfAnalysis) -> Option<PhoneItemToken>
                 drop(n1b);
                 if let Some(n2) = n2_opt {
                     if n2.borrow().is_char('/', sofa) {
-                        let mut item = PhoneItemToken::new(t0.clone(), n2.clone(), PhoneItemType::CityCode, val);
+                        let mut item = PhoneItemToken::new(
+                            t0.clone(),
+                            n2.clone(),
+                            PhoneItemType::CityCode,
+                            val,
+                        );
                         item.is_in_brackets = true;
                         return Some(item);
                     }
@@ -391,9 +438,18 @@ fn _try_attach(t0: &TokenRef, sofa: &SourceOfAnalysis) -> Option<PhoneItemToken>
                 if let Some(n2) = n2_opt {
                     let n2b = n2.borrow();
                     if n2b.is_value("Р", None) || n2b.is_value("М", None) {
-                        let ki = if n2b.is_value("Р", None) { PhoneKind::Work } else { PhoneKind::Mobile };
+                        let ki = if n2b.is_value("Р", None) {
+                            PhoneKind::Work
+                        } else {
+                            PhoneKind::Mobile
+                        };
                         drop(n2b);
-                        let mut item = PhoneItemToken::new(t0.clone(), n2.clone(), PhoneItemType::Prefix, String::new());
+                        let mut item = PhoneItemToken::new(
+                            t0.clone(),
+                            n2.clone(),
+                            PhoneItemType::Prefix,
+                            String::new(),
+                        );
                         item.kind = ki;
                         return Some(item);
                     }
@@ -464,7 +520,10 @@ fn _try_attach(t0: &TokenRef, sofa: &SourceOfAnalysis) -> Option<PhoneItemToken>
     }
 
     // Get the phone kind from tag2
-    let ki = tt.termin.tag2.as_ref()
+    let ki = tt
+        .termin
+        .tag2
+        .as_ref()
         .and_then(|t2| t2.downcast_ref::<PhoneKind>())
         .copied()
         .unwrap_or(PhoneKind::Undefined);
@@ -531,8 +590,12 @@ pub fn try_attach(t0: &TokenRef, sofa: &SourceOfAnalysis) -> Option<PhoneItemTok
     let mut t = res.end.borrow().next.clone();
     while let Some(tok) = t {
         let tb = tok.borrow();
-        if tb.is_table_control_char(sofa) { break; }
-        if tb.is_newline_before(sofa) { break; }
+        if tb.is_table_control_char(sofa) {
+            break;
+        }
+        if tb.is_newline_before(sofa) {
+            break;
+        }
 
         if let Some(res2) = _try_attach(&tok, sofa) {
             if res2.item_type == PhoneItemType::Prefix {
@@ -562,7 +625,9 @@ pub fn try_attach(t0: &TokenRef, sofa: &SourceOfAnalysis) -> Option<PhoneItemTok
         }
         let t0_len = res.begin.borrow().length_char();
         drop(tb);
-        if t0_len == 1 { break; }
+        if t0_len == 1 {
+            break;
+        }
 
         // Advance through text tokens (simplified)
         res.end = tok.clone();
@@ -573,7 +638,10 @@ pub fn try_attach(t0: &TokenRef, sofa: &SourceOfAnalysis) -> Option<PhoneItemTok
 }
 
 /// Try to attach an additional (extension) number after the main phone number
-pub fn try_attach_additional(t0_opt: Option<TokenRef>, sofa: &SourceOfAnalysis) -> Option<PhoneItemToken> {
+pub fn try_attach_additional(
+    t0_opt: Option<TokenRef>,
+    sofa: &SourceOfAnalysis,
+) -> Option<PhoneItemToken> {
     let t0 = t0_opt?;
     let mut t = t0.clone();
 
@@ -606,7 +674,12 @@ pub fn try_attach_additional(t0_opt: Option<TokenRef>, sofa: &SourceOfAnalysis) 
                         }
                     }
                     if val.len() >= 3 && val.len() < 7 {
-                        return Some(PhoneItemToken::new(t0.clone(), t1.clone(), PhoneItemType::AddNumber, val));
+                        return Some(PhoneItemToken::new(
+                            t0.clone(),
+                            t1.clone(),
+                            PhoneItemType::AddNumber,
+                            val,
+                        ));
                     }
                 }
             }
@@ -623,7 +696,9 @@ pub fn try_attach_additional(t0_opt: Option<TokenRef>, sofa: &SourceOfAnalysis) 
             // If preceded by comma → return None
             let prev_opt = tb.prev.as_ref().and_then(|w| w.upgrade());
             if let Some(prev) = prev_opt {
-                if prev.borrow().is_comma(sofa) { return None; }
+                if prev.borrow().is_comma(sofa) {
+                    return None;
+                }
             }
             br = true;
             let next = tb.next.clone();
@@ -636,13 +711,19 @@ pub fn try_attach_additional(t0_opt: Option<TokenRef>, sofa: &SourceOfAnalysis) 
 
     let to = phone_termins().try_parse(&t);
     if let Some(ref to_tok) = to {
-        if to_tok.termin.tag.is_none() { return None; } // not an additional termin
+        if to_tok.termin.tag.is_none() {
+            return None;
+        } // not an additional termin
         let end_next = to_tok.end_token.borrow().next.clone();
         t = end_next?;
     } else {
-        if !br { return None; }
+        if !br {
+            return None;
+        }
         let tb = t.borrow();
-        if tb.whitespaces_before_count(sofa) > 1 { return None; }
+        if tb.whitespaces_before_count(sofa) > 1 {
+            return None;
+        }
     }
 
     // Skip НОМЕР / N / # / № / NUMBER / +
@@ -689,7 +770,9 @@ pub fn try_attach_additional(t0_opt: Option<TokenRef>, sofa: &SourceOfAnalysis) 
     // Must be a digit token now
     {
         let tb = t.borrow();
-        if !tb.is_number_token() { return None; }
+        if !tb.is_number_token() {
+            return None;
+        }
         let mut val = tb.number_value().unwrap_or("").to_string();
         let t_ws_after = tb.is_whitespace_after(sofa);
         let t_next_opt = tb.next.clone();
@@ -711,23 +794,36 @@ pub fn try_attach_additional(t0_opt: Option<TokenRef>, sofa: &SourceOfAnalysis) 
             }
         }
 
-        if val.len() < 2 || val.len() > 7 { return None; }
+        if val.len() < 2 || val.len() > 7 {
+            return None;
+        }
 
         if br {
             let t1b = t1.borrow();
             let t1_next_opt = t1b.next.clone();
             drop(t1b);
             let closing = t1_next_opt?;
-            if !closing.borrow().is_char(')', sofa) { return None; }
+            if !closing.borrow().is_char(')', sofa) {
+                return None;
+            }
             t1 = closing;
         }
 
-        Some(PhoneItemToken::new(t0.clone(), t1, PhoneItemType::AddNumber, val))
+        Some(PhoneItemToken::new(
+            t0.clone(),
+            t1,
+            PhoneItemType::AddNumber,
+            val,
+        ))
     }
 }
 
 /// Attach all phone item tokens starting from t0, up to maxCount items
-pub fn try_attach_all(t0: &TokenRef, sofa: &SourceOfAnalysis, max_count: usize) -> Option<Vec<PhoneItemToken>> {
+pub fn try_attach_all(
+    t0: &TokenRef,
+    sofa: &SourceOfAnalysis,
+    max_count: usize,
+) -> Option<Vec<PhoneItemToken>> {
     let mut p_opt = try_attach(t0, sofa);
     let mut br = false;
 
@@ -739,22 +835,33 @@ pub fn try_attach_all(t0: &TokenRef, sofa: &SourceOfAnalysis, max_count: usize) 
                 if let Some(ref mut p) = p_opt {
                     p.begin = t0.clone();
                     p.is_in_brackets = true;
-                    if p.item_type == PhoneItemType::Prefix { br = false; } else { br = true; }
+                    if p.item_type == PhoneItemType::Prefix {
+                        br = false;
+                    } else {
+                        br = true;
+                    }
                 }
             }
         }
     }
 
     let mut p = p_opt?;
-    if p.item_type == PhoneItemType::Delim { return None; }
+    if p.item_type == PhoneItemType::Delim {
+        return None;
+    }
 
     let mut res: Vec<PhoneItemToken> = Vec::new();
     res.push(p.clone());
 
     let mut t_cur: Option<TokenRef> = p.end.borrow().next.clone();
     loop {
-        let tok = match t_cur.clone() { None => break, Some(x) => x };
-        if res.len() > max_count { break; }
+        let tok = match t_cur.clone() {
+            None => break,
+            Some(x) => x,
+        };
+        if res.len() > max_count {
+            break;
+        }
 
         let is_table_ctrl = tok.borrow().is_table_control_char(sofa);
         let is_close_paren = tok.borrow().is_char(')', sofa);
@@ -790,7 +897,9 @@ pub fn try_attach_all(t0: &TokenRef, sofa: &SourceOfAnalysis, max_count: usize) 
         }
 
         if p0_opt.is_none() {
-            if is_newline { break; }
+            if is_newline {
+                break;
+            }
 
             // Try prefix handling
             if p.item_type == PhoneItemType::Prefix && (is_slash || is_hiphen) {
@@ -807,13 +916,24 @@ pub fn try_attach_all(t0: &TokenRef, sofa: &SourceOfAnalysis, max_count: usize) 
             }
 
             // Try slash-number continuations for prefix items
-            if !res.is_empty() && res[0].item_type == PhoneItemType::Prefix
-                && is_slash && !tok_ws_before && !tok.borrow().is_whitespace_after(sofa)
+            if !res.is_empty()
+                && res[0].item_type == PhoneItemType::Prefix
+                && is_slash
+                && !tok_ws_before
+                && !tok.borrow().is_whitespace_after(sofa)
             {
                 if let Some(next) = tok.borrow().next.clone() {
                     if next.borrow().is_number_token() {
-                        let sum_num: i32 = res.iter()
-                            .filter(|it| matches!(it.item_type, PhoneItemType::CityCode | PhoneItemType::CountryCode | PhoneItemType::Number))
+                        let sum_num: i32 = res
+                            .iter()
+                            .filter(|it| {
+                                matches!(
+                                    it.item_type,
+                                    PhoneItemType::CityCode
+                                        | PhoneItemType::CountryCode
+                                        | PhoneItemType::Number
+                                )
+                            })
                             .map(|it| it.value.len() as i32)
                             .sum();
                         if sum_num < 7 {
@@ -821,17 +941,24 @@ pub fn try_attach_all(t0: &TokenRef, sofa: &SourceOfAnalysis, max_count: usize) 
                             let mut nt = next.clone();
                             loop {
                                 let ntb = nt.borrow();
-                                if ntb.is_whitespace_before(sofa) { break; }
+                                if ntb.is_whitespace_before(sofa) {
+                                    break;
+                                }
                                 if ntb.is_number_token() {
                                     sum2 += ntb.length_char();
-                                } else if matches!(ntb.kind, crate::token::TokenKind::Text(_)) && !ntb.chars.is_letter() {
+                                } else if matches!(ntb.kind, crate::token::TokenKind::Text(_))
+                                    && !ntb.chars.is_letter()
+                                {
                                     // ok
                                 } else {
                                     break;
                                 }
                                 let nn = ntb.next.clone();
                                 drop(ntb);
-                                match nn { Some(n) => nt = n, None => break }
+                                match nn {
+                                    Some(n) => nt = n,
+                                    None => break,
+                                }
                             }
                             if sum2 == 10 || sum2 == 11 {
                                 t_cur = tok.borrow().next.clone();
@@ -851,8 +978,15 @@ pub fn try_attach_all(t0: &TokenRef, sofa: &SourceOfAnalysis, max_count: usize) 
         }
 
         if is_ws2plus {
-            let ok = res.iter().any(|pp| matches!(pp.item_type, PhoneItemType::Prefix | PhoneItemType::CountryCode));
-            if !ok { break; }
+            let ok = res.iter().any(|pp| {
+                matches!(
+                    pp.item_type,
+                    PhoneItemType::Prefix | PhoneItemType::CountryCode
+                )
+            });
+            if !ok {
+                break;
+            }
         }
 
         if br && p.item_type == PhoneItemType::Number {
@@ -860,11 +994,22 @@ pub fn try_attach_all(t0: &TokenRef, sofa: &SourceOfAnalysis, max_count: usize) 
         }
 
         // Insert implicit delimiter if two consecutive number items
-        if p0.item_type == PhoneItemType::Number && res.last().map_or(false, |l| l.item_type == PhoneItemType::Number) {
-            res.push(PhoneItemToken::new(tok.clone(), tok.clone(), PhoneItemType::Delim, " ".to_string()));
+        if p0.item_type == PhoneItemType::Number
+            && res
+                .last()
+                .map_or(false, |l| l.item_type == PhoneItemType::Number)
+        {
+            res.push(PhoneItemToken::new(
+                tok.clone(),
+                tok.clone(),
+                PhoneItemType::Delim,
+                " ".to_string(),
+            ));
         }
 
-        if br { p0.is_in_brackets = true; }
+        if br {
+            p0.is_in_brackets = true;
+        }
         let p0_end = p0.end.clone();
         p = p0.clone();
         res.push(p0);
@@ -877,7 +1022,10 @@ pub fn try_attach_all(t0: &TokenRef, sofa: &SourceOfAnalysis, max_count: usize) 
     }
 
     // Clean up: remove trailing delims
-    while res.last().map_or(false, |r| r.item_type == PhoneItemType::Delim) {
+    while res
+        .last()
+        .map_or(false, |r| r.item_type == PhoneItemType::Delim)
+    {
         res.pop();
     }
 
@@ -886,7 +1034,9 @@ pub fn try_attach_all(t0: &TokenRef, sofa: &SourceOfAnalysis, max_count: usize) 
     while i + 1 < res.len() {
         if res[i].item_type == PhoneItemType::Delim && res[i + 1].is_in_brackets {
             res.remove(i);
-        } else if res[i].item_type == PhoneItemType::Delim && res[i + 1].item_type == PhoneItemType::Delim {
+        } else if res[i].item_type == PhoneItemType::Delim
+            && res[i + 1].item_type == PhoneItemType::Delim
+        {
             let new_end = res[i + 1].end.clone();
             res[i].end = new_end;
             res.remove(i + 1);
@@ -906,10 +1056,15 @@ pub fn try_attach_all(t0: &TokenRef, sofa: &SourceOfAnalysis, max_count: usize) 
     }
 
     // If first is Prefix, trim extra inner Prefix sequences
-    if res.first().map_or(false, |r| r.item_type == PhoneItemType::Prefix) {
+    if res
+        .first()
+        .map_or(false, |r| r.item_type == PhoneItemType::Prefix)
+    {
         let mut i = 2usize;
         while i + 1 < res.len() {
-            if res[i].item_type == PhoneItemType::Prefix && res[i + 1].item_type != PhoneItemType::Prefix {
+            if res[i].item_type == PhoneItemType::Prefix
+                && res[i + 1].item_type != PhoneItemType::Prefix
+            {
                 res.drain(i..);
                 break;
             }
@@ -961,7 +1116,10 @@ pub fn try_attach_alternate(
                 // Try to match full sequence
                 if let Some(pli1) = try_attach_all(&next, sofa, 15) {
                     let mut pli1 = pli1;
-                    if pli1.last().map_or(false, |r| r.item_type == PhoneItemType::Delim) {
+                    if pli1
+                        .last()
+                        .map_or(false, |r| r.item_type == PhoneItemType::Delim)
+                    {
                         pli1.pop();
                     }
                     if pli1.len() > 1 && pli1.len() <= pli.len() {
@@ -971,22 +1129,40 @@ pub fn try_attach_alternate(
                         while ii < pli1.len() {
                             let p1 = &pli1[ii];
                             let p0 = &pli[offset + ii];
-                            if p1.item_type != p0.item_type { break; }
-                            if p1.item_type != PhoneItemType::Number && p1.item_type != PhoneItemType::Delim { break; }
+                            if p1.item_type != p0.item_type {
+                                break;
+                            }
+                            if p1.item_type != PhoneItemType::Number
+                                && p1.item_type != PhoneItemType::Delim
+                            {
+                                break;
+                            }
                             if p1.item_type == PhoneItemType::Number {
-                                if p1.length_char() != p0.length_char() { break; }
+                                if p1.length_char() != p0.length_char() {
+                                    break;
+                                }
                                 num.push_str(&p1.value);
                             }
                             ii += 1;
                         }
                         if ii >= pli1.len() {
                             let last_end = pli1.last().unwrap().end.clone();
-                            return Some(PhoneItemToken::new(t0.clone(), last_end, PhoneItemType::Alt, num));
+                            return Some(PhoneItemToken::new(
+                                t0.clone(),
+                                last_end,
+                                PhoneItemType::Alt,
+                                num,
+                            ));
                         }
                     }
                 }
 
-                return Some(PhoneItemToken::new(t0.clone(), next_end, PhoneItemType::Alt, val));
+                return Some(PhoneItemToken::new(
+                    t0.clone(),
+                    next_end,
+                    PhoneItemType::Alt,
+                    val,
+                ));
             }
         }
         return None;
@@ -1003,10 +1179,9 @@ pub fn try_attach_alternate(
                 let t1 = next.clone();
                 let t1_next_opt = nb.next.clone();
                 drop(nb);
-                let ok = t1_next_opt.as_ref()
-                    .map_or(true, |n| {
-                        n.borrow().is_newline_before(sofa) || n.borrow().is_char_of(",.", sofa)
-                    });
+                let ok = t1_next_opt.as_ref().map_or(true, |n| {
+                    n.borrow().is_newline_before(sofa) || n.borrow().is_char_of(",.", sofa)
+                });
                 if ok {
                     return Some(PhoneItemToken::new(t0.clone(), t1, PhoneItemType::Alt, val));
                 }
@@ -1027,7 +1202,12 @@ pub fn try_attach_alternate(
                 drop(nb);
                 if let Some(t1) = t1_opt {
                     if t1.borrow().is_char(')', sofa) {
-                        return Some(PhoneItemToken::new(t0.clone(), t1.clone(), PhoneItemType::Alt, val));
+                        return Some(PhoneItemToken::new(
+                            t0.clone(),
+                            t1.clone(),
+                            PhoneItemType::Alt,
+                            val,
+                        ));
                     }
                 }
             }
@@ -1050,7 +1230,12 @@ pub fn try_attach_alternate(
                             let val = nb.number_value().unwrap_or("").to_string();
                             let t1 = next.clone();
                             drop(nb);
-                            return Some(PhoneItemToken::new(t0.clone(), t1, PhoneItemType::Alt, val));
+                            return Some(PhoneItemToken::new(
+                                t0.clone(),
+                                t1,
+                                PhoneItemType::Alt,
+                                val,
+                            ));
                         }
                     }
                 }

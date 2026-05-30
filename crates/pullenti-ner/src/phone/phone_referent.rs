@@ -1,7 +1,7 @@
-use std::rc::Rc;
-use std::cell::RefCell;
-use crate::referent::{Referent, SlotValue};
 use super::phone_kind::PhoneKind;
+use crate::referent::{Referent, SlotValue};
+use std::cell::RefCell;
+use std::rc::Rc;
 
 pub const OBJ_TYPENAME: &str = "PHONE";
 pub const ATTR_NUMBER: &str = "NUMBER";
@@ -20,7 +20,10 @@ pub struct PhoneExtra {
 
 impl PhoneExtra {
     pub fn new() -> Self {
-        PhoneExtra { template: None, tag: None }
+        PhoneExtra {
+            template: None,
+            tag: None,
+        }
     }
 }
 
@@ -82,7 +85,8 @@ pub fn set_kind(r: &mut Referent, kind: PhoneKind) {
 
 /// Get template from extra data
 pub fn get_template(r: &Referent) -> Option<&str> {
-    r.data_as::<PhoneExtra>().and_then(|e| e.template.as_deref())
+    r.data_as::<PhoneExtra>()
+        .and_then(|e| e.template.as_deref())
 }
 
 /// Set template in extra data
@@ -108,7 +112,9 @@ pub fn set_tag(r: &mut Referent, kind: PhoneKind) {
 
 /// Auto-correct phone kind based on attributes
 pub fn correct(r: &mut Referent) {
-    if get_kind(r) != PhoneKind::Undefined { return; }
+    if get_kind(r) != PhoneKind::Undefined {
+        return;
+    }
     if r.find_slot(ATTR_ADDNUMBER, None).is_some() {
         set_kind(r, PhoneKind::Work);
     } else {
@@ -125,24 +131,26 @@ pub fn correct(r: &mut Referent) {
 
 /// Check if two phone referents can be equal (simplified)
 pub fn can_be_equals(a: &Referent, b: &Referent) -> bool {
-    if a.type_name != OBJ_TYPENAME || b.type_name != OBJ_TYPENAME { return false; }
+    if a.type_name != OBJ_TYPENAME || b.type_name != OBJ_TYPENAME {
+        return false;
+    }
     let a_cc = get_country_code(a);
     let b_cc = get_country_code(b);
     if let (Some(acc), Some(bcc)) = (&a_cc, &b_cc) {
-        if acc != bcc { return false; }
+        if acc != bcc {
+            return false;
+        }
     }
     let a_add = get_add_number(a);
     let b_add = get_add_number(b);
-    if a_add != b_add { return false; }
+    if a_add != b_add {
+        return false;
+    }
     let a_num = get_number(a);
     let b_num = get_number(b);
     match (a_num, b_num) {
         (None, _) | (_, None) => false,
-        (Some(an), Some(bn)) => {
-            an == bn
-                || an.ends_with(&bn)
-                || bn.ends_with(&an)
-        }
+        (Some(an), Some(bn)) => an == bn || an.ends_with(&bn) || bn.ends_with(&an),
     }
 }
 
@@ -164,7 +172,9 @@ pub fn merge_slots(dst: &mut Referent, src: &Referent) {
 pub fn to_string_ex(r: &Referent) -> String {
     let mut res = String::new();
     if let Some(cc) = get_country_code(r) {
-        if cc != "8" { res.push('+'); }
+        if cc != "8" {
+            res.push('+');
+        }
         res.push_str(&cc);
         res.push(' ');
     }

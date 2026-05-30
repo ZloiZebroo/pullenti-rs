@@ -9,7 +9,11 @@ struct PhoneNode {
 
 impl PhoneNode {
     fn new(pref: String) -> Self {
-        PhoneNode { pref, children: HashMap::new(), countries: Vec::new() }
+        PhoneNode {
+            pref,
+            children: HashMap::new(),
+            countries: Vec::new(),
+        }
     }
 }
 
@@ -28,17 +32,24 @@ fn get_instance() -> &'static PhoneHelper {
 
         for line0 in txt.split('\n') {
             let line = line0.trim();
-            if line.len() < 3 { continue; }
+            if line.len() < 3 {
+                continue;
+            }
             let country = &line[..2];
             let cod = line[2..].trim();
-            if cod.is_empty() { continue; }
+            if cod.is_empty() {
+                continue;
+            }
 
-            all_country_codes.entry(country.to_string()).or_insert_with(|| cod.to_string());
+            all_country_codes
+                .entry(country.to_string())
+                .or_insert_with(|| cod.to_string());
 
             let mut tn = &mut root;
             for (i, dig) in cod.chars().enumerate() {
                 if !tn.children.contains_key(&dig) {
-                    let pref = cod[..=cod.char_indices().nth(i).map(|(b, _)| b).unwrap_or(0)].to_string();
+                    let pref =
+                        cod[..=cod.char_indices().nth(i).map(|(b, _)| b).unwrap_or(0)].to_string();
                     tn.children.insert(dig, PhoneNode::new(pref));
                 }
                 tn = tn.children.get_mut(&dig).unwrap();
@@ -46,7 +57,10 @@ fn get_instance() -> &'static PhoneHelper {
             tn.countries.push(country.to_string());
         }
 
-        PhoneHelper { root, all_country_codes }
+        PhoneHelper {
+            root,
+            all_country_codes,
+        }
     })
 }
 
@@ -74,7 +88,14 @@ pub fn get_country_prefix(full_number: &str) -> Option<String> {
     if max_idx < 0 {
         None
     } else {
-        Some(full_number[..full_number.char_indices().nth((max_idx + 1) as usize).map(|(b, _)| b).unwrap_or(full_number.len())].to_string())
+        Some(
+            full_number[..full_number
+                .char_indices()
+                .nth((max_idx + 1) as usize)
+                .map(|(b, _)| b)
+                .unwrap_or(full_number.len())]
+                .to_string(),
+        )
     }
 }
 

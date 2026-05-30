@@ -19,10 +19,10 @@ impl MailKind {
     pub fn as_str(self) -> &'static str {
         match self {
             MailKind::Undefined => "UNDEFINED",
-            MailKind::Head      => "HEAD",
-            MailKind::Hello     => "HELLO",
-            MailKind::Body      => "BODY",
-            MailKind::Tail      => "TAIL",
+            MailKind::Head => "HEAD",
+            MailKind::Hello => "HELLO",
+            MailKind::Body => "BODY",
+            MailKind::Tail => "TAIL",
         }
     }
 }
@@ -55,11 +55,11 @@ pub fn set_kind(r: &mut Referent, kind: MailKind) {
 /// Get the KIND slot value.
 pub fn get_kind(r: &Referent) -> MailKind {
     match r.get_string_value(ATTR_KIND) {
-        Some("HEAD")      => MailKind::Head,
-        Some("HELLO")     => MailKind::Hello,
-        Some("BODY")      => MailKind::Body,
-        Some("TAIL")      => MailKind::Tail,
-        _                 => MailKind::Undefined,
+        Some("HEAD") => MailKind::Head,
+        Some("HELLO") => MailKind::Hello,
+        Some("BODY") => MailKind::Body,
+        Some("TAIL") => MailKind::Tail,
+        _ => MailKind::Undefined,
     }
 }
 

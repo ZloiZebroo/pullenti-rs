@@ -4,58 +4,64 @@
 ///  1. **EmptyProcessor path** (primary): morphology-only tokenization →
 ///     `person_item_token::try_attach_list()` → `person_normal_node::score_and_build()`.
 ///  2. **StandardProcessor fallback**: full NER pipeline (PersonAnalyzer).
-
 use std::collections::HashMap;
 use std::sync::OnceLock;
 
-use pullenti_morph::MorphologyService;
-use crate::processor_service::ProcessorService;
-use crate::source_of_analysis::SourceOfAnalysis;
-use crate::token::{TokenKind, build_token_chain};
-use crate::person::person_referent::{get_firstname, get_middlename, get_lastname, get_sex};
-use crate::person::person_normal_result::PersonNormalResult;
 use crate::person::person_item_token::try_attach_list;
 use crate::person::person_normal_node::score_and_build;
+use crate::person::person_normal_result::PersonNormalResult;
+use crate::person::person_referent::{get_firstname, get_lastname, get_middlename, get_sex};
+use crate::processor_service::ProcessorService;
+use crate::source_of_analysis::SourceOfAnalysis;
+use crate::token::{build_token_chain, TokenKind};
+use pullenti_morph::MorphologyService;
 
 // ── PersonNormalData ──────────────────────────────────────────────────────────
 
 #[derive(Debug, Default)]
 pub struct PersonNormalData {
     /// Фамилия
-    pub lastname:     Option<String>,
+    pub lastname: Option<String>,
     /// Фамилия до замужества (alternative)
     pub lastname_alt: Option<String>,
     /// Имя
-    pub firstname:    Option<String>,
+    pub firstname: Option<String>,
     /// Имя альтернативное (исходное уменьшительное)
     pub firstname_alt: Option<String>,
     /// Отчество
-    pub middlename:   Option<String>,
+    pub middlename: Option<String>,
     /// Пол: 1 = мужчина, 2 = женщина, 0 = неизвестно
-    pub gender:       i32,
+    pub gender: i32,
     /// Тип результата
-    pub res_typ:      PersonNormalResult,
+    pub res_typ: PersonNormalResult,
     /// Коэффициент качества (0–100)
-    pub coef:         i32,
+    pub coef: i32,
     /// Сообщение об ошибке (если есть)
     pub error_message: Option<String>,
     /// Откорректированные слова: исходное → коррекция
-    pub corr_words:   HashMap<String, String>,
+    pub corr_words: HashMap<String, String>,
 }
 
 impl PersonNormalData {
     pub fn new() -> Self {
-        PersonNormalData { res_typ: PersonNormalResult::Undefined, ..Default::default() }
+        PersonNormalData {
+            res_typ: PersonNormalResult::Undefined,
+            ..Default::default()
+        }
     }
 }
 
 impl std::fmt::Display for PersonNormalData {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} ({:?}): {} {} {}",
-            self.coef, self.res_typ,
+        write!(
+            f,
+            "{} ({:?}): {} {} {}",
+            self.coef,
+            self.res_typ,
             self.lastname.as_deref().unwrap_or(""),
             self.firstname.as_deref().unwrap_or(""),
-            self.middlename.as_deref().unwrap_or(""))
+            self.middlename.as_deref().unwrap_or("")
+        )
     }
 }
 
@@ -106,7 +112,9 @@ pub fn analyze(txt: &str) -> PersonNormalData {
                 if let TokenKind::Referent(r) = &tb.kind {
                     let tn = r.referent.borrow().type_name.clone();
                     tn == "GEO" || tn == "STREET" || tn == "ADDRESS"
-                } else { false }
+                } else {
+                    false
+                }
             };
             if disq {
                 res.error_message = Some("Похоже на адрес".to_string());
@@ -116,7 +124,9 @@ pub fn analyze(txt: &str) -> PersonNormalData {
                 let tb = t.borrow();
                 if let TokenKind::Referent(r) = &tb.kind {
                     r.referent.borrow().type_name == "ORGANIZATION"
-                } else { false }
+                } else {
+                    false
+                }
             };
             if disq_org {
                 res.error_message = Some("Похоже на организацию".to_string());
@@ -135,8 +145,12 @@ pub fn analyze(txt: &str) -> PersonNormalData {
             if let TokenKind::Referent(r) = &tb.kind {
                 if r.referent.borrow().type_name == "PERSON" {
                     Some(r.referent.clone())
-                } else { None }
-            } else { None }
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
         };
 
         if let Some(r) = person_rc {
@@ -155,9 +169,9 @@ pub fn analyze(txt: &str) -> PersonNormalData {
 
             // Gender from SEX slot
             match get_sex(&rb).as_deref() {
-                Some("Male")   => res.gender = 1,
+                Some("Male") => res.gender = 1,
                 Some("Female") => res.gender = 2,
-                _              => {}
+                _ => {}
             }
             drop(rb);
 
@@ -222,7 +236,9 @@ fn try_empty_processor_path(txt: &str) -> Option<PersonNormalData> {
 
     // Build morph tokens (language auto-detected)
     let morph_tokens = MorphologyService::process(txt, None)?;
-    if morph_tokens.is_empty() { return None; }
+    if morph_tokens.is_empty() {
+        return None;
+    }
 
     let first_token = build_token_chain(morph_tokens, &sofa)?;
 
@@ -273,8 +289,12 @@ fn try_empty_processor_path(txt: &str) -> Option<PersonNormalData> {
 
     // Gender
     match nd.gender {
-        1 => { nd.gender = 1; }
-        2 => { nd.gender = 2; }
+        1 => {
+            nd.gender = 1;
+        }
+        2 => {
+            nd.gender = 2;
+        }
         _ => {}
     }
 
@@ -298,12 +318,16 @@ fn preprocess(txt: &str) -> String {
             let next1 = chars[i + 1];
             if next1.is_lowercase() {
                 buf.push(c);
-                for uc in next1.to_uppercase() { buf.push(uc); }
+                for uc in next1.to_uppercase() {
+                    buf.push(uc);
+                }
                 i += 2;
                 continue;
             } else if next1 == ' ' && i + 2 < n && chars[i + 2].is_alphabetic() {
                 buf.push(c);
-                for uc in chars[i + 2].to_uppercase() { buf.push(uc); }
+                for uc in chars[i + 2].to_uppercase() {
+                    buf.push(uc);
+                }
                 i += 3;
                 continue;
             }
@@ -345,7 +369,8 @@ static CORR_TAILS: OnceLock<Vec<(String, String)>> = OnceLock::new();
 /// Returns (wrong_suffix, correct_suffix) pairs sorted longest-first for greedy match.
 fn corr_tails() -> &'static Vec<(String, String)> {
     CORR_TAILS.get_or_init(|| {
-        const DATA: &str = "слаовна$:славовна\nславона$:славовна\nславоич$:славович\nслаович$:славович\
+        const DATA: &str =
+            "слаовна$:славовна\nславона$:славовна\nславоич$:славович\nслаович$:славович\
 \nвнана$:вна\nевана$:евна\nевнва$:евна\nевнаа$:евна\nевнна$:евна\nована$:овна\nовнва$:овна\
 \nовнаа$:овна\nовнна$:овна\nевена$:евна\nевсна$:евна\nевона$:евна\nовена$:овна\nовсна$:овна\
 \nовона$:овна\nовоич$:ович\nевича$:евич\nевичч$:евич\nевивч$:евич\nевиич$:евич\nеваич$:евич\
@@ -363,7 +388,9 @@ fn corr_tails() -> &'static Vec<(String, String)> {
             let sep = line.find(':').or_else(|| line.find(';'));
             if let Some(i) = sep {
                 let mut key = line[..i].to_string();
-                if key.ends_with('$') { key.pop(); }
+                if key.ends_with('$') {
+                    key.pop();
+                }
                 let val = line[i + 1..].to_string();
                 if !pairs.iter().any(|(k, _)| k == &key) {
                     pairs.push((key, val));
@@ -384,7 +411,9 @@ fn apply_midname_corr(res: &mut PersonNormalData) {
                 let stem_len = mid_upper.len() - wrong.len();
                 let new_mid = format!("{}{}", &mid_upper[..stem_len], correct);
                 if new_mid != mid_upper {
-                    res.corr_words.entry(mid_upper.clone()).or_insert(new_mid.clone());
+                    res.corr_words
+                        .entry(mid_upper.clone())
+                        .or_insert(new_mid.clone());
                     res.middlename = Some(new_mid);
                     res.coef = (res.coef as f64 * 0.95) as i32;
                 }

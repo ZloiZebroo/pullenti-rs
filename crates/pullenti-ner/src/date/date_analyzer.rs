@@ -1,14 +1,14 @@
-use std::rc::Rc;
-use std::cell::RefCell;
-use crate::analyzer::Analyzer;
 use crate::analysis_kit::AnalysisKit;
-use crate::referent::Referent;
-use crate::token::{Token, TokenRef};
-use crate::source_of_analysis::SourceOfAnalysis;
-use crate::date::date_item_token::{DateItemToken, DateItemType, try_parse_list};
-use crate::date::date_referent as dr;
-use crate::date::date_range_referent as drr;
+use crate::analyzer::Analyzer;
+use crate::date::date_item_token::{try_parse_list, DateItemToken, DateItemType};
 use crate::date::date_pointer_type::DatePointerType;
+use crate::date::date_range_referent as drr;
+use crate::date::date_referent as dr;
+use crate::referent::Referent;
+use crate::source_of_analysis::SourceOfAnalysis;
+use crate::token::{Token, TokenRef};
+use std::cell::RefCell;
+use std::rc::Rc;
 
 const DATE_TYPENAME: &str = "DATE";
 const APPROX_CUR_YEAR: i32 = 2026;
@@ -17,12 +17,18 @@ const APPROX_CUR_YEAR: i32 = 2026;
 pub struct DateAnalyzer;
 
 impl DateAnalyzer {
-    pub fn new() -> Self { DateAnalyzer }
+    pub fn new() -> Self {
+        DateAnalyzer
+    }
 }
 
 impl Analyzer for DateAnalyzer {
-    fn name(&self) -> &'static str { "DATE" }
-    fn caption(&self) -> &'static str { "Даты" }
+    fn name(&self) -> &'static str {
+        "DATE"
+    }
+    fn caption(&self) -> &'static str {
+        "Даты"
+    }
 
     fn process(&self, kit: &mut AnalysisKit) {
         let sofa = kit.sofa.clone();
@@ -60,9 +66,7 @@ impl Analyzer for DateAnalyzer {
             for (referent, begin, end) in rts {
                 let r_rc = Rc::new(RefCell::new(referent));
                 let r_rc = kit.add_entity(r_rc);
-                let tok = Rc::new(RefCell::new(
-                    Token::new_referent(begin, end, r_rc)
-                ));
+                let tok = Rc::new(RefCell::new(Token::new_referent(begin, end, r_rc)));
                 kit.embed_token(tok.clone());
                 cur = tok.borrow().next.clone();
             }
@@ -82,19 +86,27 @@ fn is_high_context(t: &TokenRef, sofa: &SourceOfAnalysis) -> bool {
     let mut tt = t.borrow().prev.as_ref().and_then(|w| w.upgrade());
     while let Some(tok) = tt {
         depth += 1;
-        if depth > 5 { break; }
+        if depth > 5 {
+            break;
+        }
         let tok_b = tok.borrow();
         if tok_b.is_char(':', sofa) || tok_b.is_hiphen(sofa) {
             tt = tok_b.prev.as_ref().and_then(|w| w.upgrade());
             continue;
         }
-        if tok_b.is_newline_after(sofa) { break; }
-        if tok_b.is_value("ДАТА", None) || tok_b.is_value("DATE", None)
+        if tok_b.is_newline_after(sofa) {
+            break;
+        }
+        if tok_b.is_value("ДАТА", None)
+            || tok_b.is_value("DATE", None)
             || tok_b.is_value("ГОД", None)
         {
             return true;
         }
-        if tok_b.get_referent().map_or(false, |r| r.borrow().type_name == DATE_TYPENAME) {
+        if tok_b
+            .get_referent()
+            .map_or(false, |r| r.borrow().type_name == DATE_TYPENAME)
+        {
             return true;
         }
         break;
@@ -110,11 +122,12 @@ pub fn try_attach(
     high: bool,
     sofa: &SourceOfAnalysis,
 ) -> Vec<(Referent, TokenRef, TokenRef)> {
-    if dts.is_empty() { return vec![]; }
+    if dts.is_empty() {
+        return vec![];
+    }
 
     // Special: single "Today" pointer
-    if dts.len() == 1 && dts[0].typ == DateItemType::Pointer
-        && dts[0].ptr == DatePointerType::Today
+    if dts.len() == 1 && dts[0].typ == DateItemType::Pointer && dts[0].ptr == DatePointerType::Today
     {
         let mut r = dr::new_date_referent();
         dr::set_pointer(&mut r, DatePointerType::Today);
@@ -163,9 +176,16 @@ pub fn try_attach(
         let v = dts[0].int_value;
         let accept = v >= 1000 || high || {
             // Also accept 2-digit year if explicitly preceded by year preposition
-            let prev = dts[0].begin_token.borrow().prev.as_ref().and_then(|w| w.upgrade());
+            let prev = dts[0]
+                .begin_token
+                .borrow()
+                .prev
+                .as_ref()
+                .and_then(|w| w.upgrade());
             prev.map_or(false, |p| {
-                p.borrow().is_value("В", None) || p.borrow().is_value("IN", None) || p.borrow().is_value("У", None)
+                p.borrow().is_value("В", None)
+                    || p.borrow().is_value("IN", None)
+                    || p.borrow().is_value("У", None)
             })
         };
         if accept {
@@ -182,8 +202,8 @@ pub fn try_attach(
 
 struct RuleResult {
     referent: Referent,
-    begin:    TokenRef,
-    end:      TokenRef,
+    begin: TokenRef,
+    end: TokenRef,
 }
 
 // ── ApplyRuleFormal ───────────────────────────────────────────────────────────
@@ -195,89 +215,135 @@ fn apply_rule_formal(
     sofa: &SourceOfAnalysis,
 ) -> Option<RuleResult> {
     let n = its.len();
-    if n < 5 { return None; }
+    if n < 5 {
+        return None;
+    }
 
     let mut i = 0;
     while i + 4 < n {
         // Pattern: [i] Delim [i+2] Delim [i+4] where delims match
         if its[i + 1].typ != DateItemType::Delim || its[i + 3].typ != DateItemType::Delim {
-            i += 1; continue;
+            i += 1;
+            continue;
         }
-        if its[i + 1].string_value != its[i + 3].string_value { i += 1; continue; }
+        if its[i + 1].string_value != its[i + 3].string_value {
+            i += 1;
+            continue;
+        }
 
         // All 5 tokens must be adjacent (no whitespace between them)
         let contiguous = !its[i].is_whitespace_after(sofa)
             && !its[i + 1].is_whitespace_after(sofa)
             && !its[i + 2].is_whitespace_after(sofa)
             && !its[i + 3].is_whitespace_after(sofa);
-        if !contiguous && !high { i += 1; continue; }
+        if !contiguous && !high {
+            i += 1;
+            continue;
+        }
 
         let delim = match its[i + 1].string_value.chars().next() {
-            Some(c) => c, None => { i += 1; continue; }
+            Some(c) => c,
+            None => {
+                i += 1;
+                continue;
+            }
         };
-        if !matches!(delim, '.' | '/' | '\\' | '-') { i += 1; continue; }
+        if !matches!(delim, '.' | '/' | '\\' | '-') {
+            i += 1;
+            continue;
+        }
 
         let a = &its[i];
         let b = &its[i + 2];
         let c = &its[i + 4];
 
         // Determine layout: DD.MM.YYYY vs YYYY.MM.DD
-        let (year_item, mon_item, day_opt): (&DateItemToken, &DateItemToken, Option<&DateItemToken>) =
-            if a.can_be_year() && !b.can_by_month() {
-                // YYYY.DD.month or skip
-                i += 1; continue;
-            } else if a.can_be_year() && b.can_by_month() {
-                // YYYY.MM.DD
-                (a, b, Some(c))
-            } else if a.can_be_day() && b.can_by_month() {
-                // DD.MM.YYYY
-                (c, b, Some(a))
-            } else if a.can_by_month() && b.can_be_day() {
-                // MM.DD.YYYY (American)
-                (c, a, Some(b))
-            } else {
-                i += 1; continue;
-            };
+        let (year_item, mon_item, day_opt): (
+            &DateItemToken,
+            &DateItemToken,
+            Option<&DateItemToken>,
+        ) = if a.can_be_year() && !b.can_by_month() {
+            // YYYY.DD.month or skip
+            i += 1;
+            continue;
+        } else if a.can_be_year() && b.can_by_month() {
+            // YYYY.MM.DD
+            (a, b, Some(c))
+        } else if a.can_be_day() && b.can_by_month() {
+            // DD.MM.YYYY
+            (c, b, Some(a))
+        } else if a.can_by_month() && b.can_be_day() {
+            // MM.DD.YYYY (American)
+            (c, a, Some(b))
+        } else {
+            i += 1;
+            continue;
+        };
 
         if !year_item.can_be_year() {
-            if !high || year_item.int_value < 1000 { i += 1; continue; }
+            if !high || year_item.int_value < 1000 {
+                i += 1;
+                continue;
+            }
         }
 
         // Month sanity: single-digit must be zero-headed or year >= 1980
         if mon_item.int_value < 10 && !mon_item.is_zero_headed(sofa) {
-            if year_item.year() < 1980 { i += 1; continue; }
+            if year_item.year() < 1980 {
+                i += 1;
+                continue;
+            }
         }
 
         // For "." and "-" delimiters, year must be >= 1900
-        if matches!(delim, '.' | '-') && year_item.year() < 1900 { i += 1; continue; }
+        if matches!(delim, '.' | '-') && year_item.year() < 1900 {
+            i += 1;
+            continue;
+        }
 
         let mut r = dr::new_date_referent();
         dr::set_year(&mut r, year_item.year());
         dr::set_month(&mut r, mon_item.int_value);
-        if let Some(d) = day_opt { dr::set_day(&mut r, d.int_value); }
+        if let Some(d) = day_opt {
+            dr::set_day(&mut r, d.int_value);
+        }
 
         return Some(RuleResult {
             referent: r,
             begin: its[i].begin_token.clone(),
-            end:   its[i + 4].end_token.clone(),
+            end: its[i + 4].end_token.clone(),
         });
     }
 
     // High mode: also accept DD.MM.YY (2-digit year)
     if high && n >= 5 {
-        let a = &its[0]; let b = &its[1]; let c = &its[2]; let d = &its[3]; let e = &its[4];
-        if b.typ == DateItemType::Delim && d.typ == DateItemType::Delim
-            && b.string_value == "." && d.string_value == "."
-            && a.can_be_day() && c.can_by_month()
-            && a.length_char() == 2 && c.length_char() == 2
+        let a = &its[0];
+        let b = &its[1];
+        let c = &its[2];
+        let d = &its[3];
+        let e = &its[4];
+        if b.typ == DateItemType::Delim
+            && d.typ == DateItemType::Delim
+            && b.string_value == "."
+            && d.string_value == "."
+            && a.can_be_day()
+            && c.can_by_month()
+            && a.length_char() == 2
+            && c.length_char() == 2
             && (e.length_char() == 2 || e.length_char() == 4)
-            && !a.is_whitespace_after(sofa) && !b.is_whitespace_after(sofa)
-            && !c.is_whitespace_after(sofa) && !d.is_whitespace_after(sofa)
+            && !a.is_whitespace_after(sofa)
+            && !b.is_whitespace_after(sofa)
+            && !c.is_whitespace_after(sofa)
+            && !d.is_whitespace_after(sofa)
         {
             let yv = e.int_value;
-            let year = if yv > 80 && yv < 100 { 1900 + yv }
-                else if yv <= (APPROX_CUR_YEAR - 2000) { yv + 2000 }
-                else { return None; };
+            let year = if yv > 80 && yv < 100 {
+                1900 + yv
+            } else if yv <= (APPROX_CUR_YEAR - 2000) {
+                yv + 2000
+            } else {
+                return None;
+            };
             let mut r = dr::new_date_referent();
             dr::set_year(&mut r, year);
             dr::set_month(&mut r, c.int_value);
@@ -285,7 +351,7 @@ fn apply_rule_formal(
             return Some(RuleResult {
                 referent: r,
                 begin: its[0].begin_token.clone(),
-                end:   its[4].end_token.clone(),
+                end: its[4].end_token.clone(),
             });
         }
     }
@@ -296,10 +362,7 @@ fn apply_rule_formal(
 // ── ApplyRuleWithMonth ────────────────────────────────────────────────────────
 
 /// Handle patterns: "DD месяца [YYYY]", "месяц [YYYY]", "[DD] месяц YYYY".
-fn apply_rule_with_month(
-    its: &[DateItemToken],
-    sofa: &SourceOfAnalysis,
-) -> Option<RuleResult> {
+fn apply_rule_with_month(its: &[DateItemToken], sofa: &SourceOfAnalysis) -> Option<RuleResult> {
     let n = its.len();
 
     // Find the month token
@@ -307,14 +370,9 @@ fn apply_rule_with_month(
     let mon_val = its[mi].int_value;
 
     // Day: the Number token just before the month (possibly separated by delim)
-    let day_idx = if mi > 0 && its[mi - 1].can_be_day()
-        && its[mi - 1].typ != DateItemType::Delim
-    {
+    let day_idx = if mi > 0 && its[mi - 1].can_be_day() && its[mi - 1].typ != DateItemType::Delim {
         Some(mi - 1)
-    } else if mi > 1
-        && its[mi - 1].typ == DateItemType::Delim
-        && its[mi - 2].can_be_day()
-    {
+    } else if mi > 1 && its[mi - 1].typ == DateItemType::Delim && its[mi - 2].can_be_day() {
         Some(mi - 2)
     } else {
         None
@@ -326,9 +384,18 @@ fn apply_rule_with_month(
         let mut j = mi + 1;
         while j < n {
             match its[j].typ {
-                DateItemType::Delim => { j += 1; continue; }
-                DateItemType::Year => { yi = Some(j); break; }
-                DateItemType::Number if its[j].can_be_year() => { yi = Some(j); break; }
+                DateItemType::Delim => {
+                    j += 1;
+                    continue;
+                }
+                DateItemType::Year => {
+                    yi = Some(j);
+                    break;
+                }
+                DateItemType::Number if its[j].can_be_year() => {
+                    yi = Some(j);
+                    break;
+                }
                 _ => break,
             }
         }
@@ -346,41 +413,46 @@ fn apply_rule_with_month(
             return Some(RuleResult {
                 referent: r,
                 begin: its[mi].begin_token.clone(),
-                end:   its[mi].end_token.clone(),
+                end: its[mi].end_token.clone(),
             });
         }
         return None;
     }
 
     let start_i = day_idx.unwrap_or(mi);
-    let end_i   = year_idx.map_or(mi, |yi| yi);
+    let end_i = year_idx.map_or(mi, |yi| yi);
 
     let mut r = dr::new_date_referent();
-    if year_val != 0 { dr::set_year(&mut r, year_val); }
+    if year_val != 0 {
+        dr::set_year(&mut r, year_val);
+    }
     dr::set_month(&mut r, mon_val);
-    if let Some(di) = day_idx { dr::set_day(&mut r, its[di].int_value); }
+    if let Some(di) = day_idx {
+        dr::set_day(&mut r, its[di].int_value);
+    }
 
     Some(RuleResult {
         referent: r,
         begin: its[start_i].begin_token.clone(),
-        end:   its[end_i].end_token.clone(),
+        end: its[end_i].end_token.clone(),
     })
 }
 
 // ── ApplyRuleYearOnly ─────────────────────────────────────────────────────────
 
 /// Handle patterns: "YYYY год", "в YYYY году", "в YYYY".
-fn apply_rule_year_only(
-    its: &[DateItemToken],
-    sofa: &SourceOfAnalysis,
-) -> Option<RuleResult> {
+fn apply_rule_year_only(its: &[DateItemToken], sofa: &SourceOfAnalysis) -> Option<RuleResult> {
     let n = its.len();
-    if n == 0 { return None; }
+    if n == 0 {
+        return None;
+    }
 
     // Find explicit Year token
     let yi = its.iter().position(|t| t.typ == DateItemType::Year)?;
     let year_val = its[yi].year();
-    if year_val <= 0 { return None; }
+    if year_val <= 0 {
+        return None;
+    }
 
     // Optional preceding pointer (начало, конец, ...)
     let pointer = if yi > 0 && its[yi - 1].typ == DateItemType::Pointer {
@@ -389,16 +461,22 @@ fn apply_rule_year_only(
         DatePointerType::No
     };
 
-    let start_i = if pointer != DatePointerType::No { yi - 1 } else { yi };
+    let start_i = if pointer != DatePointerType::No {
+        yi - 1
+    } else {
+        yi
+    };
 
     let mut r = dr::new_date_referent();
     dr::set_year(&mut r, year_val);
-    if pointer != DatePointerType::No { dr::set_pointer(&mut r, pointer); }
+    if pointer != DatePointerType::No {
+        dr::set_pointer(&mut r, pointer);
+    }
 
     Some(RuleResult {
         referent: r,
         begin: its[start_i].begin_token.clone(),
-        end:   its[yi].end_token.clone(),
+        end: its[yi].end_token.clone(),
     })
 }
 
@@ -407,7 +485,9 @@ fn apply_rule_year_only(
 fn apply_date_ranges(kit: &mut AnalysisKit, sofa: &SourceOfAnalysis) {
     let mut cur = kit.first_token.clone();
     while let Some(t) = cur.clone() {
-        let is_date1 = t.borrow().get_referent()
+        let is_date1 = t
+            .borrow()
+            .get_referent()
             .map_or(false, |r| r.borrow().type_name == DATE_TYPENAME);
 
         // Case A: raw_year_number + hyphen + raw_year_number (e.g. "2020-2024")
@@ -415,7 +495,11 @@ fn apply_date_ranges(kit: &mut AnalysisKit, sofa: &SourceOfAnalysis) {
             if let Some((range, end_tok)) = try_raw_year_range(&t, sofa) {
                 let range_rc = Rc::new(RefCell::new(range));
                 let range_rc = kit.add_entity(range_rc);
-                let rt = Rc::new(RefCell::new(Token::new_referent(t.clone(), end_tok, range_rc)));
+                let rt = Rc::new(RefCell::new(Token::new_referent(
+                    t.clone(),
+                    end_tok,
+                    range_rc,
+                )));
                 kit.embed_token(rt.clone());
                 cur = rt.borrow().next.clone();
                 continue;
@@ -427,7 +511,11 @@ fn apply_date_ranges(kit: &mut AnalysisKit, sofa: &SourceOfAnalysis) {
             if let Some((range, end_tok)) = try_day_to_date_range(&t, sofa) {
                 let range_rc = Rc::new(RefCell::new(range));
                 let range_rc = kit.add_entity(range_rc);
-                let rt = Rc::new(RefCell::new(Token::new_referent(t.clone(), end_tok, range_rc)));
+                let rt = Rc::new(RefCell::new(Token::new_referent(
+                    t.clone(),
+                    end_tok,
+                    range_rc,
+                )));
                 kit.embed_token(rt.clone());
                 cur = rt.borrow().next.clone();
                 continue;
@@ -442,14 +530,17 @@ fn apply_date_ranges(kit: &mut AnalysisKit, sofa: &SourceOfAnalysis) {
         // Case C: DATE + connector + DATE
         let next1 = match t.borrow().next.clone() {
             Some(n) => n,
-            None => { cur = None; continue; }
+            None => {
+                cur = None;
+                continue;
+            }
         };
 
         let is_hiphen_conn = next1.borrow().is_hiphen(sofa);
-        let is_po_conn     = next1.borrow().is_value("ПО", Some("ДО"));
-        let is_and_conn    = next1.borrow().is_value("И", None)
-                             && !next1.borrow().is_newline_before(sofa);
-        let is_connector   = is_hiphen_conn || is_po_conn || is_and_conn;
+        let is_po_conn = next1.borrow().is_value("ПО", Some("ДО"));
+        let is_and_conn =
+            next1.borrow().is_value("И", None) && !next1.borrow().is_newline_before(sofa);
+        let is_connector = is_hiphen_conn || is_po_conn || is_and_conn;
 
         if !is_connector {
             cur = t.borrow().next.clone();
@@ -458,19 +549,36 @@ fn apply_date_ranges(kit: &mut AnalysisKit, sofa: &SourceOfAnalysis) {
 
         let next2 = match next1.borrow().next.clone() {
             Some(n) => n,
-            None => { cur = t.borrow().next.clone(); continue; }
+            None => {
+                cur = t.borrow().next.clone();
+                continue;
+            }
         };
 
-        let is_date2 = next2.borrow().get_referent()
+        let is_date2 = next2
+            .borrow()
+            .get_referent()
             .map_or(false, |r| r.borrow().type_name == DATE_TYPENAME);
         if !is_date2 {
             cur = t.borrow().next.clone();
             continue;
         }
 
-        let year1  = t.borrow().get_referent().map(|r| dr::get_year(&r.borrow())).unwrap_or(0);
-        let year2  = next2.borrow().get_referent().map(|r| dr::get_year(&r.borrow())).unwrap_or(0);
-        let month2 = next2.borrow().get_referent().map(|r| dr::get_month(&r.borrow())).unwrap_or(0);
+        let year1 = t
+            .borrow()
+            .get_referent()
+            .map(|r| dr::get_year(&r.borrow()))
+            .unwrap_or(0);
+        let year2 = next2
+            .borrow()
+            .get_referent()
+            .map(|r| dr::get_year(&r.borrow()))
+            .unwrap_or(0);
+        let month2 = next2
+            .borrow()
+            .get_referent()
+            .map(|r| dr::get_month(&r.borrow()))
+            .unwrap_or(0);
 
         // Allow range if:
         // • year range: year1 < year2 (both set)
@@ -498,9 +606,11 @@ fn apply_date_ranges(kit: &mut AnalysisKit, sofa: &SourceOfAnalysis) {
 
         let range_rc = Rc::new(RefCell::new(range));
         let range_rc = kit.add_entity(range_rc);
-        let rt = Rc::new(RefCell::new(
-            Token::new_referent(t.clone(), next2.clone(), range_rc)
-        ));
+        let rt = Rc::new(RefCell::new(Token::new_referent(
+            t.clone(),
+            next2.clone(),
+            range_rc,
+        )));
         kit.embed_token(rt.clone());
         cur = rt.borrow().next.clone();
     }
@@ -509,16 +619,24 @@ fn apply_date_ranges(kit: &mut AnalysisKit, sofa: &SourceOfAnalysis) {
 /// Case A: raw year number + hyphen (no space) + raw year number → DATERANGE
 fn try_raw_year_range(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Referent, TokenRef)> {
     let n1 = t.borrow().number_value()?.parse::<i32>().ok()?;
-    if n1 < 1000 || n1 > 2100 { return None; }
+    if n1 < 1000 || n1 > 2100 {
+        return None;
+    }
 
     let next1 = t.borrow().next.clone()?;
-    if !next1.borrow().is_hiphen(sofa) { return None; }
+    if !next1.borrow().is_hiphen(sofa) {
+        return None;
+    }
 
     let next2 = next1.borrow().next.clone()?;
-    if !next2.borrow().is_number_token() { return None; }
+    if !next2.borrow().is_number_token() {
+        return None;
+    }
 
     let n2 = next2.borrow().number_value()?.parse::<i32>().ok()?;
-    if n2 < 1000 || n2 > 2100 || n2 <= n1 { return None; }
+    if n2 < 1000 || n2 > 2100 || n2 <= n1 {
+        return None;
+    }
 
     let mut r1 = dr::new_date_referent();
     dr::set_year(&mut r1, n1);
@@ -536,7 +654,9 @@ fn try_raw_year_range(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Referent
 /// Case B: raw day number + ПО/ДО + DATE(has month) → DATERANGE
 fn try_day_to_date_range(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Referent, TokenRef)> {
     let day_val = t.borrow().number_value()?.parse::<i32>().ok()?;
-    if day_val < 1 || day_val > 31 { return None; }
+    if day_val < 1 || day_val > 31 {
+        return None;
+    }
 
     let next1 = t.borrow().next.clone()?;
     if !next1.borrow().is_value("ПО", Some("ДО")) && !next1.borrow().is_value("ДО", None) {
@@ -544,20 +664,29 @@ fn try_day_to_date_range(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Refer
     }
 
     let next2 = next1.borrow().next.clone()?;
-    let ref2 = next2.borrow().get_referent().filter(|r| r.borrow().type_name == DATE_TYPENAME)?;
+    let ref2 = next2
+        .borrow()
+        .get_referent()
+        .filter(|r| r.borrow().type_name == DATE_TYPENAME)?;
 
     let month2 = dr::get_month(&ref2.borrow());
-    if month2 == 0 { return None; }
+    if month2 == 0 {
+        return None;
+    }
     let year2 = dr::get_year(&ref2.borrow());
-    let day2  = dr::get_day(&ref2.borrow());
+    let day2 = dr::get_day(&ref2.borrow());
 
     // Sanity: if both are days, from-day must be less than to-day (same month)
-    if day2 > 0 && day_val >= day2 { return None; }
+    if day2 > 0 && day_val >= day2 {
+        return None;
+    }
 
     let mut r1 = dr::new_date_referent();
     dr::set_day(&mut r1, day_val);
     dr::set_month(&mut r1, month2);
-    if year2 != 0 { dr::set_year(&mut r1, year2); }
+    if year2 != 0 {
+        dr::set_year(&mut r1, year2);
+    }
     let r1_rc = Rc::new(RefCell::new(r1));
 
     let mut range = drr::new_date_range_referent();

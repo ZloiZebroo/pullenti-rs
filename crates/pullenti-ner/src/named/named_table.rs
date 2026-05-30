@@ -57,74 +57,292 @@ fn build_tables() -> Tables {
     let mut names: HashMap<String, NameEntry> = HashMap::new();
 
     // ── Planets ──────────────────────────────────────────────────────────────
-    for kw in &["ПЛАНЕТА", "ЗВЕЗДА", "КОМЕТА", "МЕТЕОРИТ", "СОЗВЕЗДИЕ", "ГАЛАКТИКА"] {
-        types.insert(kw.to_string(), TypeEntry { kind: NamedKind::Planet, canonical: kw.to_string() });
+    for kw in &[
+        "ПЛАНЕТА",
+        "ЗВЕЗДА",
+        "КОМЕТА",
+        "МЕТЕОРИТ",
+        "СОЗВЕЗДИЕ",
+        "ГАЛАКТИКА",
+    ] {
+        types.insert(
+            kw.to_string(),
+            TypeEntry {
+                kind: NamedKind::Planet,
+                canonical: kw.to_string(),
+            },
+        );
     }
-    for nm in &["СОЛНЦЕ", "МЕРКУРИЙ", "ВЕНЕРА", "ЗЕМЛЯ", "МАРС", "ЮПИТЕР", "САТУРН",
-                "УРАН", "НЕПТУН", "ПЛУТОН", "ЛУНА", "ДЕЙМОС", "ФОБОС", "ГАНИМЕД", "КАЛЛИСТО"] {
-        names.insert(nm.to_string(), NameEntry { kind: NamedKind::Planet, canonical: nm.to_string(), type_label: None });
+    for nm in &[
+        "СОЛНЦЕ",
+        "МЕРКУРИЙ",
+        "ВЕНЕРА",
+        "ЗЕМЛЯ",
+        "МАРС",
+        "ЮПИТЕР",
+        "САТУРН",
+        "УРАН",
+        "НЕПТУН",
+        "ПЛУТОН",
+        "ЛУНА",
+        "ДЕЙМОС",
+        "ФОБОС",
+        "ГАНИМЕД",
+        "КАЛЛИСТО",
+    ] {
+        names.insert(
+            nm.to_string(),
+            NameEntry {
+                kind: NamedKind::Planet,
+                canonical: nm.to_string(),
+                type_label: None,
+            },
+        );
     }
 
     // ── Locations (type keywords) ─────────────────────────────────────────────
-    for kw in &["РЕКА", "ОЗЕРО", "МОРЕ", "ОКЕАН", "ЗАЛИВ", "ПРОЛИВ", "ПОБЕРЕЖЬЕ",
-                "КОНТИНЕНТ", "ОСТРОВ", "ПОЛУОСТРОВ", "МЫС", "ГОРА", "ГОРНЫЙ ХРЕБЕТ",
-                "ПЕРЕВАЛ", "ПАДЬ", "ЛЕС", "САД", "ЗАПОВЕДНИК", "ЗАКАЗНИК", "ДОЛИНА",
-                "УЩЕЛЬЕ", "РАВНИНА", "БЕРЕГ"] {
-        types.insert(kw.to_string(), TypeEntry { kind: NamedKind::Location, canonical: kw.to_string() });
+    for kw in &[
+        "РЕКА",
+        "ОЗЕРО",
+        "МОРЕ",
+        "ОКЕАН",
+        "ЗАЛИВ",
+        "ПРОЛИВ",
+        "ПОБЕРЕЖЬЕ",
+        "КОНТИНЕНТ",
+        "ОСТРОВ",
+        "ПОЛУОСТРОВ",
+        "МЫС",
+        "ГОРА",
+        "ГОРНЫЙ ХРЕБЕТ",
+        "ПЕРЕВАЛ",
+        "ПАДЬ",
+        "ЛЕС",
+        "САД",
+        "ЗАПОВЕДНИК",
+        "ЗАКАЗНИК",
+        "ДОЛИНА",
+        "УЩЕЛЬЕ",
+        "РАВНИНА",
+        "БЕРЕГ",
+    ] {
+        types.insert(
+            kw.to_string(),
+            TypeEntry {
+                kind: NamedKind::Location,
+                canonical: kw.to_string(),
+            },
+        );
     }
 
     // ── Well-known ocean adjectives (ТИХИЙ ОКЕАН etc.) ────────────────────────
-    for nm in &["ТИХИЙ", "АТЛАНТИЧЕСКИЙ", "ИНДИЙСКИЙ", "СЕВЕРО-ЛЕДОВИТЫЙ"] {
-        names.insert(nm.to_string(), NameEntry { kind: NamedKind::Location, canonical: nm.to_string(), type_label: Some("океан".to_string()) });
+    for nm in &["ТИХИЙ", "АТЛАНТИЧЕСКИЙ", "ИНДИЙСКИЙ", "СЕВЕРО-ЛЕДОВИТЫЙ"]
+    {
+        names.insert(
+            nm.to_string(),
+            NameEntry {
+                kind: NamedKind::Location,
+                canonical: nm.to_string(),
+                type_label: Some("океан".to_string()),
+            },
+        );
     }
 
     // ── Continents ────────────────────────────────────────────────────────────
-    for nm in &["ЕВРАЗИЯ", "АФРИКА", "АМЕРИКА", "АВСТРАЛИЯ", "АНТАРКТИДА"] {
-        names.insert(nm.to_string(), NameEntry { kind: NamedKind::Location, canonical: nm.to_string(), type_label: Some("континент".to_string()) });
+    for nm in &["ЕВРАЗИЯ", "АФРИКА", "АМЕРИКА", "АВСТРАЛИЯ", "АНТАРКТИДА"]
+    {
+        names.insert(
+            nm.to_string(),
+            NameEntry {
+                kind: NamedKind::Location,
+                canonical: nm.to_string(),
+                type_label: Some("континент".to_string()),
+            },
+        );
     }
 
     // ── Well-known rivers ─────────────────────────────────────────────────────
-    for nm in &["ВОЛГА", "НЕВА", "АМУР", "АНГАРА", "ЛЕНА", "ИРТЫШ", "ДНЕПР", "ДОН",
-                "ДНЕСТР", "РЕЙН", "ТИГР", "ЕВФРАТ", "ИОРДАН", "МИССИСИПИ", "АМАЗОНКА",
-                "ТЕМЗА", "СЕНА", "НИЛ", "ЯНЦЗЫ", "ХУАНХЭ", "НИГЕР", "ЕНИСЕЙ",
-                "КАМА", "ОКА", "ВИСЛА", "ДАУГАВА", "НЕМАН", "МЕЗЕНЬ", "КУБАНЬ"] {
-        names.insert(nm.to_string(), NameEntry { kind: NamedKind::Location, canonical: nm.to_string(), type_label: Some("река".to_string()) });
+    for nm in &[
+        "ВОЛГА",
+        "НЕВА",
+        "АМУР",
+        "АНГАРА",
+        "ЛЕНА",
+        "ИРТЫШ",
+        "ДНЕПР",
+        "ДОН",
+        "ДНЕСТР",
+        "РЕЙН",
+        "ТИГР",
+        "ЕВФРАТ",
+        "ИОРДАН",
+        "МИССИСИПИ",
+        "АМАЗОНКА",
+        "ТЕМЗА",
+        "СЕНА",
+        "НИЛ",
+        "ЯНЦЗЫ",
+        "ХУАНХЭ",
+        "НИГЕР",
+        "ЕНИСЕЙ",
+        "КАМА",
+        "ОКА",
+        "ВИСЛА",
+        "ДАУГАВА",
+        "НЕМАН",
+        "МЕЗЕНЬ",
+        "КУБАНЬ",
+    ] {
+        names.insert(
+            nm.to_string(),
+            NameEntry {
+                kind: NamedKind::Location,
+                canonical: nm.to_string(),
+                type_label: Some("река".to_string()),
+            },
+        );
     }
 
     // ── Well-known regions / geographic areas ────────────────────────────────
-    for nm in &["ЕВРОПА", "АЗИЯ", "АРКТИКА", "КАВКАЗ", "ПРИБАЛТИКА", "СИБИРЬ",
-                "ЗАПОЛЯРЬЕ", "ЧУКОТКА", "БАЛКАНЫ", "СКАНДИНАВИЯ", "ОКЕАНИЯ", "АЛЯСКА",
-                "УРАЛ", "ПОВОЛЖЬЕ", "ПРИМОРЬЕ", "КУРИЛЫ", "ТИБЕТ", "ГИМАЛАИ",
-                "АЛЬПЫ", "САХАРА", "ГОБИ", "БАЙКОНУР", "ЧЕРНОБЫЛЬ"] {
-        names.insert(nm.to_string(), NameEntry { kind: NamedKind::Location, canonical: nm.to_string(), type_label: None });
+    for nm in &[
+        "ЕВРОПА",
+        "АЗИЯ",
+        "АРКТИКА",
+        "КАВКАЗ",
+        "ПРИБАЛТИКА",
+        "СИБИРЬ",
+        "ЗАПОЛЯРЬЕ",
+        "ЧУКОТКА",
+        "БАЛКАНЫ",
+        "СКАНДИНАВИЯ",
+        "ОКЕАНИЯ",
+        "АЛЯСКА",
+        "УРАЛ",
+        "ПОВОЛЖЬЕ",
+        "ПРИМОРЬЕ",
+        "КУРИЛЫ",
+        "ТИБЕТ",
+        "ГИМАЛАИ",
+        "АЛЬПЫ",
+        "САХАРА",
+        "ГОБИ",
+        "БАЙКОНУР",
+        "ЧЕРНОБЫЛЬ",
+    ] {
+        names.insert(
+            nm.to_string(),
+            NameEntry {
+                kind: NamedKind::Location,
+                canonical: nm.to_string(),
+                type_label: None,
+            },
+        );
     }
 
     // ── Monuments ────────────────────────────────────────────────────────────
-    for kw in &["ПАМЯТНИК", "МОНУМЕНТ", "МЕМОРИАЛ", "БЮСТ", "ОБЕЛИСК", "МОГИЛА",
-                "МАВЗОЛЕЙ", "ЗАХОРОНЕНИЕ"] {
-        types.insert(kw.to_string(), TypeEntry { kind: NamedKind::Monument, canonical: kw.to_string() });
+    for kw in &[
+        "ПАМЯТНИК",
+        "МОНУМЕНТ",
+        "МЕМОРИАЛ",
+        "БЮСТ",
+        "ОБЕЛИСК",
+        "МОГИЛА",
+        "МАВЗОЛЕЙ",
+        "ЗАХОРОНЕНИЕ",
+    ] {
+        types.insert(
+            kw.to_string(),
+            TypeEntry {
+                kind: NamedKind::Monument,
+                canonical: kw.to_string(),
+            },
+        );
     }
-    for nm in &["ВЕЧНЫЙ ОГОНЬ", "МЕДНЫЙ ВСАДНИК", "ПОКЛОННАЯ ГОРА"] {
-        names.insert(nm.to_string(), NameEntry { kind: NamedKind::Monument, canonical: nm.to_string(), type_label: None });
+    for nm in &["ВЕЧНЫЙ ОГОНЬ", "МЕДНЫЙ ВСАДНИК", "ПОКЛОННАЯ ГОРА"]
+    {
+        names.insert(
+            nm.to_string(),
+            NameEntry {
+                kind: NamedKind::Monument,
+                canonical: nm.to_string(),
+                type_label: None,
+            },
+        );
     }
 
     // ── Art ──────────────────────────────────────────────────────────────────
-    for kw in &["ФИЛЬМ", "КИНОФИЛЬМ", "ТЕЛЕФИЛЬМ", "СЕРИАЛ", "ТЕЛЕСЕРИАЛ",
-                "БЛОКБАСТЕР", "КОМЕДИЯ", "БОЕВИК", "АЛЬБОМ", "ДИСК", "ПЕСНЯ",
-                "СИНГЛ", "СПЕКТАКЛЬ", "МЮЗИКЛ", "ТЕЛЕШОУ",
-                "КНИГА", "РАССКАЗ", "РОМАН", "ПОЭМА", "СТИХ", "СТИХОТВОРЕНИЕ"] {
-        types.insert(kw.to_string(), TypeEntry { kind: NamedKind::Art, canonical: kw.to_string() });
+    for kw in &[
+        "ФИЛЬМ",
+        "КИНОФИЛЬМ",
+        "ТЕЛЕФИЛЬМ",
+        "СЕРИАЛ",
+        "ТЕЛЕСЕРИАЛ",
+        "БЛОКБАСТЕР",
+        "КОМЕДИЯ",
+        "БОЕВИК",
+        "АЛЬБОМ",
+        "ДИСК",
+        "ПЕСНЯ",
+        "СИНГЛ",
+        "СПЕКТАКЛЬ",
+        "МЮЗИКЛ",
+        "ТЕЛЕШОУ",
+        "КНИГА",
+        "РАССКАЗ",
+        "РОМАН",
+        "ПОЭМА",
+        "СТИХ",
+        "СТИХОТВОРЕНИЕ",
+    ] {
+        types.insert(
+            kw.to_string(),
+            TypeEntry {
+                kind: NamedKind::Art,
+                canonical: kw.to_string(),
+            },
+        );
     }
 
     // ── Buildings ────────────────────────────────────────────────────────────
-    for kw in &["ДВОРЕЦ", "КРЕМЛЬ", "ЗАМОК", "КРЕПОСТЬ", "УСАДЬБА",
-                "ЗДАНИЕ", "ШТАБ-КВАРТИРА", "ЖЕЛЕЗНОДОРОЖНЫЙ ВОКЗАЛ", "ВОКЗАЛ",
-                "АВТОВОКЗАЛ", "АЭРОВОКЗАЛ", "АЭРОПОРТ", "АЭРОДРОМ",
-                "БИБЛИОТЕКА", "СОБОР", "МЕЧЕТЬ", "СИНАГОГА", "ЛАВРА", "ХРАМ", "ЦЕРКОВЬ"] {
-        types.insert(kw.to_string(), TypeEntry { kind: NamedKind::Building, canonical: kw.to_string() });
+    for kw in &[
+        "ДВОРЕЦ",
+        "КРЕМЛЬ",
+        "ЗАМОК",
+        "КРЕПОСТЬ",
+        "УСАДЬБА",
+        "ЗДАНИЕ",
+        "ШТАБ-КВАРТИРА",
+        "ЖЕЛЕЗНОДОРОЖНЫЙ ВОКЗАЛ",
+        "ВОКЗАЛ",
+        "АВТОВОКЗАЛ",
+        "АЭРОВОКЗАЛ",
+        "АЭРОПОРТ",
+        "АЭРОДРОМ",
+        "БИБЛИОТЕКА",
+        "СОБОР",
+        "МЕЧЕТЬ",
+        "СИНАГОГА",
+        "ЛАВРА",
+        "ХРАМ",
+        "ЦЕРКОВЬ",
+    ] {
+        types.insert(
+            kw.to_string(),
+            TypeEntry {
+                kind: NamedKind::Building,
+                canonical: kw.to_string(),
+            },
+        );
     }
     for nm in &["КРЕМЛЬ", "КАПИТОЛИЙ", "БЕЛЫЙ ДОМ", "БИГ БЕН"] {
-        names.insert(nm.to_string(), NameEntry { kind: NamedKind::Building, canonical: nm.to_string(), type_label: None });
+        names.insert(
+            nm.to_string(),
+            NameEntry {
+                kind: NamedKind::Building,
+                canonical: nm.to_string(),
+                type_label: None,
+            },
+        );
     }
 
     Tables { types, names }

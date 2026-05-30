@@ -1,31 +1,32 @@
+use std::cell::RefCell;
 /// KeywordAnalyzer — extracts keywords (noun phrases, predicates, referent wrappers).
 /// Mirrors `KeywordAnalyzer.cs`.
-
 use std::rc::Rc;
-use std::cell::RefCell;
 
-use crate::analyzer::Analyzer;
 use crate::analysis_kit::AnalysisKit;
-use crate::token::{Token, TokenRef, TokenKind};
-use crate::referent::{Referent, SlotValue};
-use crate::denomination::DenominationAnalyzer;
+use crate::analyzer::Analyzer;
 use crate::core::noun_phrase::{try_parse as npt_try_parse, NounPhraseParseAttr};
+use crate::denomination::DenominationAnalyzer;
+use crate::referent::{Referent, SlotValue};
+use crate::token::{Token, TokenKind, TokenRef};
 
 use super::keyword_referent::{
-    OBJ_TYPENAME, ATTR_VALUE, ATTR_NORMAL, ATTR_REF,
-    KeywordType,
-    new_keyword_referent, set_typ, add_value, add_normal, add_rank,
-    compute_rank_delta, get_typ,
+    add_normal, add_rank, add_value, compute_rank_delta, get_typ, new_keyword_referent, set_typ,
+    KeywordType, ATTR_NORMAL, ATTR_REF, ATTR_VALUE, OBJ_TYPENAME,
 };
 
 pub struct KeywordAnalyzer;
 
 impl KeywordAnalyzer {
-    pub fn new() -> Self { KeywordAnalyzer }
+    pub fn new() -> Self {
+        KeywordAnalyzer
+    }
 }
 
 impl Default for KeywordAnalyzer {
-    fn default() -> Self { KeywordAnalyzer }
+    fn default() -> Self {
+        KeywordAnalyzer
+    }
 }
 
 // ── Deduplication helper ───────────────────────────────────────────────────
@@ -36,7 +37,9 @@ struct KeywordStore {
 }
 
 impl KeywordStore {
-    fn new() -> Self { KeywordStore { items: Vec::new() } }
+    fn new() -> Self {
+        KeywordStore { items: Vec::new() }
+    }
 
     /// Register the referent. If an equivalent one already exists, merge and return the
     /// existing one; otherwise store and return as-is.
@@ -60,14 +63,18 @@ fn can_be_equals(a: &Referent, b: &Referent) -> bool {
     }
     let ta = get_typ(a);
     let tb = get_typ(b);
-    if ta != tb { return false; }
+    if ta != tb {
+        return false;
+    }
 
     // For referent-type keywords, compare the underlying referent by pointer
     if ta == KeywordType::Referent {
-        let ra = a.find_slot(ATTR_REF, None)
+        let ra = a
+            .find_slot(ATTR_REF, None)
             .and_then(|s| s.value.as_ref())
             .and_then(|v| v.as_referent());
-        let rb = b.find_slot(ATTR_REF, None)
+        let rb = b
+            .find_slot(ATTR_REF, None)
             .and_then(|s| s.value.as_ref())
             .and_then(|v| v.as_referent());
         if let (Some(ra), Some(rb)) = (ra, rb) {
@@ -78,13 +85,19 @@ fn can_be_equals(a: &Referent, b: &Referent) -> bool {
 
     // For object / predicate keywords: any VALUE or NORMAL overlap
     for sa in &a.slots {
-        if sa.type_name != ATTR_NORMAL && sa.type_name != ATTR_VALUE { continue; }
+        if sa.type_name != ATTR_NORMAL && sa.type_name != ATTR_VALUE {
+            continue;
+        }
         let sv = match sa.value.as_ref().and_then(|v| v.as_str()) {
             Some(s) => s,
             None => continue,
         };
-        if b.find_slot(ATTR_NORMAL, Some(sv)).is_some() { return true; }
-        if b.find_slot(ATTR_VALUE,  Some(sv)).is_some() { return true; }
+        if b.find_slot(ATTR_NORMAL, Some(sv)).is_some() {
+            return true;
+        }
+        if b.find_slot(ATTR_VALUE, Some(sv)).is_some() {
+            return true;
+        }
     }
     false
 }
@@ -94,7 +107,9 @@ fn merge_slots(dst: &mut Referent, src: &Referent) {
     for slot in &src.slots {
         // Skip TYPE (already same by construction) and RANK (accumulated separately)
         let n = slot.type_name.as_str();
-        if n == "TYPE" || n == "RANK" { continue; }
+        if n == "TYPE" || n == "RANK" {
+            continue;
+        }
         if let Some(ref v) = slot.value {
             let v_str = v.to_string();
             if dst.find_slot(n, Some(&v_str)).is_none() {
@@ -107,10 +122,18 @@ fn merge_slots(dst: &mut Referent, src: &Referent) {
 // ── Analyzer impl ──────────────────────────────────────────────────────────
 
 impl Analyzer for KeywordAnalyzer {
-    fn name(&self) -> &'static str { "KEYWORD" }
-    fn caption(&self) -> &'static str { "Ключевые комбинации" }
-    fn is_specific(&self) -> bool { true }
-    fn progress_weight(&self) -> i32 { 1 }
+    fn name(&self) -> &'static str {
+        "KEYWORD"
+    }
+    fn caption(&self) -> &'static str {
+        "Ключевые комбинации"
+    }
+    fn is_specific(&self) -> bool {
+        true
+    }
+    fn progress_weight(&self) -> i32 {
+        1
+    }
 
     fn process(&self, kit: &mut AnalysisKit) {
         // Ensure DenominationAnalyzer has already run (run it ourselves if not)
@@ -165,7 +188,10 @@ impl Analyzer for KeywordAnalyzer {
             // ── Case B: TextToken with letters ───────────────────────────────
             {
                 let tb = t.borrow();
-                if !matches!(tb.kind, TokenKind::Text(_)) || !tb.chars.is_letter() || tb.length_char() < 3 {
+                if !matches!(tb.kind, TokenKind::Text(_))
+                    || !tb.chars.is_letter()
+                    || tb.length_char() < 3
+                {
                     drop(tb);
                     cur = next_tok;
                     position += 1;
@@ -175,7 +201,9 @@ impl Analyzer for KeywordAnalyzer {
                 // Check special case "ЕСТЬ" — only treat as verb if preceded by a verb
                 if let TokenKind::Text(ref txt) = tb.kind {
                     if txt.term == "ЕСТЬ" {
-                        let prev_is_verb = tb.prev.as_ref()
+                        let prev_is_verb = tb
+                            .prev
+                            .as_ref()
                             .and_then(|p| p.upgrade())
                             .map(|p| p.borrow().get_morph_class_in_dictionary().is_verb())
                             .unwrap_or(false);
@@ -244,7 +272,9 @@ impl Analyzer for KeywordAnalyzer {
                     let mut inner = Some(t.clone());
                     while let Some(tt) = inner.clone() {
                         let tt_end = tt.borrow().end_char;
-                        if tt_end > npt_end_char { break; }
+                        if tt_end > npt_end_char {
+                            break;
+                        }
 
                         // Only process text tokens
                         let is_text_tok = matches!(tt.borrow().kind, TokenKind::Text(_));
@@ -294,9 +324,11 @@ impl Analyzer for KeywordAnalyzer {
                         let kref_rc = store.register(Rc::new(RefCell::new(kref)));
 
                         // Embed as referent token around `tt`
-                        let rt = Rc::new(RefCell::new(
-                            Token::new_referent(tt.clone(), tt.clone(), kref_rc.clone())
-                        ));
+                        let rt = Rc::new(RefCell::new(Token::new_referent(
+                            tt.clone(),
+                            tt.clone(),
+                            kref_rc.clone(),
+                        )));
                         kit.embed_token(rt.clone());
 
                         if first_tok_opt.is_none() {
@@ -318,10 +350,12 @@ impl Analyzer for KeywordAnalyzer {
 
                     for kw in &kw_list {
                         let kwb = kw.borrow();
-                        let v = kwb.get_string_value(ATTR_VALUE)
+                        let v = kwb
+                            .get_string_value(ATTR_VALUE)
                             .map(|s| s.to_string())
                             .unwrap_or_default();
-                        let n = kwb.get_string_value(ATTR_NORMAL)
+                        let n = kwb
+                            .get_string_value(ATTR_NORMAL)
                             .map(|s| s.to_string())
                             .unwrap_or_else(|| v.clone());
                         val_parts.push(v);
@@ -368,7 +402,9 @@ impl Analyzer for KeywordAnalyzer {
                         let mut scan = Some(first_t.clone());
                         while let Some(st) = scan {
                             let st_end = st.borrow().end_char;
-                            if st_end > npt_end_char { break; }
+                            if st_end > npt_end_char {
+                                break;
+                            }
                             last = st.clone();
                             scan = st.borrow().next.clone();
                         }
@@ -376,9 +412,11 @@ impl Analyzer for KeywordAnalyzer {
                     };
 
                     let morph_clone = npt.morph.clone_collection();
-                    let rt = Rc::new(RefCell::new(
-                        Token::new_referent(first_t, last_t, combined_rc.clone())
-                    ));
+                    let rt = Rc::new(RefCell::new(Token::new_referent(
+                        first_t,
+                        last_t,
+                        combined_rc.clone(),
+                    )));
                     {
                         rt.borrow_mut().morph = morph_clone;
                     }
@@ -415,8 +453,7 @@ impl Analyzer for KeywordAnalyzer {
 
                     // Get lemma / normal form
                     let norm = if let TokenKind::Text(ref txt) = tb.kind {
-                        let mut n = txt.lemma.clone()
-                            .unwrap_or_else(|| txt.term.clone());
+                        let mut n = txt.lemma.clone().unwrap_or_else(|| txt.term.clone());
                         // Strip reflexive suffix "СЯ" if ends with "ЬСЯ"
                         // "СЯ" is 4 bytes in UTF-8 (2 Cyrillic chars × 2 bytes each)
                         if n.ends_with("ЬСЯ") {
@@ -441,9 +478,11 @@ impl Analyzer for KeywordAnalyzer {
 
                     let kref_rc = store.register(Rc::new(RefCell::new(kref)));
 
-                    let rt = Rc::new(RefCell::new(
-                        Token::new_referent(t.clone(), t.clone(), kref_rc.clone())
-                    ));
+                    let rt = Rc::new(RefCell::new(Token::new_referent(
+                        t.clone(),
+                        t.clone(),
+                        kref_rc.clone(),
+                    )));
                     {
                         let morph_clone = t.borrow().morph.clone_collection();
                         rt.borrow_mut().morph = morph_clone;
@@ -472,12 +511,17 @@ impl Analyzer for KeywordAnalyzer {
 fn should_skip_npt(end_tok: &TokenRef, npt: &crate::core::noun_phrase::NounPhraseToken) -> bool {
     let has_preposition = npt.preposition.is_some();
 
-    if end_tok.borrow().is_value("ЦЕЛОМ", None) || end_tok.borrow().is_value("ЧАСТНОСТИ", None) {
-        if has_preposition { return true; }
+    if end_tok.borrow().is_value("ЦЕЛОМ", None) || end_tok.borrow().is_value("ЧАСТНОСТИ", None)
+    {
+        if has_preposition {
+            return true;
+        }
     }
     if end_tok.borrow().is_value("СТОРОНЫ", None) && has_preposition {
         if let Some(ref prep) = npt.preposition {
-            if prep.normal == "С" { return true; }
+            if prep.normal == "С" {
+                return true;
+            }
         }
     }
     false
@@ -528,16 +572,20 @@ fn process_referent_token(
         add_rank(&mut kref, rank_delta);
 
         let kref_rc = store.register(Rc::new(RefCell::new(kref)));
-        let rt = Rc::new(RefCell::new(
-            Token::new_referent(t.clone(), t.clone(), kref_rc)
-        ));
+        let rt = Rc::new(RefCell::new(Token::new_referent(
+            t.clone(),
+            t.clone(),
+            kref_rc,
+        )));
         kit.embed_token(rt.clone());
         return Some(rt);
     }
 
     // Money → Object keyword with NORMAL = currency code
     if type_name == "MONEY" {
-        let currency = r_rc.borrow().get_string_value("CURRENCY")
+        let currency = r_rc
+            .borrow()
+            .get_string_value("CURRENCY")
             .map(|s| s.to_string());
         if let Some(cur_str) = currency {
             let mut kref = new_keyword_referent();
@@ -548,9 +596,11 @@ fn process_referent_token(
             add_rank(&mut kref, rank_delta);
 
             let kref_rc = store.register(Rc::new(RefCell::new(kref)));
-            let rt = Rc::new(RefCell::new(
-                Token::new_referent(t.clone(), t.clone(), kref_rc)
-            ));
+            let rt = Rc::new(RefCell::new(Token::new_referent(
+                t.clone(),
+                t.clone(),
+                kref_rc,
+            )));
             kit.embed_token(rt.clone());
             return Some(rt);
         }
@@ -563,7 +613,9 @@ fn process_referent_token(
 
     // Get the display string
     let norm = if type_name == "GEO" {
-        r_rc.borrow().get_string_value("ALPHA2").map(|s| s.to_string())
+        r_rc.borrow()
+            .get_string_value("ALPHA2")
+            .map(|s| s.to_string())
             .unwrap_or_else(|| referent_to_string(&r_rc.borrow()))
     } else {
         referent_to_string(&r_rc.borrow())
@@ -578,9 +630,11 @@ fn process_referent_token(
     add_rank(&mut kref, rank_delta);
 
     let kref_rc = store.register(Rc::new(RefCell::new(kref)));
-    let rt = Rc::new(RefCell::new(
-        Token::new_referent(t.clone(), t.clone(), kref_rc)
-    ));
+    let rt = Rc::new(RefCell::new(Token::new_referent(
+        t.clone(),
+        t.clone(),
+        kref_rc,
+    )));
     kit.embed_token(rt.clone());
     Some(rt)
 }
@@ -593,14 +647,20 @@ fn referent_to_string(r: &Referent) -> String {
     // Try common display attributes
     for attr in &["NAME", "VALUE", "NUMBER", "TYPE"] {
         if let Some(v) = r.get_string_value(attr) {
-            if !v.is_empty() { return v.to_string(); }
+            if !v.is_empty() {
+                return v.to_string();
+            }
         }
     }
     // Fallback: first non-internal slot string value
     for slot in &r.slots {
-        if slot.is_internal() { continue; }
+        if slot.is_internal() {
+            continue;
+        }
         if let Some(v) = slot.value.as_ref().and_then(|v| v.as_str()) {
-            if !v.is_empty() { return v.to_string(); }
+            if !v.is_empty() {
+                return v.to_string();
+            }
         }
     }
     r.type_name.clone()

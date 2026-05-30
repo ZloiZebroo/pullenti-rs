@@ -1,6 +1,6 @@
 use std::any::Any;
-use std::rc::Rc;
 use std::cell::RefCell;
+use std::rc::Rc;
 
 /// A text fragment annotation (span where an entity occurs in text)
 #[derive(Debug, Clone)]
@@ -15,7 +15,11 @@ pub struct TextAnnotation {
 
 impl TextAnnotation {
     pub fn new(begin: i32, end: i32) -> Self {
-        TextAnnotation { begin_char: begin, end_char: end, essential_for_occurrence: false }
+        TextAnnotation {
+            begin_char: begin,
+            end_char: end,
+            essential_for_occurrence: false,
+        }
     }
 
     pub fn get_text<'a>(&self, text: &'a str) -> Option<&'a str> {
@@ -38,7 +42,10 @@ pub enum SlotValue {
 
 impl SlotValue {
     pub fn as_str(&self) -> Option<&str> {
-        match self { SlotValue::Str(s) => Some(s.as_str()), _ => None }
+        match self {
+            SlotValue::Str(s) => Some(s.as_str()),
+            _ => None,
+        }
     }
 
     pub fn as_referent(&self) -> Option<Rc<RefCell<Referent>>> {
@@ -86,7 +93,11 @@ impl Slot {
     }
 
     pub fn add_annotation(&mut self, begin: i32, end: i32) {
-        if !self.occurrence.iter().any(|o| o.begin_char == begin && o.end_char == end) {
+        if !self
+            .occurrence
+            .iter()
+            .any(|o| o.begin_char == begin && o.end_char == end)
+        {
             self.occurrence.push(TextAnnotation::new(begin, end));
         }
     }
@@ -139,7 +150,12 @@ impl Referent {
     }
 
     /// Add or update a slot value. If `clear_old` is true, remove any existing slot with the same name.
-    pub fn add_slot(&mut self, name: impl Into<String>, value: SlotValue, clear_old: bool) -> &mut Slot {
+    pub fn add_slot(
+        &mut self,
+        name: impl Into<String>,
+        value: SlotValue,
+        clear_old: bool,
+    ) -> &mut Slot {
         let name = name.into();
         if clear_old {
             self.slots.retain(|s| s.type_name != name);
@@ -147,7 +163,11 @@ impl Referent {
         // Check if same value already exists
         for slot in &mut self.slots {
             if slot.type_name == name {
-                if slot.value.as_ref().map_or(false, |v| v.to_string() == value.to_string()) {
+                if slot
+                    .value
+                    .as_ref()
+                    .map_or(false, |v| v.to_string() == value.to_string())
+                {
                     slot.count += 1;
                     let len = self.slots.len();
                     return &mut self.slots[len - 1]; // return last (hack, will fix)
@@ -172,7 +192,8 @@ impl Referent {
 
     /// Get the first string value of a named slot
     pub fn get_string_value(&self, name: &str) -> Option<&str> {
-        self.slots.iter()
+        self.slots
+            .iter()
             .find(|s| s.type_name == name)
             .and_then(|s| s.value.as_ref())
             .and_then(|v| v.as_str())
@@ -180,7 +201,8 @@ impl Referent {
 
     /// Get all string values for a named slot
     pub fn get_all_string_values(&self, name: &str) -> Vec<&str> {
-        self.slots.iter()
+        self.slots
+            .iter()
             .filter(|s| s.type_name == name)
             .filter_map(|s| s.value.as_ref().and_then(|v| v.as_str()))
             .collect()
@@ -188,7 +210,11 @@ impl Referent {
 
     /// Add occurrence annotation
     pub fn add_occurrence(&mut self, begin: i32, end: i32) {
-        if !self.occurrence.iter().any(|o| o.begin_char == begin && o.end_char == end) {
+        if !self
+            .occurrence
+            .iter()
+            .any(|o| o.begin_char == begin && o.end_char == end)
+        {
             self.occurrence.push(TextAnnotation::new(begin, end));
         }
     }
@@ -205,7 +231,9 @@ impl Referent {
 
 impl std::fmt::Display for Referent {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let slots_str: Vec<String> = self.slots.iter()
+        let slots_str: Vec<String> = self
+            .slots
+            .iter()
             .filter(|s| !s.is_internal())
             .map(|s| s.to_string())
             .collect();

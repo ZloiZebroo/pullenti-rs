@@ -1,60 +1,61 @@
+use std::cell::RefCell;
 /// GoodsAnalyzer — detects product/goods entities with their attributes.
 /// Mirrors `GoodsAnalyzer.cs` and the key patterns from `GoodAttrToken.cs`.
 ///
 /// This is a SPECIFIC analyzer (is_specific = true): it processes each
 /// newline-separated line/block independently, extracting a GOOD referent
 /// that aggregates all the detected attributes on that line.
-
 use std::rc::Rc;
-use std::cell::RefCell;
 
-use pullenti_morph::{MorphCase, MorphNumber, MorphGenderFlags};
+use pullenti_morph::{MorphCase, MorphGenderFlags, MorphNumber};
 
-use crate::analyzer::Analyzer;
 use crate::analysis_kit::AnalysisKit;
-use crate::token::{Token, TokenRef, TokenKind};
+use crate::analyzer::Analyzer;
 use crate::referent::{Referent, SlotValue};
 use crate::source_of_analysis::SourceOfAnalysis;
+use crate::token::{Token, TokenKind, TokenRef};
 
 use super::good_referent::{
-    ATTR_ATTR, ATTR_VALUE, ATTR_REF,
-    GoodAttrType,
-    new_good_referent, new_goodattr_referent,
-    set_attr_type, add_attr_value, add_attr_altvalue, set_attr_name, set_attr_ref,
+    add_attr_altvalue, add_attr_value, new_good_referent, new_goodattr_referent, set_attr_name,
+    set_attr_ref, set_attr_type, GoodAttrType, ATTR_ATTR, ATTR_REF, ATTR_VALUE,
 };
 
 pub struct GoodsAnalyzer;
 
 impl GoodsAnalyzer {
-    pub fn new() -> Self { GoodsAnalyzer }
+    pub fn new() -> Self {
+        GoodsAnalyzer
+    }
 }
 
 impl Default for GoodsAnalyzer {
-    fn default() -> Self { GoodsAnalyzer }
+    fn default() -> Self {
+        GoodsAnalyzer
+    }
 }
 
 // ── Internal parsed attribute ──────────────────────────────────────────────
 
 struct GoodAttrTok {
     begin_token: TokenRef,
-    end_token:   TokenRef,
-    typ:         GoodAttrType,
-    value:       Option<String>,
-    alt_value:   Option<String>,
-    name:        Option<String>,
-    ref_r:       Option<Rc<RefCell<Referent>>>,
+    end_token: TokenRef,
+    typ: GoodAttrType,
+    value: Option<String>,
+    alt_value: Option<String>,
+    name: Option<String>,
+    ref_r: Option<Rc<RefCell<Referent>>>,
 }
 
 impl GoodAttrTok {
     fn new(begin: TokenRef, end: TokenRef, typ: GoodAttrType) -> Self {
         GoodAttrTok {
             begin_token: begin,
-            end_token:   end,
+            end_token: end,
             typ,
-            value:       None,
-            alt_value:   None,
-            name:        None,
-            ref_r:       None,
+            value: None,
+            alt_value: None,
+            name: None,
+            ref_r: None,
         }
     }
 
@@ -101,10 +102,18 @@ impl GoodAttrTok {
 // ── Analyzer impl ──────────────────────────────────────────────────────────
 
 impl Analyzer for GoodsAnalyzer {
-    fn name(&self) -> &'static str { "GOODS" }
-    fn caption(&self) -> &'static str { "Товары и атрибуты" }
-    fn is_specific(&self) -> bool { true }
-    fn progress_weight(&self) -> i32 { 100 }
+    fn name(&self) -> &'static str {
+        "GOODS"
+    }
+    fn caption(&self) -> &'static str {
+        "Товары и атрибуты"
+    }
+    fn is_specific(&self) -> bool {
+        true
+    }
+    fn progress_weight(&self) -> i32 {
+        100
+    }
 
     fn process(&self, kit: &mut AnalysisKit) {
         let sofa = kit.sofa.clone();
@@ -163,9 +172,11 @@ impl Analyzer for GoodsAnalyzer {
             // Embed each attribute as a referent token
             let mut embedded: Vec<TokenRef> = Vec::new();
             for (r_rc, begin, end) in &attr_refs {
-                let tok = Rc::new(RefCell::new(
-                    Token::new_referent(begin.clone(), end.clone(), r_rc.clone())
-                ));
+                let tok = Rc::new(RefCell::new(Token::new_referent(
+                    begin.clone(),
+                    end.clone(),
+                    r_rc.clone(),
+                )));
                 kit.embed_token(tok.clone());
                 embedded.push(tok);
             }
@@ -174,7 +185,9 @@ impl Analyzer for GoodsAnalyzer {
             let mut good = new_good_referent();
             for (r_rc, _, _) in &attr_refs {
                 let already = good.slots.iter().any(|s| {
-                    if s.type_name != ATTR_ATTR { return false; }
+                    if s.type_name != ATTR_ATTR {
+                        return false;
+                    }
                     if let Some(ref sv) = s.value {
                         if let Some(ref er) = sv.as_referent() {
                             return Rc::ptr_eq(er, r_rc);
@@ -191,10 +204,10 @@ impl Analyzer for GoodsAnalyzer {
             let good_rc = kit.add_entity(good_rc);
 
             let first_emb = embedded.first().unwrap().clone();
-            let last_emb  = embedded.last().unwrap().clone();
-            let good_tok = Rc::new(RefCell::new(
-                Token::new_referent(first_emb, last_emb, good_rc)
-            ));
+            let last_emb = embedded.last().unwrap().clone();
+            let good_tok = Rc::new(RefCell::new(Token::new_referent(
+                first_emb, last_emb, good_rc,
+            )));
             kit.embed_token(good_tok.clone());
 
             cur = good_tok.borrow().next.clone();
@@ -272,9 +285,7 @@ fn try_parse_attr_list(start: &TokenRef, sofa: &SourceOfAnalysis) -> Vec<GoodAtt
 
     // Remove trailing single-token Character attrs that are adverbs
     while let Some(last) = res.last() {
-        if last.typ == GoodAttrType::Character
-            && Rc::ptr_eq(&last.begin_token, &last.end_token)
-        {
+        if last.typ == GoodAttrType::Character && Rc::ptr_eq(&last.begin_token, &last.end_token) {
             let mc = last.begin_token.borrow().get_morph_class_in_dictionary();
             if mc.is_adverb() {
                 res.pop();
@@ -289,7 +300,11 @@ fn try_parse_attr_list(start: &TokenRef, sofa: &SourceOfAnalysis) -> Vec<GoodAtt
 
 // ── Single attribute parser ────────────────────────────────────────────────
 
-fn try_parse_attr(t: &TokenRef, key_val: Option<&str>, sofa: &SourceOfAnalysis) -> Option<GoodAttrTok> {
+fn try_parse_attr(
+    t: &TokenRef,
+    key_val: Option<&str>,
+    sofa: &SourceOfAnalysis,
+) -> Option<GoodAttrTok> {
     let tb = t.borrow();
 
     // ── ReferentToken ──────────────────────────────────────────────────────
@@ -306,7 +321,7 @@ fn try_parse_attr(t: &TokenRef, key_val: Option<&str>, sofa: &SourceOfAnalysis) 
                         .unwrap_or_else(|| type_name.clone())
                 };
                 let mut a = GoodAttrTok::new(t.clone(), t.clone(), GoodAttrType::Model);
-                a.name  = Some("СПЕЦИФИКАЦИЯ".to_string());
+                a.name = Some("СПЕЦИФИКАЦИЯ".to_string());
                 a.value = Some(val);
                 return Some(a);
             }
@@ -358,14 +373,14 @@ fn try_parse_attr(t: &TokenRef, key_val: Option<&str>, sofa: &SourceOfAnalysis) 
 
     // ── TextToken ──────────────────────────────────────────────────────────
     if let TokenKind::Text(ref txt) = tb.kind {
-        let term         = txt.term.clone();
-        let is_cyrillic  = tb.chars.is_cyrillic_letter();
-        let is_latin     = tb.chars.is_latin_letter();
-        let is_letter    = tb.chars.is_letter();
-        let morph_class  = tb.get_morph_class_in_dictionary();
-        let mc_dict      = tb.get_morph_class_in_dictionary();
-        let char_len     = tb.length_char();
-        let ws_before    = tb.is_whitespace_before(sofa);
+        let term = txt.term.clone();
+        let is_cyrillic = tb.chars.is_cyrillic_letter();
+        let is_latin = tb.chars.is_latin_letter();
+        let is_letter = tb.chars.is_letter();
+        let morph_class = tb.get_morph_class_in_dictionary();
+        let mc_dict = tb.get_morph_class_in_dictionary();
+        let char_len = tb.length_char();
+        let ws_before = tb.is_whitespace_before(sofa);
 
         if !is_letter {
             drop(tb);
@@ -411,7 +426,7 @@ fn try_parse_attr(t: &TokenRef, key_val: Option<&str>, sofa: &SourceOfAnalysis) 
             let (end_tok, val, alt) = collect_latin_proper(t, sofa);
             if val.chars().count() >= 2 {
                 let mut a = GoodAttrTok::new(t.clone(), end_tok, GoodAttrType::Proper);
-                a.value     = Some(val);
+                a.value = Some(val);
                 a.alt_value = alt;
                 return Some(a);
             }
@@ -431,10 +446,16 @@ fn try_parse_attr(t: &TokenRef, key_val: Option<&str>, sofa: &SourceOfAnalysis) 
                     drop(nb);
                     if let Some(ref num_t) = after {
                         let nmb = num_t.borrow();
-                        if matches!(nmb.kind, TokenKind::Number(_)) && !nmb.is_whitespace_before(sofa) {
-                            let num_val = nmb.number_value().map(|s| s.to_string()).unwrap_or_default();
+                        if matches!(nmb.kind, TokenKind::Number(_))
+                            && !nmb.is_whitespace_before(sofa)
+                        {
+                            let num_val = nmb
+                                .number_value()
+                                .map(|s| s.to_string())
+                                .unwrap_or_default();
                             drop(nmb);
-                            let mut a = GoodAttrTok::new(t.clone(), num_t.clone(), GoodAttrType::Model);
+                            let mut a =
+                                GoodAttrTok::new(t.clone(), num_t.clone(), GoodAttrType::Model);
                             a.value = Some(format!("{}-{}", term, num_val));
                             return Some(a);
                         }
@@ -519,7 +540,8 @@ fn try_extend_hyphen_keyword(t: &TokenRef, sofa: &SourceOfAnalysis) -> TokenRef 
     let next1 = t.borrow().next.clone();
     if let Some(ref n1) = next1 {
         let n1b = n1.borrow();
-        if n1b.is_hiphen(sofa) && !n1b.is_whitespace_before(sofa) && !n1b.is_whitespace_after(sofa) {
+        if n1b.is_hiphen(sofa) && !n1b.is_whitespace_before(sofa) && !n1b.is_whitespace_after(sofa)
+        {
             let next2 = n1b.next.clone();
             drop(n1b);
             if let Some(ref n2) = next2 {
@@ -539,7 +561,10 @@ fn try_extend_hyphen_keyword(t: &TokenRef, sofa: &SourceOfAnalysis) -> TokenRef 
 
 // ── Helper: collect a Latin proper-name span ───────────────────────────────
 
-fn collect_latin_proper(t: &TokenRef, sofa: &SourceOfAnalysis) -> (TokenRef, String, Option<String>) {
+fn collect_latin_proper(
+    t: &TokenRef,
+    sofa: &SourceOfAnalysis,
+) -> (TokenRef, String, Option<String>) {
     let mut end = t.clone();
     let mut parts: Vec<String> = Vec::new();
 
@@ -579,7 +604,12 @@ fn collect_latin_proper(t: &TokenRef, sofa: &SourceOfAnalysis) -> (TokenRef, Str
 fn is_verb_form_to_skip(term: &str) -> bool {
     matches!(
         term,
-        "ПРЕДНАЗНАЧИТЬ" | "ПРЕДНАЗНАЧАТЬ" | "ИЗГОТОВИТЬ" | "ИЗГОТОВЛЯТЬ"
-            | "ПРИМЕНЯТЬ" | "ИСПОЛЬЗОВАТЬ" | "ИЗГОТАВЛИВАТЬ"
+        "ПРЕДНАЗНАЧИТЬ"
+            | "ПРЕДНАЗНАЧАТЬ"
+            | "ИЗГОТОВИТЬ"
+            | "ИЗГОТОВЛЯТЬ"
+            | "ПРИМЕНЯТЬ"
+            | "ИСПОЛЬЗОВАТЬ"
+            | "ИЗГОТАВЛИВАТЬ"
     )
 }

@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 /// ResumeAnalyzer — detects resume/CV structure.
 /// Mirrors `ResumeAnalyzer.cs` (simplified port).
 ///
@@ -5,34 +6,39 @@
 /// structured as: [ORG_entity] [DATE/DATERANGE_entity] [optional position].
 ///
 /// Public helpers `parse_org` and `parse_org2` are also used by LinkAnalyzer.
-
 use std::rc::Rc;
-use std::cell::RefCell;
 
-use crate::analyzer::Analyzer;
+use super::resume_referent::{self as rr, ResumeItemType, ATTR_DATERANGE, ATTR_REF, OBJ_TYPENAME};
 use crate::analysis_kit::AnalysisKit;
-use crate::token::{Token, TokenRef, TokenKind};
-use crate::source_of_analysis::SourceOfAnalysis;
+use crate::analyzer::Analyzer;
 use crate::referent::SlotValue;
-use super::resume_referent::{
-    self as rr, ResumeItemType,
-    OBJ_TYPENAME, ATTR_REF, ATTR_DATERANGE,
-};
+use crate::source_of_analysis::SourceOfAnalysis;
+use crate::token::{Token, TokenKind, TokenRef};
 
 pub struct ResumeAnalyzer;
 
 impl ResumeAnalyzer {
-    pub fn new() -> Self { ResumeAnalyzer }
+    pub fn new() -> Self {
+        ResumeAnalyzer
+    }
 }
 
 impl Default for ResumeAnalyzer {
-    fn default() -> Self { ResumeAnalyzer }
+    fn default() -> Self {
+        ResumeAnalyzer
+    }
 }
 
 impl Analyzer for ResumeAnalyzer {
-    fn name(&self)       -> &'static str { "RESUME" }
-    fn caption(&self)    -> &'static str { "Резюме" }
-    fn is_specific(&self) -> bool        { true }
+    fn name(&self) -> &'static str {
+        "RESUME"
+    }
+    fn caption(&self) -> &'static str {
+        "Резюме"
+    }
+    fn is_specific(&self) -> bool {
+        true
+    }
 
     fn process(&self, kit: &mut AnalysisKit) {
         let sofa = kit.sofa.clone();
@@ -47,7 +53,10 @@ impl Analyzer for ResumeAnalyzer {
                 if t.borrow().is_value("ОБРАЗОВАНИЕ", None) {
                     cur_typ = ResumeItemType::Study;
                 } else if t.borrow().is_value("ОПЫТ", None) {
-                    if next_tok.as_ref().map_or(false, |n| n.borrow().is_value("РАБОТЫ", None)) {
+                    if next_tok
+                        .as_ref()
+                        .map_or(false, |n| n.borrow().is_value("РАБОТЫ", None))
+                    {
                         cur_typ = ResumeItemType::Organization;
                     }
                 }
@@ -61,7 +70,11 @@ impl Analyzer for ResumeAnalyzer {
                         referent.add_slot(ATTR_REF, SlotValue::Referent(r), false);
                         let r_rc = Rc::new(RefCell::new(referent));
                         let r_rc = kit.add_entity(r_rc);
-                        let tok = Rc::new(RefCell::new(Token::new_referent(t.clone(), t.clone(), r_rc)));
+                        let tok = Rc::new(RefCell::new(Token::new_referent(
+                            t.clone(),
+                            t.clone(),
+                            r_rc,
+                        )));
                         kit.embed_token(tok.clone());
                         cur = tok.borrow().next.clone();
                         continue;
@@ -103,7 +116,11 @@ impl Analyzer for ResumeAnalyzer {
                         referent.add_slot(ATTR_REF, SlotValue::Referent(r), false);
                         let r_rc = Rc::new(RefCell::new(referent));
                         let r_rc = kit.add_entity(r_rc);
-                        let tok = Rc::new(RefCell::new(Token::new_referent(t.clone(), t.clone(), r_rc)));
+                        let tok = Rc::new(RefCell::new(Token::new_referent(
+                            t.clone(),
+                            t.clone(),
+                            r_rc,
+                        )));
                         kit.embed_token(tok.clone());
                         cur = tok.borrow().next.clone();
                         continue;
@@ -143,20 +160,30 @@ pub fn parse_org(t: &TokenRef, typ: ResumeItemType, sofa: &SourceOfAnalysis) -> 
             let cb = cur.borrow();
             matches!(&cb.kind, TokenKind::Number(_))
                 && cb.is_newline_before(sofa)
-                && cb.next.as_ref().map_or(false, |nx| nx.borrow().is_char_of(".)", sofa))
+                && cb
+                    .next
+                    .as_ref()
+                    .map_or(false, |nx| nx.borrow().is_char_of(".)", sofa))
         };
         if is_num_prefix {
-            let after = cur.borrow().next.clone()
+            let after = cur
+                .borrow()
+                .next
+                .clone()
                 .and_then(|n| n.borrow().next.clone());
             match after {
-                Some(a) => { cur = a; }
+                Some(a) => {
+                    cur = a;
+                }
                 None => return None,
             }
         }
     }
 
     // Case 1: Org referent immediately at this position
-    let org_ref = cur.borrow().get_referent()
+    let org_ref = cur
+        .borrow()
+        .get_referent()
         .filter(|r| r.borrow().type_name == "ORGANIZATION");
 
     if let Some(org) = org_ref {
@@ -170,8 +197,15 @@ pub fn parse_org(t: &TokenRef, typ: ResumeItemType, sofa: &SourceOfAnalysis) -> 
         // Determine actual type
         let actual_typ = if typ == ResumeItemType::Undefined {
             // Check org profile
-            let org_type = org.borrow().get_string_value("TYPE").unwrap_or("").to_string();
-            if org_type.contains("обр") || org_type.contains("универ") || org_type.contains("институт") {
+            let org_type = org
+                .borrow()
+                .get_string_value("TYPE")
+                .unwrap_or("")
+                .to_string();
+            if org_type.contains("обр")
+                || org_type.contains("универ")
+                || org_type.contains("институт")
+            {
                 ResumeItemType::Study
             } else {
                 ResumeItemType::Organization
@@ -201,9 +235,13 @@ pub fn parse_org(t: &TokenRef, typ: ResumeItemType, sofa: &SourceOfAnalysis) -> 
 
 pub fn parse_org2(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<TokenRef> {
     // Must start with "ОПЫТ РАБОТЫ"
-    if !t.borrow().is_value("ОПЫТ", None) { return None; }
+    if !t.borrow().is_value("ОПЫТ", None) {
+        return None;
+    }
     let next = t.borrow().next.clone()?;
-    if !next.borrow().is_value("РАБОТЫ", None) { return None; }
+    if !next.borrow().is_value("РАБОТЫ", None) {
+        return None;
+    }
 
     // Skip to next newline
     let mut cur = next.borrow().next.clone()?;
@@ -232,12 +270,13 @@ pub fn parse_org2(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<TokenRef> {
                                 referent.add_slot(ATTR_DATERANGE, SlotValue::Referent(dr), false);
                             }
                             let r_rc = Rc::new(RefCell::new(referent));
-                            let tok = Rc::new(RefCell::new(
-                                Token::new_referent(cur.clone(), end_tok.clone(), r_rc)
-                            ));
+                            let tok = Rc::new(RefCell::new(Token::new_referent(
+                                cur.clone(),
+                                end_tok.clone(),
+                                r_rc,
+                            )));
                             res = Some(tok.clone());
-                            cur = end_tok.borrow().next.clone()
-                                .unwrap_or_else(|| tok.clone());
+                            cur = end_tok.borrow().next.clone().unwrap_or_else(|| tok.clone());
                             continue;
                         }
                     }
@@ -247,10 +286,14 @@ pub fn parse_org2(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<TokenRef> {
         let next = c.borrow().next.clone();
         match next {
             None => break,
-            Some(n) => { cur = n; }
+            Some(n) => {
+                cur = n;
+            }
         }
         // Stop at new sections
-        if cur.borrow().is_value("ОБРАЗОВАНИЕ", None) { break; }
+        if cur.borrow().is_value("ОБРАЗОВАНИЕ", None) {
+            break;
+        }
     }
 
     res
@@ -258,13 +301,17 @@ pub fn parse_org2(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<TokenRef> {
 
 // ── Helper: find date referent within a few tokens ────────────────────────
 
-fn find_date_after(start: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Option<Rc<RefCell<crate::referent::Referent>>>, TokenRef)> {
+fn find_date_after(
+    start: &TokenRef,
+    sofa: &SourceOfAnalysis,
+) -> Option<(Option<Rc<RefCell<crate::referent::Referent>>>, TokenRef)> {
     let mut cur = start.clone();
     let mut steps = 0;
     loop {
         {
             let cb = cur.borrow();
-            let rtype = cb.get_referent()
+            let rtype = cb
+                .get_referent()
                 .map(|r| r.borrow().type_name.clone())
                 .unwrap_or_default();
             if rtype == "DATE" || rtype == "DATERANGE" {
@@ -280,11 +327,15 @@ fn find_date_after(start: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Option<
                 return None;
             }
         }
-        if steps > 5 { return None; }
+        if steps > 5 {
+            return None;
+        }
         let next = cur.borrow().next.clone();
         match next {
             None => return None,
-            Some(n) => { cur = n; }
+            Some(n) => {
+                cur = n;
+            }
         }
     }
 }

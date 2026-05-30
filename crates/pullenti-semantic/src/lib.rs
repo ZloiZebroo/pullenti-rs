@@ -1,6 +1,13 @@
 // Pullenti Semantic — Semantic analysis subsystem
 // Ported from Pullenti C# SDK v4.33
 
+#![allow(
+    dead_code,
+    unused_imports,
+    unused_mut,
+    unused_variables
+)]
+
 pub mod types;
 pub mod core;
 pub mod sem_graph;

@@ -1,3 +1,5 @@
+#![allow(dead_code, unused_imports, unused_variables)]
+
 /// Pullenti SDK — Rust demo.
 ///
 /// Mirrors the C# Demo/Program.cs — demonstrates the full NLP pipeline:
@@ -19,7 +21,7 @@ use pullenti::pullenti_ner::person::PersonAnalyzer;
 use pullenti::pullenti_ner::address::AddressAnalyzer;
 use pullenti::pullenti_ner::geo::GeoAnalyzer;
 use std::fs;
-use std::time::Instant; 
+use std::time::Instant;
 
 fn main() {
     // ── 1. Initialize SDK (morph + all analyzers) ─────────────────────────
@@ -44,7 +46,7 @@ fn main() {
 
     // 3. Создаём процессор и запускаем
     let proc = ProcessorService::create_processor();
-    println!("OK ({:.2} ms)", init_start.elapsed().as_secs_f64() * 1000.0); 
+    println!("OK ({:.2} ms)", init_start.elapsed().as_secs_f64() * 1000.0);
     // println!("OK");
 
     // MorphologyService::initialize(Some(MorphLang::RU));

@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 /// PersonIdToken — identity document pattern parsing.
 /// Mirrors `PersonIdToken.cs`.
 ///
@@ -5,39 +6,37 @@
 ///   "паспорт 1234 567890"
 ///   "паспорт серия 12 34 номер 567890"
 ///   "водительское удостоверение 77ВВ 123456, выдан 01.01.2020"
-
 use std::rc::Rc;
-use std::cell::RefCell;
 use std::sync::{Arc, OnceLock};
 
-use crate::token::{TokenRef, TokenKind};
+use super::person_identity_referent as pir;
+use crate::core::termin::{Termin, TerminCollection};
 use crate::referent::Referent;
 use crate::source_of_analysis::SourceOfAnalysis;
-use crate::core::termin::{Termin, TerminCollection};
-use super::person_identity_referent as pir;
+use crate::token::{TokenKind, TokenRef};
 
 // ── Token type ────────────────────────────────────────────────────────────────
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum IdTokenTyp {
-    Keyword,  // document type keyword
-    Seria,    // series
-    Number,   // document number
-    Date,     // issue date
-    Org,      // issuing org
-    Vidan,    // "issued by" keyword (скип)
-    Code,     // division code (К/П)
-    Address,  // registration address
+    Keyword, // document type keyword
+    Seria,   // series
+    Number,  // document number
+    Date,    // issue date
+    Org,     // issuing org
+    Vidan,   // "issued by" keyword (скип)
+    Code,    // division code (К/П)
+    Address, // registration address
 }
 
 // ── Parsed element ────────────────────────────────────────────────────────────
 
 struct IdItem {
-    typ:         IdTokenTyp,
-    value:       String,
-    end_tok:     TokenRef,
-    referent:    Option<Rc<RefCell<Referent>>>,
-    has_prefix:  bool,
+    typ: IdTokenTyp,
+    value: String,
+    end_tok: TokenRef,
+    referent: Option<Rc<RefCell<Referent>>>,
+    has_prefix: bool,
 }
 
 // ── Termin collection ─────────────────────────────────────────────────────────
@@ -144,7 +143,10 @@ fn typ_from_tag(tag: &Option<Arc<dyn std::any::Any + Send + Sync>>) -> Option<Id
 fn try_parse_one(t: &TokenRef, is_first: bool, sofa: &SourceOfAnalysis) -> Option<IdItem> {
     let tb = t.borrow();
     // Skip table control chars and punct-only tokens
-    if !tb.chars.is_letter() && !matches!(tb.kind, TokenKind::Referent(_)) && !matches!(tb.kind, TokenKind::Number(_)) {
+    if !tb.chars.is_letter()
+        && !matches!(tb.kind, TokenKind::Referent(_))
+        && !matches!(tb.kind, TokenKind::Number(_))
+    {
         return None;
     }
     drop(tb);
@@ -169,12 +171,18 @@ fn try_parse_one(t: &TokenRef, is_first: bool, sofa: &SourceOfAnalysis) -> Optio
             let mut tt = tok.end_token.borrow().next.clone();
             while let Some(cur) = tt {
                 let cb = cur.borrow();
-                if cb.is_newline_before(sofa) { break; }
+                if cb.is_newline_before(sofa) {
+                    break;
+                }
                 if let TokenKind::Referent(ref rd) = cb.kind {
                     let rtype = rd.referent.borrow().type_name.clone();
                     if rtype == "GEO" {
                         // check if it's a state
-                        let is_state = rd.referent.borrow().slots.iter()
+                        let is_state = rd
+                            .referent
+                            .borrow()
+                            .slots
+                            .iter()
                             .any(|s| s.type_name == "ALPHA2" || s.type_name == "ALPHA3");
                         if is_state {
                             res.referent = Some(rd.referent.clone());
@@ -223,20 +231,27 @@ fn try_parse_one(t: &TokenRef, is_first: bool, sofa: &SourceOfAnalysis) -> Optio
                 }
                 while let Some(c) = cur.clone() {
                     let cb = c.borrow();
-                    if cb.is_newline_before(sofa) { break; }
+                    if cb.is_newline_before(sofa) {
+                        break;
+                    }
                     if let TokenKind::Number(ref nd) = cb.kind {
                         value.push_str(&nd.value.to_string());
                         res.end_tok = c.clone();
                         cur = cb.next.clone();
                     } else if let TokenKind::Text(ref td) = cb.kind {
                         // check for slash separator
-                        if td.term == "/" { cur = cb.next.clone(); continue; }
+                        if td.term == "/" {
+                            cur = cb.next.clone();
+                            continue;
+                        }
                         break;
                     } else {
                         break;
                     }
                 }
-                if value.is_empty() { return None; }
+                if value.is_empty() {
+                    return None;
+                }
                 res.value = value;
                 res.has_prefix = true;
                 return Some(res);
@@ -251,9 +266,13 @@ fn try_parse_one(t: &TokenRef, is_first: bool, sofa: &SourceOfAnalysis) -> Optio
                 }
                 while let Some(c) = cur.clone() {
                     let cb = c.borrow();
-                    if cb.is_newline_before(sofa) { break; }
+                    if cb.is_newline_before(sofa) {
+                        break;
+                    }
                     if let TokenKind::Number(ref nd) = cb.kind {
-                        if value.len() >= 4 { break; }
+                        if value.len() >= 4 {
+                            break;
+                        }
                         value.push_str(&nd.value.to_string());
                         res.end_tok = c.clone();
                         cur = cb.next.clone();
@@ -275,7 +294,9 @@ fn try_parse_one(t: &TokenRef, is_first: bool, sofa: &SourceOfAnalysis) -> Optio
                         break;
                     }
                 }
-                if value.len() < 2 { return None; }
+                if value.len() < 2 {
+                    return None;
+                }
                 res.value = value;
                 res.has_prefix = true;
                 return Some(res);
@@ -285,7 +306,9 @@ fn try_parse_one(t: &TokenRef, is_first: bool, sofa: &SourceOfAnalysis) -> Optio
                 let mut cur = tok.end_token.borrow().next.clone();
                 while let Some(c) = cur.clone() {
                     let cb = c.borrow();
-                    if cb.is_newline_before(sofa) { break; }
+                    if cb.is_newline_before(sofa) {
+                        break;
+                    }
                     if let TokenKind::Number(_) = cb.kind {
                         res.end_tok = c.clone();
                         cur = cb.next.clone();
@@ -302,7 +325,9 @@ fn try_parse_one(t: &TokenRef, is_first: bool, sofa: &SourceOfAnalysis) -> Optio
                 let mut cur = tok.end_token.borrow().next.clone();
                 while let Some(c) = cur.clone() {
                     let cb = c.borrow();
-                    if cb.is_newline_before(sofa) { break; }
+                    if cb.is_newline_before(sofa) {
+                        break;
+                    }
                     if let TokenKind::Referent(ref rd) = cb.kind {
                         if rd.referent.borrow().type_name == "ADDRESS" {
                             res.referent = Some(rd.referent.clone());
@@ -312,10 +337,14 @@ fn try_parse_one(t: &TokenRef, is_first: bool, sofa: &SourceOfAnalysis) -> Optio
                     }
                     cur = cb.next.clone();
                 }
-                if res.referent.is_none() { return None; }
+                if res.referent.is_none() {
+                    return None;
+                }
                 return Some(res);
             }
-            _ => { return Some(res); }
+            _ => {
+                return Some(res);
+            }
         }
     }
 
@@ -325,9 +354,9 @@ fn try_parse_one(t: &TokenRef, is_first: bool, sofa: &SourceOfAnalysis) -> Optio
         if let TokenKind::Referent(ref rd) = tb.kind {
             let rtype = rd.referent.borrow().type_name.clone();
             let typ = match rtype.as_str() {
-                "DATE"         => IdTokenTyp::Date,
+                "DATE" => IdTokenTyp::Date,
                 "ORGANIZATION" => IdTokenTyp::Org,
-                "ADDRESS"      => IdTokenTyp::Address,
+                "ADDRESS" => IdTokenTyp::Address,
                 _ => return None,
             };
             return Some(IdItem {
@@ -379,7 +408,9 @@ fn try_parse_one(t: &TokenRef, is_first: bool, sofa: &SourceOfAnalysis) -> Optio
                 // Collect consecutive number tokens on same line
                 while let Some(c) = cur {
                     let cb = c.borrow();
-                    if cb.is_newline_before(sofa) { break; }
+                    if cb.is_newline_before(sofa) {
+                        break;
+                    }
                     if let TokenKind::Number(ref nd2) = cb.kind {
                         value.push_str(&nd2.value.to_string());
                         end = c.clone();
@@ -388,7 +419,9 @@ fn try_parse_one(t: &TokenRef, is_first: bool, sofa: &SourceOfAnalysis) -> Optio
                         break;
                     }
                 }
-                if value.len() < 4 { return None; }
+                if value.len() < 4 {
+                    return None;
+                }
                 return Some(IdItem {
                     typ: IdTokenTyp::Number,
                     value,
@@ -436,12 +469,16 @@ fn try_parse_one(t: &TokenRef, is_first: bool, sofa: &SourceOfAnalysis) -> Optio
 /// Returns `Some((referent, begin_tok, end_tok))` on success.
 pub fn try_attach(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Referent, TokenRef, TokenRef)> {
     let tb = t.borrow();
-    if !tb.chars.is_letter() { return None; }
+    if !tb.chars.is_letter() {
+        return None;
+    }
     drop(tb);
 
     // First token must be a Keyword
     let noun = try_parse_one(t, true, sofa)?;
-    if noun.typ != IdTokenTyp::Keyword { return None; }
+    if noun.typ != IdTokenTyp::Keyword {
+        return None;
+    }
 
     let begin_tok = t.clone();
     let doc_type = noun.value.clone();
@@ -454,11 +491,15 @@ pub fn try_attach(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Referent, To
     while let Some(c) = cur.clone() {
         let cb = c.borrow();
         // Stop at table control / long newline gap
-        if cb.is_newline_before(sofa) { break; }
+        if cb.is_newline_before(sofa) {
+            break;
+        }
         let c_str = matches!(cb.kind, TokenKind::Text(_)) && {
             if let TokenKind::Text(ref td) = cb.kind {
                 td.term == "," || td.term == ":" || td.term == ";"
-            } else { false }
+            } else {
+                false
+            }
         };
         drop(cb);
         if c_str {
@@ -473,7 +514,9 @@ pub fn try_attach(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Referent, To
         match try_parse_one(&c, false, sofa) {
             None => break,
             Some(item) => {
-                if item.typ == IdTokenTyp::Keyword { break; }
+                if item.typ == IdTokenTyp::Keyword {
+                    break;
+                }
                 end_tok = item.end_tok.clone();
                 cur = end_tok.borrow().next.clone();
                 elements.push(item);
@@ -481,7 +524,9 @@ pub fn try_attach(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Referent, To
         }
     }
 
-    if elements.is_empty() { return None; }
+    if elements.is_empty() {
+        return None;
+    }
 
     // ── Determine number from series of elements ─────────────────────────────
     // Patterns: [Seria, Number], [Number], [Number, Number(prefix)]
@@ -571,7 +616,9 @@ pub fn try_attach(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Referent, To
                     }
                 }
             }
-            _ => { break; }
+            _ => {
+                break;
+            }
         }
     }
 

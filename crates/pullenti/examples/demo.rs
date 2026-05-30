@@ -1,3 +1,5 @@
+#![allow(unused_imports)]
+
 /// Pullenti SDK — Rust demo.
 ///
 /// Mirrors the C# Demo/Program.cs — demonstrates the full NLP pipeline:

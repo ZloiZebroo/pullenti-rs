@@ -1,33 +1,44 @@
+use std::cell::RefCell;
 /// MailAnalyzer — segments an e-mail text into Head / Hello / Body / Tail blocks.
 ///
 /// Simplified port of `Pullenti.Ner.Mail.MailAnalyzer`.
 /// This is a *specific* analyzer (is_specific = true).
-
 use std::rc::Rc;
-use std::cell::RefCell;
 
-use crate::analyzer::Analyzer;
 use crate::analysis_kit::AnalysisKit;
+use crate::analyzer::Analyzer;
 use crate::token::Token;
 
-use super::mail_referent::{self as mr, MailKind};
 use super::mail_line::{self, MailLine, MailLineType};
+use super::mail_referent::{self as mr, MailKind};
 
 pub struct MailAnalyzer;
 
 impl MailAnalyzer {
-    pub fn new() -> Self { MailAnalyzer }
+    pub fn new() -> Self {
+        MailAnalyzer
+    }
 }
 
 impl Default for MailAnalyzer {
-    fn default() -> Self { MailAnalyzer }
+    fn default() -> Self {
+        MailAnalyzer
+    }
 }
 
 impl Analyzer for MailAnalyzer {
-    fn name(&self) -> &'static str { "MAIL" }
-    fn caption(&self) -> &'static str { "Блок письма" }
-    fn is_specific(&self) -> bool { true }
-    fn progress_weight(&self) -> i32 { 1 }
+    fn name(&self) -> &'static str {
+        "MAIL"
+    }
+    fn caption(&self) -> &'static str {
+        "Блок письма"
+    }
+    fn is_specific(&self) -> bool {
+        true
+    }
+    fn progress_weight(&self) -> i32 {
+        1
+    }
 
     fn process(&self, kit: &mut AnalysisKit) {
         let sofa = kit.sofa.clone();
@@ -35,7 +46,10 @@ impl Analyzer for MailAnalyzer {
         // ── Step 1: collect MailLines ────────────────────────────────────
         let mut lines: Vec<MailLine> = Vec::new();
         {
-            let first = match kit.first_token.clone() { Some(t) => t, None => return };
+            let first = match kit.first_token.clone() {
+                Some(t) => t,
+                None => return,
+            };
 
             // First token: always emit a line regardless of newline
             let mut cur = Some(first);
@@ -61,7 +75,9 @@ impl Analyzer for MailAnalyzer {
             }
         }
 
-        if lines.is_empty() { return; }
+        if lines.is_empty() {
+            return;
+        }
 
         // ── Step 2: group lines into blocks ──────────────────────────────
         // A new block is started when:
@@ -82,8 +98,10 @@ impl Analyzer for MailAnalyzer {
                 if !is_new && (i + 2) < n {
                     let t1 = lines[i + 1].typ;
                     let t2 = lines[i + 2].typ;
-                    if t1 == MailLineType::From || t2 == MailLineType::From
-                        || t1 == MailLineType::Hello || t2 == MailLineType::Hello
+                    if t1 == MailLineType::From
+                        || t2 == MailLineType::From
+                        || t1 == MailLineType::Hello
+                        || t2 == MailLineType::Hello
                     {
                         is_new = true;
                     }
@@ -108,7 +126,9 @@ impl Analyzer for MailAnalyzer {
                     let end_char = lines[i].end_char();
                     let mut t = Some(lines[i].begin_token.clone());
                     while let Some(tok) = t.clone() {
-                        if tok.borrow().end_char > end_char { break; }
+                        if tok.borrow().end_char > end_char {
+                            break;
+                        }
                         if let Some(r) = tok.borrow().get_referent() {
                             let rtype = r.borrow().type_name.clone();
                             if rtype == "DATE" || rtype == "URI" {
@@ -196,11 +216,15 @@ impl Analyzer for MailAnalyzer {
             }
         }
 
-        if blocks.is_empty() { return; }
+        if blocks.is_empty() {
+            return;
+        }
 
         // ── Step 3: create MailReferent entities for each block ──────────
         for blk_indices in &blocks {
-            if blk_indices.is_empty() { continue; }
+            if blk_indices.is_empty() {
+                continue;
+            }
             let blk_lines: Vec<&MailLine> = blk_indices.iter().map(|&i| &lines[i]).collect();
             process_block(blk_lines, &sofa, kit);
         }
@@ -214,7 +238,9 @@ fn process_block(
     sofa: &crate::source_of_analysis::SourceOfAnalysis,
     kit: &mut AnalysisKit,
 ) {
-    if lines.is_empty() { return; }
+    if lines.is_empty() {
+        return;
+    }
     let n = lines.len();
     let mut i0 = 0usize;
 
@@ -235,8 +261,10 @@ fn process_block(
         i0 = head_end_idx + 1;
 
         let begin_tok = lines[0].begin_token.clone();
-        let end_tok   = lines[head_end_idx].end_token.clone();
-        let text = sofa.substring(begin_tok.borrow().begin_char, end_tok.borrow().end_char).to_string();
+        let end_tok = lines[head_end_idx].end_token.clone();
+        let text = sofa
+            .substring(begin_tok.borrow().begin_char, end_tok.borrow().end_char)
+            .to_string();
 
         let mut r = mr::new_mail_referent();
         mr::set_kind(&mut r, MailKind::Head);
@@ -320,18 +348,18 @@ fn process_block(
             if lines[ii].typ == MailLineType::Hello {
                 if i0 <= ii {
                     let begin_tok = lines[i0].begin_token.clone();
-                    let end_tok   = lines[ii].end_token.clone();
+                    let end_tok = lines[ii].end_token.clone();
                     if begin_tok.borrow().begin_char <= end_tok.borrow().end_char {
-                        let text = sofa.substring(
-                            begin_tok.borrow().begin_char,
-                            end_tok.borrow().end_char,
-                        ).to_string();
+                        let text = sofa
+                            .substring(begin_tok.borrow().begin_char, end_tok.borrow().end_char)
+                            .to_string();
                         let mut r = mr::new_mail_referent();
                         mr::set_kind(&mut r, MailKind::Hello);
                         mr::set_text(&mut r, &text);
                         let r_rc = Rc::new(RefCell::new(r));
                         let r_rc = kit.add_entity(r_rc);
-                        let tok = Rc::new(RefCell::new(Token::new_referent(begin_tok, end_tok, r_rc)));
+                        let tok =
+                            Rc::new(RefCell::new(Token::new_referent(begin_tok, end_tok, r_rc)));
                         kit.embed_token(tok);
                         i0 = ii + 1;
                     }
@@ -347,7 +375,9 @@ fn process_block(
         }
     }
 
-    if i0 >= n { return; }
+    if i0 >= n {
+        return;
+    }
 
     // Body block
     {
@@ -364,12 +394,11 @@ fn process_block(
         if let Some(end_idx) = body_end_idx {
             if end_idx >= i0 {
                 let begin_tok = lines[i0].begin_token.clone();
-                let end_tok   = lines[end_idx].end_token.clone();
+                let end_tok = lines[end_idx].end_token.clone();
                 if begin_tok.borrow().begin_char <= end_tok.borrow().end_char {
-                    let text = sofa.substring(
-                        begin_tok.borrow().begin_char,
-                        end_tok.borrow().end_char,
-                    ).to_string();
+                    let text = sofa
+                        .substring(begin_tok.borrow().begin_char, end_tok.borrow().end_char)
+                        .to_string();
                     let mut r = mr::new_mail_referent();
                     mr::set_kind(&mut r, MailKind::Body);
                     mr::set_text(&mut r, &text);
@@ -386,12 +415,11 @@ fn process_block(
     if let Some(ts) = tail_start {
         if ts < n {
             let begin_tok = lines[ts].begin_token.clone();
-            let end_tok   = lines[n - 1].end_token.clone();
+            let end_tok = lines[n - 1].end_token.clone();
             if begin_tok.borrow().begin_char <= end_tok.borrow().end_char {
-                let text = sofa.substring(
-                    begin_tok.borrow().begin_char,
-                    end_tok.borrow().end_char,
-                ).to_string();
+                let text = sofa
+                    .substring(begin_tok.borrow().begin_char, end_tok.borrow().end_char)
+                    .to_string();
                 let mut r = mr::new_mail_referent();
                 mr::set_kind(&mut r, MailKind::Tail);
                 mr::set_text(&mut r, &text);

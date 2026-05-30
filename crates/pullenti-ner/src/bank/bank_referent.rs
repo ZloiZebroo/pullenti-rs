@@ -1,7 +1,6 @@
-/// Bank data referent — ports BankDataReferent.cs.
-
-use std::rc::Rc;
 use std::cell::RefCell;
+/// Bank data referent — ports BankDataReferent.cs.
+use std::rc::Rc;
 
 use crate::referent::{Referent, SlotValue};
 use crate::uri::uri_referent as ur;
@@ -33,10 +32,21 @@ pub fn set_corbank(r: &mut Referent, org: Rc<RefCell<Referent>>) {
 
 /// Return true if the scheme is a recognised bank requisite scheme.
 pub fn is_bank_req_scheme(scheme: &str) -> bool {
-    matches!(scheme,
-        "Р/С" | "К/С" | "Л/С" |
-        "ОКФС" | "ОКАТО" | "ОГРН" | "БИК" | "SWIFT" |
-        "ОКПО" | "ОКВЭД" | "КБК" | "ИНН" | "КПП"
+    matches!(
+        scheme,
+        "Р/С"
+            | "К/С"
+            | "Л/С"
+            | "ОКФС"
+            | "ОКАТО"
+            | "ОГРН"
+            | "БИК"
+            | "SWIFT"
+            | "ОКПО"
+            | "ОКВЭД"
+            | "КБК"
+            | "ИНН"
+            | "КПП"
     )
 }
 

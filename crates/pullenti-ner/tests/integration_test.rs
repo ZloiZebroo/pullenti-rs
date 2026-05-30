@@ -7,26 +7,26 @@ use pullenti_ner::{
 use pullenti_ner::phone::phone_referent as ph_ref;
 use pullenti_ner::uri::{ATTR_VALUE, ATTR_SCHEME};
 use pullenti_ner::date::{get_year, get_month, get_day, get_date_from, get_date_to, DATERANGE_OBJ_TYPENAME};
-use pullenti_ner::money::{get_currency, get_value as get_money_value, get_rest};
-use pullenti_ner::measure::{get_value as get_measure_value, get_unit, get_kind};
+use pullenti_ner::money::{get_currency, get_value as get_money_value};
+use pullenti_ner::measure::{get_value as get_measure_value, get_kind};
 use pullenti_ner::geo::{get_name as get_geo_name, get_type as get_geo_type, get_alpha2, is_state, is_region};
 use pullenti_ner::person::{get_firstname, get_middlename, get_lastname, get_sex, SEX_MALE, SEX_FEMALE,
     PERSONPROPERTY_OBJ_TYPENAME, get_person_property_name};
-use pullenti_ner::org::{get_name as get_org_name, get_type as get_org_type, get_names as get_org_names};
-use pullenti_ner::named::{get_name as get_named_name, get_kind as get_named_kind, get_type as get_named_type};
+use pullenti_ner::org::{get_type as get_org_type, get_names as get_org_names};
+use pullenti_ner::named::{get_name as get_named_name, get_kind as get_named_kind};
 use pullenti_ner::NamedEntityAnalyzer;
 use pullenti_ner::address::{get_street_type, get_street_name, get_house, get_flat,
     get_corpus, get_floor, get_office};
 use pullenti_ner::AddressAnalyzer;
 use pullenti_ner::TransportAnalyzer;
-use pullenti_ner::transport::{get_transport_type, get_transport_brand, get_transport_kind};
+use pullenti_ner::transport::{get_transport_brand, get_transport_kind};
 use pullenti_ner::DecreeAnalyzer;
 use pullenti_ner::decree::{get_decree_type, get_decree_number, get_decree_kind};
 use pullenti_ner::bank::bank_referent::find_value_owned;
 use pullenti_ner::WeaponAnalyzer;
 use pullenti_ner::weapon::weapon_referent::{get_type as get_weapon_type, get_brand as get_weapon_brand, get_model as get_weapon_model};
 use pullenti_ner::ChemicalAnalyzer;
-use pullenti_ner::chemical::{get_value as get_chem_value, get_name as get_chem_name, CHEMICAL_OBJ_TYPENAME};
+use pullenti_ner::chemical::{get_value as get_chem_value, CHEMICAL_OBJ_TYPENAME};
 use pullenti_ner::VacanceAnalyzer;
 use pullenti_ner::vacance::{VACANCE_OBJ_TYPENAME, get_item_type, get_value as get_vac_value, VacanceItemType};
 use std::sync::Arc;
@@ -350,6 +350,20 @@ fn test_uri_inn() {
     assert_eq!(scheme.as_deref(), Some("ИНН"), "Scheme should be ИНН, got {:?}", scheme);
 }
 
+/// Long ontology phrase should canonicalize to its short scheme.
+#[test]
+fn test_uri_long_classifier_scheme() {
+    let proc = uri_proc();
+    let sofa = SourceOfAnalysis::new("Общероссийский классификатор форм собственности 16");
+    let result = proc.process(sofa, Some(MorphLang::RU));
+    let uris: Vec<_> = result.entities.iter()
+        .filter(|e| e.borrow().type_name == "URI")
+        .collect();
+    assert!(!uris.is_empty(), "Should extract URI from long OKFS classifier name");
+    let scheme = get_uri_attr(&uris[0].borrow(), ATTR_SCHEME);
+    assert_eq!(scheme.as_deref(), Some("ОКФС"), "Scheme should canonicalize to ОКФС, got {:?}", scheme);
+}
+
 // ── Date analyzer tests ───────────────────────────────────────────────────────
 
 fn date_proc() -> Processor {
@@ -555,6 +569,16 @@ fn measure_proc() -> Processor {
     Processor::with_analyzers(vec![Arc::new(MeasureAnalyzer::new())])
 }
 
+fn get_measure_values(r: &pullenti_ner::Referent) -> Vec<String> {
+    r.slots.iter()
+        .filter(|s| s.type_name == pullenti_ner::measure::ATTR_VALUE)
+        .filter_map(|s| match s.value.as_ref()? {
+            pullenti_ner::SlotValue::Str(v) => Some(v.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
 /// "100 км" → MEASURE, value=100, unit=км, kind=Length
 #[test]
 fn test_measure_kilometers() {
@@ -600,6 +624,36 @@ fn test_measure_percent() {
     let rb = measures[0].borrow();
     let kind = get_kind(&rb);
     assert_eq!(kind.as_deref(), Some("Percent"), "Kind should be Percent, got {:?}", kind);
+}
+
+/// "двадцать пять кг" → MEASURE, value=25 via core word-number helper.
+#[test]
+fn test_measure_word_number_ru() {
+    let proc = measure_proc();
+    let sofa = SourceOfAnalysis::new("Масса двадцать пять кг");
+    let result = proc.process(sofa, Some(MorphLang::RU));
+    let measures: Vec<_> = result.entities.iter()
+        .filter(|e| e.borrow().type_name == "MEASURE")
+        .collect();
+    assert!(!measures.is_empty(), "Should extract MEASURE from word number");
+    let rb = measures[0].borrow();
+    let val = get_measure_value(&rb);
+    assert_eq!(val.as_deref(), Some("25"), "Value should be 25, got {:?}", val);
+}
+
+/// "5-10 кг" → MEASURE with two VALUE slots.
+#[test]
+fn test_measure_number_range() {
+    let proc = measure_proc();
+    let sofa = SourceOfAnalysis::new("Вес 5-10 кг");
+    let result = proc.process(sofa, Some(MorphLang::RU));
+    let measures: Vec<_> = result.entities.iter()
+        .filter(|e| e.borrow().type_name == "MEASURE")
+        .collect();
+    assert!(!measures.is_empty(), "Should extract MEASURE from numeric range");
+    let rb = measures[0].borrow();
+    let values = get_measure_values(&rb);
+    assert_eq!(values, vec!["5".to_string(), "10".to_string()]);
 }
 
 // ── Geo analyzer tests ────────────────────────────────────────────────────────
@@ -1917,6 +1971,32 @@ fn test_definition_yavlyaetsya() {
 }
 
 #[test]
+fn test_definition_quoted_term() {
+    let text = "«Договор» — соглашение двух или более лиц.";
+    let sofa = SourceOfAnalysis::new(text);
+    let proc = def_proc();
+    let ar = proc.process(sofa, None);
+    let theses: Vec<_> = ar.entities.iter().filter(|e| e.borrow().type_name == THESIS_OBJ_TYPENAME).collect();
+    assert!(!theses.is_empty(), "Should find THESIS with quoted term");
+    let t = theses[0].borrow();
+    assert_eq!(get_termin(&t).as_deref(), Some("Договор"));
+    assert!(get_value(&t).as_deref().map(|s| s.contains("соглашение")).unwrap_or(false));
+}
+
+#[test]
+fn test_definition_nested_parenthesized_alias() {
+    let text = "Договор (контракт (типовой)) — соглашение сторон.";
+    let sofa = SourceOfAnalysis::new(text);
+    let proc = def_proc();
+    let ar = proc.process(sofa, None);
+    let theses: Vec<_> = ar.entities.iter().filter(|e| e.borrow().type_name == THESIS_OBJ_TYPENAME).collect();
+    assert!(!theses.is_empty(), "Should skip nested parenthesized alias before connector");
+    let t = theses[0].borrow();
+    assert_eq!(get_termin(&t).as_deref(), Some("Договор"));
+    assert!(get_value(&t).as_deref().map(|s| s.contains("соглашение")).unwrap_or(false));
+}
+
+#[test]
 fn test_definition_eto() {
     // Pattern: "X это Y"
     let text = "Ипотека это залог недвижимого имущества в обеспечение кредитного обязательства.";
@@ -1942,7 +2022,7 @@ fn test_definition_eto() {
 // ── MailAnalyzer tests ────────────────────────────────────────────────────────
 
 use pullenti_ner::MailAnalyzer;
-use pullenti_ner::mail::{MAIL_OBJ_TYPENAME, get_kind as get_mail_kind, MailKind as MailKindEnum};
+use pullenti_ner::mail::{MAIL_OBJ_TYPENAME, get_kind as get_mail_kind};
 
 fn mail_proc() -> Processor {
     init();
@@ -2557,6 +2637,27 @@ fn person_prop_proc() -> Processor {
     Processor::with_analyzers(vec![Arc::new(PersonAnalyzer::new())])
 }
 
+fn attached_person_property_names(result: &pullenti_ner::AnalysisResult) -> Vec<String> {
+    let mut names = Vec::new();
+    for e in &result.entities {
+        let rb = e.borrow();
+        if rb.type_name != "PERSON" {
+            continue;
+        }
+        for s in &rb.slots {
+            if s.type_name != pullenti_ner::person::person_referent::ATTR_ATTR {
+                continue;
+            }
+            if let Some(pullenti_ner::SlotValue::Referent(r)) = s.value.as_ref() {
+                if let Some(name) = get_person_property_name(&r.borrow()) {
+                    names.push(name);
+                }
+            }
+        }
+    }
+    names
+}
+
 /// "господин Иванов" → PERSONPROPERTY(name="господин") + PERSON(lastname=ИВАНОВ)
 #[test]
 fn test_person_property_gospodin() {
@@ -2574,6 +2675,9 @@ fn test_person_property_gospodin() {
         .filter(|e| e.borrow().type_name == "PERSON")
         .collect();
     assert!(!persons.is_empty(), "PERSON should also be detected for 'Иванов'");
+    let attached = attached_person_property_names(&result);
+    assert!(attached.iter().any(|name| name == "господин"),
+        "PERSON should have attached 'господин' property, got {:?}", attached);
 }
 
 /// "директор Петров" → PERSONPROPERTY(name="директор") + PERSON(lastname=ПЕТРОВ)
@@ -2593,6 +2697,9 @@ fn test_person_property_director() {
         .filter(|e| e.borrow().type_name == "PERSON")
         .collect();
     assert!(!persons.is_empty(), "PERSON 'Петров' should be detected");
+    let attached = attached_person_property_names(&result);
+    assert!(attached.iter().any(|name| name == "директор"),
+        "PERSON should have attached 'директор' property, got {:?}", attached);
 }
 
 /// "Mr Smith" (no dot) → PERSONPROPERTY(name="mr.") + PERSON(lastname=SMITH)
@@ -2611,6 +2718,44 @@ fn test_person_property_mr_en() {
         .filter(|e| e.borrow().type_name == "PERSON")
         .collect();
     assert!(!persons.is_empty(), "PERSON 'Smith' should be detected");
+    let attached = attached_person_property_names(&result);
+    assert!(attached.iter().any(|name| name == "mr."),
+        "PERSON should have attached 'mr.' property, got {:?}", attached);
+}
+
+/// Military rank + surname should attach the rank property to the person.
+#[test]
+fn test_person_property_rank_attached() {
+    let proc = person_prop_proc();
+    let sofa = SourceOfAnalysis::new("майор Иванов прибыл в штаб.");
+    let result = proc.process(sofa, Some(MorphLang::RU));
+    let attached = attached_person_property_names(&result);
+    assert!(attached.iter().any(|name| name == "майор"),
+        "PERSON should have attached 'майор' property, got {:?}", attached);
+}
+
+/// Kinship property + full name should produce PERSONPROPERTY and attach it.
+#[test]
+fn test_person_property_kinship_attached() {
+    let proc = person_prop_proc();
+    let sofa = SourceOfAnalysis::new("отец Иван Петров пришел за документами.");
+    let result = proc.process(sofa, Some(MorphLang::RU));
+    let attached = attached_person_property_names(&result);
+    assert!(attached.iter().any(|name| name == "отец"),
+        "PERSON should have attached 'отец' property, got {:?}", attached);
+}
+
+/// A property word without a following person must not create a property entity.
+#[test]
+fn test_person_property_negative_without_person() {
+    let proc = person_prop_proc();
+    let sofa = SourceOfAnalysis::new("директор подписал приказ.");
+    let result = proc.process(sofa, Some(MorphLang::RU));
+    let props: Vec<_> = result.entities.iter()
+        .filter(|e| e.borrow().type_name == PERSONPROPERTY_OBJ_TYPENAME)
+        .collect();
+    assert!(props.is_empty(),
+        "No PERSONPROPERTY expected without a following person, got {:?}", props.len());
 }
 
 // ── LinkAnalyzer tests ────────────────────────────────────────────────────
@@ -3482,6 +3627,22 @@ fn test_address_street_initial_and_building_fraction() {
     let rb = addresses[0].borrow();
     assert_eq!(get_house(&rb).as_deref(), Some("2/9"));
     assert_eq!(get_corpus(&rb).as_deref(), Some("8/1"));
+}
+
+#[test]
+fn test_address_number_letter_suffixes() {
+    let proc = address_proc();
+    let text = "Адрес: ул. Пушкина, д. 10А, корп. 2Б, оф. 101В.";
+    let sofa = SourceOfAnalysis::new(text);
+    let result = proc.process(sofa, Some(MorphLang::RU));
+    let addresses: Vec<_> = result.entities.iter()
+        .filter(|e| e.borrow().type_name == "ADDRESS")
+        .collect();
+    assert!(!addresses.is_empty(), "Should find ADDRESS with letter suffixes");
+    let rb = addresses[0].borrow();
+    assert_eq!(get_house(&rb).as_deref(), Some("10А"));
+    assert_eq!(get_corpus(&rb).as_deref(), Some("2Б"));
+    assert_eq!(get_office(&rb).as_deref(), Some("101В"));
 }
 
 #[test]

@@ -1,11 +1,10 @@
 /// URI parsing primitives — port of UriItemToken.cs
-
 use std::collections::HashSet;
 use std::sync::OnceLock;
 
-use crate::token::{TokenRef, TokenKind, NumberSpellingType};
-use crate::source_of_analysis::SourceOfAnalysis;
 use crate::core::{Termin, TerminCollection};
+use crate::source_of_analysis::SourceOfAnalysis;
+use crate::token::{NumberSpellingType, TokenKind, TokenRef};
 
 // ── Standard domain-group TLDs ────────────────────────────────────────────────
 
@@ -81,11 +80,19 @@ pub struct UriItemToken {
 
 impl UriItemToken {
     fn new(begin: TokenRef, end: TokenRef, value: String) -> Self {
-        UriItemToken { begin_token: begin, end_token: end, value }
+        UriItemToken {
+            begin_token: begin,
+            end_token: end,
+            value,
+        }
     }
 
-    pub fn begin_char(&self) -> i32 { self.begin_token.borrow().begin_char }
-    pub fn end_char(&self) -> i32 { self.end_token.borrow().end_char }
+    pub fn begin_char(&self) -> i32 {
+        self.begin_token.borrow().begin_char
+    }
+    pub fn end_char(&self) -> i32 {
+        self.end_token.borrow().end_char
+    }
 
     /// Returns true if upcoming tokens (starting at `t`) eventually reach a domain group extension.
     fn has_domain_group_ahead(t: &TokenRef, sofa: &SourceOfAnalysis) -> bool {
@@ -97,8 +104,14 @@ impl UriItemToken {
                 let is_hyp = tb.is_hiphen(sofa);
                 let is_ws = tb.is_whitespace_before(sofa) && !std::rc::Rc::ptr_eq(&cur, t);
                 let is_nl = tb.is_newline_before(sofa);
-                let prev_doh = tb.prev.as_ref().and_then(|w| w.upgrade())
-                    .map(|p| { let pb = p.borrow(); pb.is_char('.', sofa) || pb.is_hiphen(sofa) })
+                let prev_doh = tb
+                    .prev
+                    .as_ref()
+                    .and_then(|w| w.upgrade())
+                    .map(|p| {
+                        let pb = p.borrow();
+                        pb.is_char('.', sofa) || pb.is_hiphen(sofa)
+                    })
                     .unwrap_or(false);
                 let term = tb.term().map(|s| s.to_string());
                 let is_lat = tb.chars.is_latin_letter();
@@ -106,19 +119,35 @@ impl UriItemToken {
                 (is_dot, is_hyp, is_ws, is_nl, prev_doh, term, is_lat, next)
             };
             if is_dot || is_hyp {
-                cur = match next { None => return false, Some(n) => n };
+                cur = match next {
+                    None => return false,
+                    Some(n) => n,
+                };
                 continue;
             }
             if is_ws {
-                if is_nl { return false; }
-                if !prev_doh { return false; }
+                if is_nl {
+                    return false;
+                }
+                if !prev_doh {
+                    return false;
+                }
             }
             match &term {
                 None => return false,
-                Some(t) => { if is_std_group(t) { return true; } }
+                Some(t) => {
+                    if is_std_group(t) {
+                        return true;
+                    }
+                }
             }
-            if !is_lat { return false; }
-            cur = match next { None => return false, Some(n) => n };
+            if !is_lat {
+                return false;
+            }
+            cur = match next {
+                None => return false,
+                Some(n) => n,
+            };
         }
     }
 
@@ -128,7 +157,10 @@ impl UriItemToken {
         // optionally skip a leading slash
         if cur.borrow().is_char_of("\\/", sofa) {
             let next = cur.borrow().next.clone();
-            cur = match next { None => return false, Some(n) => n };
+            cur = match next {
+                None => return false,
+                Some(n) => n,
+            };
         }
         let base = cur.clone();
         loop {
@@ -144,25 +176,44 @@ impl UriItemToken {
                     s.chars().next().map_or(false, |c| chars.contains(c))
                 });
                 let next = tb.next.clone();
-                (is_ws, is_num, is_let, is_lat, term, is_slash, in_chars, next)
+                (
+                    is_ws, is_num, is_let, is_lat, term, is_slash, in_chars, next,
+                )
             };
-            if is_ws { break; }
-            if is_num { cur = match next { None => break, Some(n) => n }; continue; }
+            if is_ws {
+                break;
+            }
+            if is_num {
+                cur = match next {
+                    None => break,
+                    Some(n) => n,
+                };
+                continue;
+            }
             if is_letter {
                 match &term {
                     None => break,
                     Some(t) => {
-                        if ["HTM","HTML","SHTML","ASP","ASPX","JSP"].contains(&t.as_str()) {
+                        if ["HTM", "HTML", "SHTML", "ASP", "ASPX", "JSP"].contains(&t.as_str()) {
                             return true;
                         }
-                        if !is_lat { break; }
+                        if !is_lat {
+                            break;
+                        }
                     }
                 }
             } else {
-                if is_slash { return true; }
-                if !in_chars { break; }
+                if is_slash {
+                    return true;
+                }
+                if !in_chars {
+                    break;
+                }
             }
-            cur = match next { None => break, Some(n) => n };
+            cur = match next {
+                None => break,
+                Some(n) => n,
+            };
         }
         false
     }
@@ -194,10 +245,16 @@ pub fn attach_domain_name(
     loop {
         let is_first = std::rc::Rc::ptr_eq(&t, t0);
         if !is_first {
-            let (ws, nl) = { let tb = t.borrow(); (tb.is_whitespace_before(sofa), tb.is_newline_before(sofa)) };
+            let (ws, nl) = {
+                let tb = t.borrow();
+                (tb.is_whitespace_before(sofa), tb.is_newline_before(sofa))
+            };
             if ws {
-                let ok = !nl && can_be_whitespaces && UriItemToken::has_domain_group_ahead(&t, sofa);
-                if !ok { break; }
+                let ok =
+                    !nl && can_be_whitespaces && UriItemToken::has_domain_group_ahead(&t, sofa);
+                if !ok {
+                    break;
+                }
             }
         }
 
@@ -214,30 +271,63 @@ pub fn attach_domain_name(
 
         if is_num {
             let nv = { t.borrow().number_value().unwrap_or("").to_string() };
-            if let Ok(v) = nv.parse::<u32>() { if v < 256 { ip_count += 1; } else { is_ip = false; } } else { is_ip = false; }
+            if let Ok(v) = nv.parse::<u32>() {
+                if v < 256 {
+                    ip_count += 1;
+                } else {
+                    is_ip = false;
+                }
+            } else {
+                is_ip = false;
+            }
             txt.push_str(&nv);
             t1 = t.clone();
-            t = match next { None => break, Some(n) => n };
+            t = match next {
+                None => break,
+                Some(n) => n,
+            };
             continue;
         }
-        if !is_text { break; }
-        let s = match term_s { None => break, Some(s) => s };
+        if !is_text {
+            break;
+        }
+        let s = match term_s {
+            None => break,
+            Some(s) => s,
+        };
         let ch = s.chars().next().unwrap_or('\0');
         if !is_letter {
-            if !".-_".contains(ch) { break; }
-            if ch != '.' { is_ip = false; }
-            if ch == '-' && txt.to_ascii_lowercase() == "vk.com" {
-                return Some(UriItemToken::new(t0.clone(), t1.clone(), txt.to_ascii_lowercase()));
+            if !".-_".contains(ch) {
+                break;
             }
-        } else { is_ip = false; }
+            if ch != '.' {
+                is_ip = false;
+            }
+            if ch == '-' && txt.to_ascii_lowercase() == "vk.com" {
+                return Some(UriItemToken::new(
+                    t0.clone(),
+                    t1.clone(),
+                    txt.to_ascii_lowercase(),
+                ));
+            }
+        } else {
+            is_ip = false;
+        }
 
         txt.push_str(&s.to_ascii_lowercase());
         t1 = t.clone();
-        t = match next { None => break, Some(n) => n };
+        t = match next {
+            None => break,
+            Some(n) => n,
+        };
     }
 
-    if txt.is_empty() { return None; }
-    if ip_count != 4 { is_ip = false; }
+    if txt.is_empty() {
+        return None;
+    }
+    if ip_count != 4 {
+        is_ip = false;
+    }
 
     // Validate / trim trailing dot
     let mut points = 0i32;
@@ -246,29 +336,41 @@ pub fn attach_domain_name(
     let mut i = 0;
     while i < n {
         if bytes[i] == '.' {
-            if i == 0 { return None; }
+            if i == 0 {
+                return None;
+            }
             if i == n - 1 {
                 txt.pop();
                 let prev_t1 = prev_of(&t1).unwrap_or_else(|| t1.clone());
                 t1 = prev_t1;
                 break;
             }
-            if (i > 0 && bytes[i-1] == '.') || (i+1 < n && bytes[i+1] == '.') { return None; }
+            if (i > 0 && bytes[i - 1] == '.') || (i + 1 < n && bytes[i + 1] == '.') {
+                return None;
+            }
             points += 1;
         }
         i += 1;
     }
-    if points == 0 { return None; }
+    if points == 0 {
+        return None;
+    }
 
     if check {
         let mut ok = is_ip || txt == "localhost";
         if !ok {
             let prev_is_dot = prev_of(&t1).map_or(false, |p| p.borrow().is_char('.', sofa));
             if prev_is_dot {
-                if let Some(term) = t1.borrow().term() { if is_std_group(term) { ok = true; } }
+                if let Some(term) = t1.borrow().term() {
+                    if is_std_group(term) {
+                        ok = true;
+                    }
+                }
             }
         }
-        if !ok { return None; }
+        if !ok {
+            return None;
+        }
     }
 
     Some(UriItemToken::new(t0.clone(), t1, txt))
@@ -287,14 +389,19 @@ fn attach_uri_content_inner(
 
     let dom = attach_domain_name(t0, sofa, true, can_be_whitespaces);
     if let Some(ref d) = dom {
-        if d.value.len() < 3 { return None; }
+        if d.value.len() < 3 {
+            return None;
+        }
     }
 
     let mut open_char = '\0';
     let start_after_dom: Option<TokenRef> = dom.as_ref().and_then(|d| next_of(&d.end_token));
 
     let mut t = match dom.as_ref() {
-        Some(_) => match start_after_dom { None => return dom.clone(), Some(n) => n },
+        Some(_) => match start_after_dom {
+            None => return dom.clone(),
+            Some(n) => n,
+        },
         None => t0.clone(),
     };
 
@@ -302,16 +409,32 @@ fn attach_uri_content_inner(
         let is_first = std::rc::Rc::ptr_eq(&t, t0);
 
         if !is_first {
-            let (ws, nl) = { let tb = t.borrow(); (tb.is_whitespace_before(sofa), tb.is_newline_before(sofa)) };
+            let (ws, nl) = {
+                let tb = t.borrow();
+                (tb.is_whitespace_before(sofa), tb.is_newline_before(sofa))
+            };
             if ws {
-                if nl || !can_be_whitespaces { break; }
-                if dom.is_none() { break; }
+                if nl || !can_be_whitespaces {
+                    break;
+                }
+                if dom.is_none() {
+                    break;
+                }
 
                 let prev_ref = prev_of(&t);
-                let prev_hyp = prev_ref.as_ref().map_or(false, |p| p.borrow().is_hiphen(sofa));
-                let prev_semi = prev_ref.as_ref().map_or(false, |p| p.borrow().is_char_of(",;", sofa));
-                let prev_dot = prev_ref.as_ref().map_or(false, |p| p.borrow().is_char('.', sofa));
-                let (t_let, t_len) = { let tb = t.borrow(); (tb.chars.is_letter(), tb.length_char()) };
+                let prev_hyp = prev_ref
+                    .as_ref()
+                    .map_or(false, |p| p.borrow().is_hiphen(sofa));
+                let prev_semi = prev_ref
+                    .as_ref()
+                    .map_or(false, |p| p.borrow().is_char_of(",;", sofa));
+                let prev_dot = prev_ref
+                    .as_ref()
+                    .map_or(false, |p| p.borrow().is_char('.', sofa));
+                let (t_let, t_len) = {
+                    let tb = t.borrow();
+                    (tb.chars.is_letter(), tb.length_char())
+                };
 
                 if prev_hyp {
                     // ok, continue
@@ -320,7 +443,9 @@ fn attach_uri_content_inner(
                 } else if prev_dot && t_let && t_len == 2 {
                     // abbreviated word — continue
                 } else {
-                    if !UriItemToken::has_web_ext_ahead(&t, sofa, chars) { break; }
+                    if !UriItemToken::has_web_ext_ahead(&t, sofa, chars) {
+                        break;
+                    }
                 }
             }
         }
@@ -331,7 +456,10 @@ fn attach_uri_content_inner(
             let src = { t.borrow().get_source_text(sofa).to_string() };
             txt.push_str(&src);
             t1 = t.clone();
-            t = match next_of(&t) { None => break, Some(n) => n };
+            t = match next_of(&t) {
+                None => break,
+                Some(n) => n,
+            };
             continue;
         }
 
@@ -343,7 +471,10 @@ fn attach_uri_content_inner(
                 let src = { t.borrow().get_source_text(sofa).to_string() };
                 txt.push_str(&src);
                 t1 = t.clone();
-                t = match next_of(&t) { None => break, Some(n) => n };
+                t = match next_of(&t) {
+                    None => break,
+                    Some(n) => n,
+                };
                 continue;
             }
             let (is_lat, is_single) = {
@@ -351,8 +482,16 @@ fn attach_uri_content_inner(
                 let lat = tb.chars.is_latin_letter();
                 let single = match &tb.kind {
                     TokenKind::Referent(r) => {
-                        let bc = r.meta.begin_token.as_ref().map_or(-1, |b| b.borrow().begin_char);
-                        let ec = r.meta.end_token.as_ref().map_or(-1, |e| e.borrow().end_char);
+                        let bc = r
+                            .meta
+                            .begin_token
+                            .as_ref()
+                            .map_or(-1, |b| b.borrow().begin_char);
+                        let ec = r
+                            .meta
+                            .end_token
+                            .as_ref()
+                            .map_or(-1, |e| e.borrow().end_char);
                         bc == ec || bc == -1
                     }
                     _ => false,
@@ -363,7 +502,10 @@ fn attach_uri_content_inner(
                 let src = { t.borrow().get_source_text(sofa).to_string() };
                 txt.push_str(&src);
                 t1 = t.clone();
-                t = match next_of(&t) { None => break, Some(n) => n };
+                t = match next_of(&t) {
+                    None => break,
+                    Some(n) => n,
+                };
                 continue;
             }
             break;
@@ -373,27 +515,52 @@ fn attach_uri_content_inner(
         let (is_text, src_opt) = {
             let tb = t.borrow();
             let is_text = matches!(&tb.kind, TokenKind::Text(_));
-            let src = if is_text { Some(tb.get_source_text(sofa).to_string()) } else { None };
+            let src = if is_text {
+                Some(tb.get_source_text(sofa).to_string())
+            } else {
+                None
+            };
             (is_text, src)
         };
-        if !is_text { break; }
+        if !is_text {
+            break;
+        }
         let src = src_opt.unwrap();
         let ch = src.chars().next().unwrap_or('\0');
 
         if !ch.is_alphabetic() {
-            if !chars.contains(ch) { break; }
-            if ch == '(' || ch == '[' { open_char = ch; }
-            else if ch == ')' { if open_char != '(' { break; } open_char = '\0'; }
-            else if ch == ']' { if open_char != '[' { break; } open_char = '\0'; }
+            if !chars.contains(ch) {
+                break;
+            }
+            if ch == '(' || ch == '[' {
+                open_char = ch;
+            } else if ch == ')' {
+                if open_char != '(' {
+                    break;
+                }
+                open_char = '\0';
+            } else if ch == ']' {
+                if open_char != '[' {
+                    break;
+                }
+                open_char = '\0';
+            }
         }
 
         txt.push_str(&src);
         t1 = t.clone();
-        t = match next_of(&t) { None => break, Some(n) => n };
+        t = match next_of(&t) {
+            None => break,
+            Some(n) => n,
+        };
     }
 
-    if txt.is_empty() { return dom; }
-    if !txt.chars().any(|c| c.is_alphanumeric()) { return dom; }
+    if txt.is_empty() {
+        return dom;
+    }
+    if !txt.chars().any(|c| c.is_alphanumeric()) {
+        return dom;
+    }
 
     // Trim trailing dot or slash
     if txt.ends_with('.') || txt.ends_with('/') {
@@ -410,8 +577,14 @@ fn attach_uri_content_inner(
         let rest = txt[2..].to_string();
         txt = format!("//{}", rest);
     }
-    let result_val = if txt.starts_with("//") { txt[2..].to_string() } else { txt.clone() };
-    if result_val.eq_ignore_ascii_case("WWW") { return None; }
+    let result_val = if txt.starts_with("//") {
+        txt[2..].to_string()
+    } else {
+        txt.clone()
+    };
+    if result_val.eq_ignore_ascii_case("WWW") {
+        return None;
+    }
 
     Some(UriItemToken::new(t0.clone(), t1, txt))
 }
@@ -441,8 +614,12 @@ pub fn attach_uri_content(
         let new_end = prev_of(&res.end_token).unwrap_or_else(|| res.end_token.clone());
         res.end_token = new_end;
     }
-    if res.value.contains('\\') { res.value = res.value.replace('\\', "/"); }
-    if res.value.is_empty() { return None; }
+    if res.value.contains('\\') {
+        res.value = res.value.replace('\\', "/");
+    }
+    if res.value.is_empty() {
+        return None;
+    }
     Some(res)
 }
 
@@ -492,19 +669,30 @@ pub fn attach_url(t0: &TokenRef, sofa: &SourceOfAnalysis) -> Option<UriItemToken
     // Path segments
     loop {
         let n1 = next_of(&t1);
-        let slash = match n1 { None => break, Some(n) => n };
-        if !slash.borrow().is_char('/', sofa) { break; }
+        let slash = match n1 {
+            None => break,
+            Some(n) => n,
+        };
+        if !slash.borrow().is_char('/', sofa) {
+            break;
+        }
         if slash.borrow().is_whitespace_after(sofa) {
             let new_t1 = slash.clone();
             t1 = new_t1;
             break;
         }
         let after = match next_of(&slash) {
-            None => { t1 = slash; break; }
+            None => {
+                t1 = slash;
+                break;
+            }
             Some(n) => n,
         };
         match attach_uri_content_inner(&after, sofa, ".-_+%", false) {
-            None => { t1 = slash; break; }
+            None => {
+                t1 = slash;
+                break;
+            }
             Some(d) => {
                 t1 = d.end_token.clone();
                 txt.push('/');
@@ -551,7 +739,9 @@ pub fn attach_url(t0: &TokenRef, sofa: &SourceOfAnalysis) -> Option<UriItemToken
         }
     }
 
-    if !txt.chars().any(|c| c.is_alphabetic()) { return None; }
+    if !txt.chars().any(|c| c.is_alphabetic()) {
+        return None;
+    }
     Some(UriItemToken::new(t0.clone(), t1, txt))
 }
 
@@ -567,12 +757,24 @@ pub fn attach_iso_content(
     loop {
         let (is_sep, is_iec, next) = {
             let tb = t.borrow();
-            (tb.is_char_of(":/\\", sofa) || tb.is_hiphen(sofa), tb.is_value("IEC", None), tb.next.clone())
+            (
+                tb.is_char_of(":/\\", sofa) || tb.is_hiphen(sofa),
+                tb.is_value("IEC", None),
+                tb.next.clone(),
+            )
         };
-        if is_sep || is_iec { t = match next { None => return None, Some(n) => n }; continue; }
+        if is_sep || is_iec {
+            t = match next {
+                None => return None,
+                Some(n) => n,
+            };
+            continue;
+        }
         break;
     }
-    if !matches!(&t.borrow().kind, TokenKind::Number(_)) { return None; }
+    if !matches!(&t.borrow().kind, TokenKind::Number(_)) {
+        return None;
+    }
 
     let t_start = t.clone();
     let mut t1 = t.clone();
@@ -591,18 +793,35 @@ pub fn attach_iso_content(
             let next = tb.next.clone();
             (is_ws, is_num, is_text, src, fc, in_s, next)
         };
-        if is_ws { break; }
+        if is_ws {
+            break;
+        }
         if is_num {
-            if delim != '\0' { txt.push(delim); delim = '\0'; }
+            if delim != '\0' {
+                txt.push(delim);
+                delim = '\0';
+            }
             txt.push_str(&src);
             t1 = t.clone();
-            t = match next { None => break, Some(n) => n };
+            t = match next {
+                None => break,
+                Some(n) => n,
+            };
             continue;
         }
-        if is_text && in_spec { delim = first_ch; t = match next { None => break, Some(n) => n }; continue; }
+        if is_text && in_spec {
+            delim = first_ch;
+            t = match next {
+                None => break,
+                Some(n) => n,
+            };
+            continue;
+        }
         break;
     }
-    if txt.is_empty() { return None; }
+    if txt.is_empty() {
+        return None;
+    }
     Some(UriItemToken::new(t0.clone(), t1, txt))
 }
 
@@ -625,29 +844,50 @@ pub fn attach_isbn(t0: &TokenRef, sofa: &SourceOfAnalysis) -> Option<UriItemToke
             let next = tb.next.clone();
             (is_tc, is_nl, is_num, term, src, next)
         };
-        if is_tc { break; }
+        if is_tc {
+            break;
+        }
         if is_nl {
             let prev_hyp = prev_of(&t).map_or(false, |p| p.borrow().is_hiphen(sofa));
-            if !prev_hyp { break; }
+            if !prev_hyp {
+                break;
+            }
         }
         if is_num {
             txt.push_str(&src);
             digs += src.len();
             t1 = t.clone();
-            if digs > 13 { break; }
-            t = match next { None => break, Some(n) => n };
+            if digs > 13 {
+                break;
+            }
+            t = match next {
+                None => break,
+                Some(n) => n,
+            };
             continue;
         }
-        let s = match term { None => break, Some(s) => s };
-        if s != "-" && s != "Х" && s != "X" { break; }
+        let s = match term {
+            None => break,
+            Some(s) => s,
+        };
+        if s != "-" && s != "Х" && s != "X" {
+            break;
+        }
         let out = if s == "Х" { "X" } else { &s };
         txt.push_str(out);
         t1 = t.clone();
-        if s != "-" { break; }
-        t = match next { None => break, Some(n) => n };
+        if s != "-" {
+            break;
+        }
+        t = match next {
+            None => break,
+            Some(n) => n,
+        };
     }
     let dig_count = txt.chars().filter(|c| c.is_ascii_digit()).count();
-    if dig_count < 7 { return None; }
+    if dig_count < 7 {
+        return None;
+    }
     Some(UriItemToken::new(t0.clone(), t1, txt))
 }
 
@@ -672,26 +912,46 @@ pub fn attach_bbk(t0: &TokenRef, sofa: &SourceOfAnalysis) -> Option<UriItemToken
             let next = tb.next.clone();
             (is_nl, is_tc, is_num, is_text, src, fc, ws, next)
         };
-        if is_nl || is_tc { break; }
+        if is_nl || is_tc {
+            break;
+        }
         if is_num {
             txt.push_str(&src);
             digs += src.len();
             t1 = t.clone();
-            t = match next { None => break, Some(n) => n };
+            t = match next {
+                None => break,
+                Some(n) => n,
+            };
             continue;
         }
-        if !is_text { break; }
-        if first_ch == ',' { break; }
-        if first_ch == '(' {
-            let nxt_is_num = next.as_ref().map_or(false, |n| matches!(&n.borrow().kind, TokenKind::Number(_)));
-            if !nxt_is_num { break; }
+        if !is_text {
+            break;
         }
-        if first_ch.is_alphabetic() && is_ws_before { break; }
+        if first_ch == ',' {
+            break;
+        }
+        if first_ch == '(' {
+            let nxt_is_num = next
+                .as_ref()
+                .map_or(false, |n| matches!(&n.borrow().kind, TokenKind::Number(_)));
+            if !nxt_is_num {
+                break;
+            }
+        }
+        if first_ch.is_alphabetic() && is_ws_before {
+            break;
+        }
         txt.push_str(&src);
         t1 = t.clone();
-        t = match next { None => break, Some(n) => n };
+        t = match next {
+            None => break,
+            Some(n) => n,
+        };
     }
-    if txt.len() < 3 || digs < 2 { return None; }
+    if txt.len() < 3 || digs < 2 {
+        return None;
+    }
     if txt.ends_with('.') {
         txt.pop();
         let new_t1 = prev_of(&t1).unwrap_or_else(|| t1.clone());
@@ -703,7 +963,9 @@ pub fn attach_bbk(t0: &TokenRef, sofa: &SourceOfAnalysis) -> Option<UriItemToken
 // ── attach_skype ──────────────────────────────────────────────────────────────
 
 pub fn attach_skype(t0: &TokenRef, sofa: &SourceOfAnalysis, tlg: bool) -> Option<UriItemToken> {
-    if t0.borrow().chars.is_cyrillic_letter() && !tlg { return None; }
+    if t0.borrow().chars.is_cyrillic_letter() && !tlg {
+        return None;
+    }
 
     let mut start = t0.clone();
     if tlg && t0.borrow().is_char('@', sofa) {
@@ -720,10 +982,19 @@ pub fn attach_skype(t0: &TokenRef, sofa: &SourceOfAnalysis, tlg: bool) -> Option
                 if n.borrow().is_char(':', sofa) {
                     tt = next_of(n);
                     loop {
-                        let n2 = match tt.clone() { None => break, Some(x) => x };
-                        if n2.borrow().is_char_of("\\/", sofa) { tt = next_of(&n2); } else { break; }
+                        let n2 = match tt.clone() {
+                            None => break,
+                            Some(x) => x,
+                        };
+                        if n2.borrow().is_char_of("\\/", sofa) {
+                            tt = next_of(&n2);
+                        } else {
+                            break;
+                        }
                     }
-                    if let Some(ref n3) = tt { return attach_skype(n3, sofa, true); }
+                    if let Some(ref n3) = tt {
+                        return attach_skype(n3, sofa, true);
+                    }
                 }
             }
         }
@@ -742,19 +1013,27 @@ pub fn attach_skype(t0: &TokenRef, sofa: &SourceOfAnalysis, tlg: bool) -> Option
         }
     }
 
-    if res.value.len() < 4 { return None; }
+    if res.value.len() < 4 {
+        return None;
+    }
     Some(res)
 }
 
 // ── attach_icq_content ────────────────────────────────────────────────────────
 
 pub fn attach_icq_content(t0: &TokenRef, sofa: &SourceOfAnalysis) -> Option<UriItemToken> {
-    if !matches!(&t0.borrow().kind, TokenKind::Number(_)) { return None; }
+    if !matches!(&t0.borrow().kind, TokenKind::Number(_)) {
+        return None;
+    }
     let mut res = attach_isbn(t0, sofa)?;
     res.value = res.value.replace('-', "");
-    if !res.value.chars().all(|c| c.is_ascii_digit()) { return None; }
+    if !res.value.chars().all(|c| c.is_ascii_digit()) {
+        return None;
+    }
     let len = res.value.len();
-    if len < 6 || len > 10 { return None; }
+    if len < 6 || len > 10 {
+        return None;
+    }
     Some(res)
 }
 
@@ -766,9 +1045,18 @@ pub fn attach_mail_users(t1: &TokenRef, sofa: &SourceOfAnalysis) -> Option<Vec<U
         let mut res0 = attach_mail_users(&inner, sofa)?;
         let mut cur = prev_of(&res0[0].begin_token);
         loop {
-            let c = match cur.take() { None => return None, Some(x) => x };
-            if c.borrow().is_char('{', sofa) { res0[0].begin_token = c; return Some(res0); }
-            if c.borrow().is_char_of(";,", sofa) { cur = prev_of(&c); continue; }
+            let c = match cur.take() {
+                None => return None,
+                Some(x) => x,
+            };
+            if c.borrow().is_char('{', sofa) {
+                res0[0].begin_token = c;
+                return Some(res0);
+            }
+            if c.borrow().is_char_of(";,", sofa) {
+                cur = prev_of(&c);
+                continue;
+            }
             let sub = attach_mail_users(&c, sofa)?;
             let first_begin = sub[0].begin_token.clone();
             res0.insert(0, sub.into_iter().next().unwrap());
@@ -791,20 +1079,38 @@ pub fn attach_mail_users(t1: &TokenRef, sofa: &SourceOfAnalysis) -> Option<Vec<U
             let prev = tb.prev.as_ref().and_then(|w| w.upgrade());
             (ws_after, is_num, is_text, src, fc, prev)
         };
-        if is_ws_after { break; }
+        if is_ws_after {
+            break;
+        }
         if is_num {
             txt.insert_str(0, &src);
             t0 = t.clone();
-            t = match prev_t { None => break, Some(p) => p };
+            t = match prev_t {
+                None => break,
+                Some(p) => p,
+            };
             continue;
         }
-        if !is_text { break; }
-        if !first_ch.is_alphabetic() && !".-_".contains(first_ch) { break; }
+        if !is_text {
+            break;
+        }
+        if !first_ch.is_alphabetic() && !".-_".contains(first_ch) {
+            break;
+        }
         txt.insert_str(0, &src);
         t0 = t.clone();
-        t = match prev_t { None => break, Some(p) => p };
+        t = match prev_t {
+            None => break,
+            Some(p) => p,
+        };
     }
 
-    if txt.is_empty() { return None; }
-    Some(vec![UriItemToken::new(t0, t1.clone(), txt.to_ascii_lowercase())])
+    if txt.is_empty() {
+        return None;
+    }
+    Some(vec![UriItemToken::new(
+        t0,
+        t1.clone(),
+        txt.to_ascii_lowercase(),
+    )])
 }

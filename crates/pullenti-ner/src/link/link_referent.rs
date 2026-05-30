@@ -1,17 +1,17 @@
-use std::rc::Rc;
-use std::cell::RefCell;
 use crate::referent::{Referent, SlotValue};
+use std::cell::RefCell;
+use std::rc::Rc;
 
 // ── Type name & slot names ─────────────────────────────────────────────────
 
 pub const OBJ_TYPENAME: &str = "LINK";
 
-pub const ATTR_TYPE:     &str = "TYPE";
-pub const ATTR_PARAM:    &str = "PARAM";
-pub const ATTR_OBJECT1:  &str = "OBJECT1";
-pub const ATTR_OBJECT2:  &str = "OBJECT2";
+pub const ATTR_TYPE: &str = "TYPE";
+pub const ATTR_PARAM: &str = "PARAM";
+pub const ATTR_OBJECT1: &str = "OBJECT1";
+pub const ATTR_OBJECT2: &str = "OBJECT2";
 pub const ATTR_DATEFROM: &str = "DATEFROM";
-pub const ATTR_DATETO:   &str = "DATETO";
+pub const ATTR_DATETO: &str = "DATETO";
 
 // ── LinkType enum ──────────────────────────────────────────────────────────
 
@@ -32,28 +32,28 @@ impl LinkType {
     pub fn as_str(&self) -> &'static str {
         match self {
             LinkType::Undefined => "undefined",
-            LinkType::Born      => "born",
-            LinkType::Family    => "family",
-            LinkType::Study     => "study",
-            LinkType::Work      => "work",
-            LinkType::Contact   => "contact",
-            LinkType::Document  => "document",
-            LinkType::Address   => "address",
-            LinkType::Unit      => "unit",
+            LinkType::Born => "born",
+            LinkType::Family => "family",
+            LinkType::Study => "study",
+            LinkType::Work => "work",
+            LinkType::Contact => "contact",
+            LinkType::Document => "document",
+            LinkType::Address => "address",
+            LinkType::Unit => "unit",
         }
     }
 
     pub fn from_str(s: &str) -> LinkType {
         match s.to_lowercase().as_str() {
-            "born"     => LinkType::Born,
-            "family"   => LinkType::Family,
-            "study"    => LinkType::Study,
-            "work"     => LinkType::Work,
-            "contact"  => LinkType::Contact,
+            "born" => LinkType::Born,
+            "family" => LinkType::Family,
+            "study" => LinkType::Study,
+            "work" => LinkType::Work,
+            "contact" => LinkType::Contact,
             "document" => LinkType::Document,
-            "address"  => LinkType::Address,
-            "unit"     => LinkType::Unit,
-            _          => LinkType::Undefined,
+            "address" => LinkType::Address,
+            "unit" => LinkType::Unit,
+            _ => LinkType::Undefined,
         }
     }
 }
@@ -87,7 +87,9 @@ pub fn set_param(r: &mut Referent, param: &str) {
 }
 
 pub fn get_object1(r: &Referent) -> Option<Rc<RefCell<Referent>>> {
-    r.slots.iter().find(|s| s.type_name == ATTR_OBJECT1)
+    r.slots
+        .iter()
+        .find(|s| s.type_name == ATTR_OBJECT1)
         .and_then(|s| s.value.as_ref())
         .and_then(|v| v.as_referent())
 }
@@ -97,7 +99,9 @@ pub fn set_object1(r: &mut Referent, obj: Rc<RefCell<Referent>>) {
 }
 
 pub fn get_object2(r: &Referent) -> Option<Rc<RefCell<Referent>>> {
-    r.slots.iter().find(|s| s.type_name == ATTR_OBJECT2)
+    r.slots
+        .iter()
+        .find(|s| s.type_name == ATTR_OBJECT2)
         .and_then(|s| s.value.as_ref())
         .and_then(|v| v.as_referent())
 }

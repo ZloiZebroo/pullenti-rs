@@ -1,11 +1,10 @@
+use crate::core::termin::{Termin, TerminCollection, TerminToken};
+use crate::source_of_analysis::SourceOfAnalysis;
+use crate::token::{Token, TokenKind, TokenRef};
 /// ConjunctionToken + ConjunctionHelper
 ///
 /// Mirrors `ConjunctionToken.cs` / `ConjunctionHelper.cs`.
-
 use std::sync::{Arc, OnceLock};
-use crate::token::{Token, TokenRef, TokenKind};
-use crate::core::termin::{Termin, TerminCollection, TerminToken};
-use crate::source_of_analysis::SourceOfAnalysis;
 
 // ── ConjunctionType ────────────────────────────────────────────────────────
 
@@ -13,18 +12,18 @@ use crate::source_of_analysis::SourceOfAnalysis;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ConjunctionType {
     Undefined = 0,
-    Comma     = 1,
-    And       = 2,
-    Or        = 3,
-    Not       = 4,
-    But       = 5,
-    If        = 6,
-    Then      = 7,
-    Else      = 8,
-    When      = 9,
-    Because   = 10,
-    Include   = 11,
-    Except    = 12,
+    Comma = 1,
+    And = 2,
+    Or = 3,
+    Not = 4,
+    But = 5,
+    If = 6,
+    Then = 7,
+    Else = 8,
+    When = 9,
+    Because = 10,
+    Include = 11,
+    Except = 12,
 }
 
 // ── ConjunctionToken ───────────────────────────────────────────────────────
@@ -32,20 +31,20 @@ pub enum ConjunctionType {
 #[derive(Clone)]
 pub struct ConjunctionToken {
     pub begin_token: TokenRef,
-    pub end_token:   TokenRef,
-    pub normal:      String,
-    pub typ:         ConjunctionType,
-    pub is_simple:   bool,
+    pub end_token: TokenRef,
+    pub normal: String,
+    pub typ: ConjunctionType,
+    pub is_simple: bool,
 }
 
 impl ConjunctionToken {
     pub fn new(begin: TokenRef, end: TokenRef) -> Self {
         ConjunctionToken {
             begin_token: begin,
-            end_token:   end,
-            normal:      String::new(),
-            typ:         ConjunctionType::Undefined,
-            is_simple:   false,
+            end_token: end,
+            normal: String::new(),
+            typ: ConjunctionType::Undefined,
+            is_simple: false,
         }
     }
 }
@@ -89,7 +88,7 @@ fn ontology() -> &'static TerminCollection {
 
         // ConjunctionType::Except = 12, tag2 = true (signals verb-ending check)
         let mut te = Termin::new("ИНАЧЕ КАК");
-        te.tag  = Some(tag_i32(ConjunctionType::Except as i32));
+        te.tag = Some(tag_i32(ConjunctionType::Except as i32));
         te.tag2 = Some(tag_i32(1i32)); // signals verb-ending check
         te.add_variant("ИНАЧЕ, КАК");
         te.add_variant("ЗА ИСКЛЮЧЕНИЕМ");
@@ -101,7 +100,7 @@ fn ontology() -> &'static TerminCollection {
 
         // ConjunctionType::Include = 11, tag2 = true
         let mut te = Termin::new("ВКЛЮЧАЯ");
-        te.tag  = Some(tag_i32(ConjunctionType::Include as i32));
+        te.tag = Some(tag_i32(ConjunctionType::Include as i32));
         te.tag2 = Some(tag_i32(1i32));
         te.add_variant("В ТОМ ЧИСЛЕ");
         tc.add(te);
@@ -111,23 +110,25 @@ fn ontology() -> &'static TerminCollection {
 }
 
 fn typ_from_tag(tok: &TerminToken) -> ConjunctionType {
-    tok.termin.tag.as_ref()
+    tok.termin
+        .tag
+        .as_ref()
         .and_then(|a| a.downcast_ref::<i32>())
         .copied()
         .map(|v| match v {
-            1  => ConjunctionType::Comma,
-            2  => ConjunctionType::And,
-            3  => ConjunctionType::Or,
-            4  => ConjunctionType::Not,
-            5  => ConjunctionType::But,
-            6  => ConjunctionType::If,
-            7  => ConjunctionType::Then,
-            8  => ConjunctionType::Else,
-            9  => ConjunctionType::When,
+            1 => ConjunctionType::Comma,
+            2 => ConjunctionType::And,
+            3 => ConjunctionType::Or,
+            4 => ConjunctionType::Not,
+            5 => ConjunctionType::But,
+            6 => ConjunctionType::If,
+            7 => ConjunctionType::Then,
+            8 => ConjunctionType::Else,
+            9 => ConjunctionType::When,
             10 => ConjunctionType::Because,
             11 => ConjunctionType::Include,
             12 => ConjunctionType::Except,
-            _  => ConjunctionType::Undefined,
+            _ => ConjunctionType::Undefined,
         })
         .unwrap_or(ConjunctionType::Undefined)
 }
@@ -136,7 +137,9 @@ fn typ_from_tag(tok: &TerminToken) -> ConjunctionType {
 
 pub fn try_parse(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<ConjunctionToken> {
     let tb = t.borrow();
-    let TokenKind::Text(ref txt) = tb.kind else { return None; };
+    let TokenKind::Text(ref txt) = tb.kind else {
+        return None;
+    };
     let term = txt.term.clone();
     drop(tb);
 
@@ -155,12 +158,16 @@ pub fn try_parse(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<ConjunctionTok
         // tag2 check: if tag2 is set, the end token must end with "АЯ" (verb form)
         if tok.termin.tag2.is_some() {
             let end_tb = tok.end_token.borrow();
-            let TokenKind::Text(ref et) = end_tb.kind else { return None; };
+            let TokenKind::Text(ref et) = end_tb.kind else {
+                return None;
+            };
             if et.term.ends_with("АЯ") {
                 // OK
             } else if end_tb.get_morph_class_in_dictionary().is_verb() {
                 // Verb: only accept if ends with АЯ
-                if !et.term.ends_with("АЯ") { return None; }
+                if !et.term.ends_with("АЯ") {
+                    return None;
+                }
             }
             drop(end_tb);
         }
@@ -173,14 +180,20 @@ pub fn try_parse(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<ConjunctionTok
 
     // Check morph dictionary
     let mc = t.borrow().get_morph_class_in_dictionary();
-    if !mc.is_conjunction() { return None; }
+    if !mc.is_conjunction() {
+        return None;
+    }
 
     if t.borrow().is_and(sofa) || t.borrow().is_or(sofa) {
         let is_or = t.borrow().is_or(sofa);
         let mut c = ConjunctionToken::new(t.clone(), t.clone());
         c.normal = term.clone();
         c.is_simple = true;
-        c.typ = if is_or { ConjunctionType::Or } else { ConjunctionType::And };
+        c.typ = if is_or {
+            ConjunctionType::Or
+        } else {
+            ConjunctionType::And
+        };
 
         // Check for "(или)", "/ или" variant extensions
         let next_opt = t.borrow().next.clone();

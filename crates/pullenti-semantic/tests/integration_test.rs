@@ -2,7 +2,7 @@
 
 use pullenti_morph::{MorphologyService, MorphLang};
 use pullenti_ner::{Sdk, ProcessorService, SourceOfAnalysis};
-use pullenti_semantic::{initialize, process, SemProcessParams, SemObjectType, SemLinkType, SemFraglinkType};
+use pullenti_semantic::{initialize, process, SemObjectType, SemLinkType, SemFraglinkType};
 
 fn init() {
     MorphologyService::initialize(Some(MorphLang::RU | MorphLang::EN));
@@ -918,7 +918,7 @@ fn test_try_create_links_verb_acc_pacient() {
     // "строить дом" → СТРОИТЬ governs ДОМ as Pacient (accusative)
     use pullenti_morph::MorphologyService;
     use pullenti_ner::{SourceOfAnalysis, token::build_token_chain};
-    use pullenti_ner::core::noun_phrase::{NounPhraseParseAttr, try_parse as npt_try_parse};
+    use pullenti_ner::core::noun_phrase::try_parse as npt_try_parse;
     use pullenti_ner::core::verb_phrase::try_parse as vpt_try_parse;
     use pullenti_semantic::internal::sent_item::{SentItem, NPT_ATTRS};
     use pullenti_semantic::core::try_create_links;

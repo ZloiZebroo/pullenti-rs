@@ -1,8 +1,7 @@
-/// Weapon item token — ports WeaponItemToken.cs (simplified).
-
-use crate::token::{TokenRef, TokenKind, NumberSpellingType};
+use super::weapon_table::{get_model_inner, get_ontology, get_typ, is_noun_doubt, WeaponItemTyp};
 use crate::source_of_analysis::SourceOfAnalysis;
-use super::weapon_table::{WeaponItemTyp, get_ontology, get_typ, is_noun_doubt, get_model_inner};
+/// Weapon item token — ports WeaponItemToken.cs (simplified).
+use crate::token::{NumberSpellingType, TokenKind, TokenRef};
 
 // ── WeaponItemToken ───────────────────────────────────────────────────────────
 
@@ -20,8 +19,13 @@ pub struct WeaponItemToken {
 impl WeaponItemToken {
     fn new(begin: TokenRef, end: TokenRef, typ: WeaponItemTyp, value: String) -> Self {
         WeaponItemToken {
-            begin, end, typ, value,
-            alt_value: None, is_doubt: false, is_internal: false,
+            begin,
+            end,
+            typ,
+            value,
+            alt_value: None,
+            is_doubt: false,
+            is_internal: false,
             inner_tokens: vec![],
         }
     }
@@ -72,7 +76,9 @@ pub fn try_parse_list(t_start: &TokenRef, sofa: &SourceOfAnalysis) -> Option<Vec
     let mut prev_end = tr0_end;
 
     loop {
-        if res.len() >= max_count { break; }
+        if res.len() >= max_count {
+            break;
+        }
         let t = match cur.clone() {
             None => break,
             Some(t) => t,
@@ -86,7 +92,10 @@ pub fn try_parse_list(t_start: &TokenRef, sofa: &SourceOfAnalysis) -> Option<Vec
 
         // Hyphen: skip for noun/brand/model contexts
         if t.borrow().is_hiphen(sofa) {
-            if prev_typ == WeaponItemTyp::Noun || prev_typ == WeaponItemTyp::Brand || prev_typ == WeaponItemTyp::Model {
+            if prev_typ == WeaponItemTyp::Noun
+                || prev_typ == WeaponItemTyp::Brand
+                || prev_typ == WeaponItemTyp::Model
+            {
                 cur = t.borrow().next.clone();
                 continue;
             }
@@ -95,8 +104,10 @@ pub fn try_parse_list(t_start: &TokenRef, sofa: &SourceOfAnalysis) -> Option<Vec
 
         // Comma: only if looking for Number after brand/model/class
         if t.borrow().is_char(',', sofa) {
-            if prev_typ == WeaponItemTyp::Name || prev_typ == WeaponItemTyp::Brand
-                || prev_typ == WeaponItemTyp::Model || prev_typ == WeaponItemTyp::Class
+            if prev_typ == WeaponItemTyp::Name
+                || prev_typ == WeaponItemTyp::Brand
+                || prev_typ == WeaponItemTyp::Model
+                || prev_typ == WeaponItemTyp::Class
                 || prev_typ == WeaponItemTyp::Date
             {
                 // Try to parse a Number after the comma
@@ -175,7 +186,11 @@ pub fn try_parse_list(t_start: &TokenRef, sofa: &SourceOfAnalysis) -> Option<Vec
 
 // ── _try_parse (internal) ─────────────────────────────────────────────────────
 
-fn _try_parse(t: &TokenRef, prev_typ: Option<WeaponItemTyp>, sofa: &SourceOfAnalysis) -> Option<WeaponItemToken> {
+fn _try_parse(
+    t: &TokenRef,
+    prev_typ: Option<WeaponItemTyp>,
+    sofa: &SourceOfAnalysis,
+) -> Option<WeaponItemToken> {
     // ── 1. Ontology lookup ─────────────────────────────────────────────────
     let tok_opt = get_ontology().try_parse(t);
 
@@ -186,14 +201,24 @@ fn _try_parse(t: &TokenRef, prev_typ: Option<WeaponItemTyp>, sofa: &SourceOfAnal
         match typ {
             WeaponItemTyp::Noun => {
                 let is_doubt = is_noun_doubt(&tok.termin);
-                let mut res = WeaponItemToken::new(t.clone(), tok.end_token.clone(), WeaponItemTyp::Noun, canon.clone());
+                let mut res = WeaponItemToken::new(
+                    t.clone(),
+                    tok.end_token.clone(),
+                    WeaponItemTyp::Noun,
+                    canon.clone(),
+                );
                 res.is_doubt = is_doubt;
                 // Look ahead for trailing brands/adjectives
                 let mut end_cur = tok.end_token.clone();
                 loop {
                     let next = end_cur.borrow().next.clone();
-                    let next = match next { None => break, Some(n) => n };
-                    if next.borrow().whitespaces_before_count(sofa) > 2 { break; }
+                    let next = match next {
+                        None => break,
+                        Some(n) => n,
+                    };
+                    if next.borrow().whitespaces_before_count(sofa) > 2 {
+                        break;
+                    }
                     // Check for brand
                     if let Some(inner_tok) = _try_parse(&next, None, sofa) {
                         if inner_tok.typ == WeaponItemTyp::Brand {
@@ -207,7 +232,11 @@ fn _try_parse(t: &TokenRef, prev_typ: Option<WeaponItemTyp>, sofa: &SourceOfAnal
                     }
                     // Check for adjective modifying the noun
                     if matches!(&next.borrow().kind, TokenKind::Text(_)) {
-                        let is_adj = next.borrow().morph.items().iter()
+                        let is_adj = next
+                            .borrow()
+                            .morph
+                            .items()
+                            .iter()
                             .any(|wf| wf.base.class.is_adjective());
                         if is_adj {
                             let term_str = next.borrow().term().unwrap_or("").to_string();
@@ -217,7 +246,8 @@ fn _try_parse(t: &TokenRef, prev_typ: Option<WeaponItemTyp>, sofa: &SourceOfAnal
                             if let Some(ref alt) = res.alt_value.clone() {
                                 if alt.ends_with(&canon) {
                                     let prefix = &alt[..alt.len() - canon.len()];
-                                    res.alt_value = Some(format!("{}{} {}", prefix, term_str, canon));
+                                    res.alt_value =
+                                        Some(format!("{}{} {}", prefix, term_str, canon));
                                 } else {
                                     res.alt_value = Some(format!("{} {}", term_str, canon));
                                 }
@@ -238,7 +268,12 @@ fn _try_parse(t: &TokenRef, prev_typ: Option<WeaponItemTyp>, sofa: &SourceOfAnal
             }
 
             WeaponItemTyp::Model => {
-                let mut res = WeaponItemToken::new(t.clone(), tok.end_token.clone(), WeaponItemTyp::Model, canon);
+                let mut res = WeaponItemToken::new(
+                    t.clone(),
+                    tok.end_token.clone(),
+                    WeaponItemTyp::Model,
+                    canon,
+                );
                 // Load inner tokens from tag2
                 if let Some(inner) = get_model_inner(&tok.termin) {
                     let is_internal = {
@@ -248,8 +283,10 @@ fn _try_parse(t: &TokenRef, prev_typ: Option<WeaponItemTyp>, sofa: &SourceOfAnal
                     };
                     for (itype, ivalue, ialt) in &inner.items {
                         let mut it = WeaponItemToken::new(
-                            t.clone(), tok.end_token.clone(),
-                            *itype, ivalue.to_string()
+                            t.clone(),
+                            tok.end_token.clone(),
+                            *itype,
+                            ivalue.to_string(),
                         );
                         it.is_internal = is_internal;
                         it.alt_value = ialt.map(|s| s.to_string());
@@ -276,8 +313,7 @@ fn _try_parse(t: &TokenRef, prev_typ: Option<WeaponItemTyp>, sofa: &SourceOfAnal
 
             // Pattern: LETTER-hyphen-NUMBER or LETTER-dot-NUMBER
             if let Some(ref sep) = next {
-                let is_hyp_or_dot = sep.borrow().is_hiphen(sofa)
-                    || sep.borrow().is_char('.', sofa);
+                let is_hyp_or_dot = sep.borrow().is_hiphen(sofa) || sep.borrow().is_char('.', sofa);
                 let no_space_after = sep.borrow().whitespaces_before_count(sofa) < 2;
 
                 if is_hyp_or_dot && no_space_after {
@@ -285,8 +321,10 @@ fn _try_parse(t: &TokenRef, prev_typ: Option<WeaponItemTyp>, sofa: &SourceOfAnal
                     if let Some(ref num) = after_sep {
                         if matches!(&num.borrow().kind, TokenKind::Number(_)) {
                             let mut res = WeaponItemToken::new(
-                                t.clone(), sep.clone(),
-                                WeaponItemTyp::Model, term_str
+                                t.clone(),
+                                sep.clone(),
+                                WeaponItemTyp::Model,
+                                term_str,
                             );
                             res.is_doubt = true;
                             correct_model(&mut res, sofa);
@@ -300,10 +338,8 @@ fn _try_parse(t: &TokenRef, prev_typ: Option<WeaponItemTyp>, sofa: &SourceOfAnal
             if let Some(ref num) = next {
                 let no_space = !t.borrow().is_whitespace_after(sofa);
                 if no_space && matches!(&num.borrow().kind, TokenKind::Number(_)) {
-                    let mut res = WeaponItemToken::new(
-                        t.clone(), t.clone(),
-                        WeaponItemTyp::Model, term_str
-                    );
+                    let mut res =
+                        WeaponItemToken::new(t.clone(), t.clone(), WeaponItemTyp::Model, term_str);
                     res.is_doubt = true;
                     correct_model(&mut res, sofa);
                     return Some(res);
@@ -314,7 +350,10 @@ fn _try_parse(t: &TokenRef, prev_typ: Option<WeaponItemTyp>, sofa: &SourceOfAnal
 
     // ── 3. Contextual Name/Brand detection (when prev is Noun/Brand/Model) ──
     if let Some(prev) = prev_typ {
-        if prev == WeaponItemTyp::Noun || prev == WeaponItemTyp::Brand || prev == WeaponItemTyp::Model {
+        if prev == WeaponItemTyp::Noun
+            || prev == WeaponItemTyp::Brand
+            || prev == WeaponItemTyp::Model
+        {
             if matches!(&t.borrow().kind, TokenKind::Text(_)) {
                 let is_letter = t.borrow().chars.is_letter();
                 let is_not_all_lower = !t.borrow().chars.is_all_lower();
@@ -333,7 +372,8 @@ fn _try_parse(t: &TokenRef, prev_typ: Option<WeaponItemTyp>, sofa: &SourceOfAnal
                             let after_hyp = n.borrow().next.clone();
                             if let Some(ref at) = after_hyp {
                                 if matches!(&at.borrow().kind, TokenKind::Text(_)) {
-                                    let at_chars_eq = at.borrow().chars.is_all_upper() == t.borrow().chars.is_all_upper();
+                                    let at_chars_eq = at.borrow().chars.is_all_upper()
+                                        == t.borrow().chars.is_all_upper();
                                     if at_chars_eq {
                                         let at_term = at.borrow().term().unwrap_or("").to_string();
                                         value = format!("{}-{}", value, at_term);
@@ -384,9 +424,14 @@ fn _try_parse(t: &TokenRef, prev_typ: Option<WeaponItemTyp>, sofa: &SourceOfAnal
 /// Extend the model token to include a trailing number (e.g., АК → АК-47).
 fn correct_model(res: &mut WeaponItemToken, sofa: &SourceOfAnalysis) {
     let tt = res.end.borrow().next.clone();
-    let tt = match tt { None => return, Some(x) => x };
+    let tt = match tt {
+        None => return,
+        Some(x) => x,
+    };
 
-    if tt.borrow().whitespaces_before_count(sofa) > 2 { return; }
+    if tt.borrow().whitespaces_before_count(sofa) > 2 {
+        return;
+    }
 
     // Skip separator (hyphen, slash, backslash, dot)
     let (skip_sep, num_start) = {
@@ -401,9 +446,14 @@ fn correct_model(res: &mut WeaponItemToken, sofa: &SourceOfAnalysis) {
         }
     };
 
-    let num_tok = match num_start { None => return, Some(x) => x };
+    let num_tok = match num_start {
+        None => return,
+        Some(x) => x,
+    };
 
-    if !matches!(&num_tok.borrow().kind, TokenKind::Number(_)) { return; }
+    if !matches!(&num_tok.borrow().kind, TokenKind::Number(_)) {
+        return;
+    }
 
     // Get the number value
     let num_val = if let TokenKind::Number(nd) = &num_tok.borrow().kind {
@@ -423,7 +473,10 @@ fn correct_model(res: &mut WeaponItemToken, sofa: &SourceOfAnalysis) {
     let mut cur = num_tok;
     loop {
         let next = cur.borrow().next.clone();
-        let next = match next { None => break, Some(n) => n };
+        let next = match next {
+            None => break,
+            Some(n) => n,
+        };
         let no_space = !cur.borrow().is_whitespace_after(sofa);
         let is_single_letter = matches!(&next.borrow().kind, TokenKind::Text(_))
             && next.borrow().length_char() == 1
@@ -446,13 +499,18 @@ fn correct_model(res: &mut WeaponItemToken, sofa: &SourceOfAnalysis) {
     if let Some(ref en) = end_next {
         let no_space = !res.end.borrow().is_whitespace_after(sofa);
         let en_no_space = en.borrow().whitespaces_before_count(sofa) == 0;
-        if no_space && en_no_space && (en.borrow().is_hiphen(sofa) || en.borrow().is_char('/', sofa)) {
+        if no_space
+            && en_no_space
+            && (en.borrow().is_hiphen(sofa) || en.borrow().is_char('/', sofa))
+        {
             let after = en.borrow().next.clone();
             if let Some(ref num2) = after {
                 if matches!(&num2.borrow().kind, TokenKind::Number(_)) {
                     let num2_val = if let TokenKind::Number(nd) = &num2.borrow().kind {
                         nd.value.clone()
-                    } else { return; };
+                    } else {
+                        return;
+                    };
                     res.value = format!("{}-{}", res.value, num2_val);
                     if let Some(ref alt) = res.alt_value.clone() {
                         res.alt_value = Some(format!("{}-{}", alt, num2_val));

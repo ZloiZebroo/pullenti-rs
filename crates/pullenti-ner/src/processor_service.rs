@@ -1,7 +1,7 @@
-use std::sync::{Arc, Mutex, OnceLock};
-use pullenti_morph::{MorphologyService, MorphLang};
 use crate::analyzer::Analyzer;
 use crate::processor::Processor;
+use pullenti_morph::{MorphLang, MorphologyService};
+use std::sync::{Arc, Mutex, OnceLock};
 
 static ANALYZERS: OnceLock<Mutex<Vec<Arc<dyn Analyzer>>>> = OnceLock::new();
 

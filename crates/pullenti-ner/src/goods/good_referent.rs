@@ -1,6 +1,5 @@
 /// GoodReferent and GoodAttributeReferent — product/goods entities and their attributes.
 /// Mirrors `GoodReferent.cs`, `GoodAttributeReferent.cs`, `GoodAttrType.cs`.
-
 use crate::referent::{Referent, SlotValue};
 
 // ── GoodReferent constants ─────────────────────────────────────────────────
@@ -59,25 +58,25 @@ pub enum GoodAttrType {
 impl GoodAttrType {
     pub fn as_str(self) -> &'static str {
         match self {
-            GoodAttrType::Undefined  => "UNDEFINED",
-            GoodAttrType::Keyword    => "KEYWORD",
-            GoodAttrType::Character  => "CHARACTER",
-            GoodAttrType::Proper     => "PROPER",
-            GoodAttrType::Model      => "MODEL",
-            GoodAttrType::Numeric    => "NUMERIC",
-            GoodAttrType::Referent   => "REFERENT",
+            GoodAttrType::Undefined => "UNDEFINED",
+            GoodAttrType::Keyword => "KEYWORD",
+            GoodAttrType::Character => "CHARACTER",
+            GoodAttrType::Proper => "PROPER",
+            GoodAttrType::Model => "MODEL",
+            GoodAttrType::Numeric => "NUMERIC",
+            GoodAttrType::Referent => "REFERENT",
         }
     }
 
     pub fn from_str(s: &str) -> Self {
         match s.to_uppercase().as_str() {
-            "KEYWORD"   => GoodAttrType::Keyword,
+            "KEYWORD" => GoodAttrType::Keyword,
             "CHARACTER" => GoodAttrType::Character,
-            "PROPER"    => GoodAttrType::Proper,
-            "MODEL"     => GoodAttrType::Model,
-            "NUMERIC"   => GoodAttrType::Numeric,
-            "REFERENT"  => GoodAttrType::Referent,
-            _           => GoodAttrType::Undefined,
+            "PROPER" => GoodAttrType::Proper,
+            "MODEL" => GoodAttrType::Model,
+            "NUMERIC" => GoodAttrType::Numeric,
+            "REFERENT" => GoodAttrType::Referent,
+            _ => GoodAttrType::Undefined,
         }
     }
 }
@@ -150,11 +149,20 @@ pub fn goodattr_to_string(r: &Referent) -> String {
     if let Some(ref_slot) = r.find_slot(ATTR_REF, None) {
         if let Some(sv) = &ref_slot.value {
             if let Some(ref_r) = sv.as_referent() {
-                let ref_str = ref_r.borrow().get_string_value("NAME")
+                let ref_str = ref_r
+                    .borrow()
+                    .get_string_value("NAME")
                     .map(|s| s.to_string())
-                    .or_else(|| ref_r.borrow().get_string_value("VALUE").map(|s| s.to_string()))
+                    .or_else(|| {
+                        ref_r
+                            .borrow()
+                            .get_string_value("VALUE")
+                            .map(|s| s.to_string())
+                    })
                     .unwrap_or_else(|| ref_r.borrow().type_name.clone());
-                if !res.is_empty() { res.push(' '); }
+                if !res.is_empty() {
+                    res.push(' ');
+                }
                 res.push_str(&ref_str);
             }
         }
@@ -166,11 +174,15 @@ pub fn goodattr_to_string(r: &Referent) -> String {
 pub fn good_to_string(r: &Referent) -> String {
     let mut parts: Vec<String> = Vec::new();
     for slot in &r.slots {
-        if slot.type_name != ATTR_ATTR { continue; }
+        if slot.type_name != ATTR_ATTR {
+            continue;
+        }
         if let Some(sv) = &slot.value {
             if let Some(ref_r) = sv.as_referent() {
                 let s = goodattr_to_string(&ref_r.borrow());
-                if !s.is_empty() { parts.push(s); }
+                if !s.is_empty() {
+                    parts.push(s);
+                }
             }
         }
     }

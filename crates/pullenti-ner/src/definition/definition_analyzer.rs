@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 /// DefinitionAnalyzer — simplified port of DefinitionAnalyzer.cs.
 ///
 /// Recognizes "X is/are/—/: Y" patterns (thesis/definition/assertion) in Russian text.
@@ -11,31 +12,40 @@
 ///       → THESIS(TERMIN="X", VALUE="Y", KIND=Assertation)
 ///
 /// is_specific() returns true — must be explicitly added to the processor.
-
 use std::rc::Rc;
-use std::cell::RefCell;
 
-use crate::analyzer::Analyzer;
 use crate::analysis_kit::AnalysisKit;
-use crate::referent::Referent;
-use crate::token::{Token, TokenRef, TokenKind};
-use crate::source_of_analysis::SourceOfAnalysis;
+use crate::analyzer::Analyzer;
+use crate::core::bracket_helper;
 use crate::core::misc_helper::can_be_start_of_sentence;
 use crate::core::noun_phrase::{try_parse as npt_try_parse, NounPhraseParseAttr};
 use crate::definition::definition_referent as dr;
 use crate::definition::definition_referent::DefinitionKind;
+use crate::referent::Referent;
+use crate::source_of_analysis::SourceOfAnalysis;
+use crate::token::{Token, TokenKind, TokenRef};
 
 pub struct DefinitionAnalyzer;
 
 impl DefinitionAnalyzer {
-    pub fn new() -> Self { DefinitionAnalyzer }
+    pub fn new() -> Self {
+        DefinitionAnalyzer
+    }
 }
 
 impl Analyzer for DefinitionAnalyzer {
-    fn name(&self)    -> &'static str { "THESIS" }
-    fn caption(&self) -> &'static str { "Тезисы" }
-    fn is_specific(&self) -> bool { true }
-    fn progress_weight(&self) -> i32 { 1 }
+    fn name(&self) -> &'static str {
+        "THESIS"
+    }
+    fn caption(&self) -> &'static str {
+        "Тезисы"
+    }
+    fn is_specific(&self) -> bool {
+        true
+    }
+    fn progress_weight(&self) -> i32 {
+        1
+    }
 
     fn process(&self, kit: &mut AnalysisKit) {
         let sofa = kit.sofa.clone();
@@ -45,29 +55,31 @@ impl Analyzer for DefinitionAnalyzer {
                 cur = t.borrow().next.clone();
                 continue;
             }
-            let ok = can_be_start_of_sentence(&t, &sofa)
-                || {
-                    let is_newline = t.borrow().is_newline_before(&sofa);
-                    is_newline && {
-                        let prev_is_semi_colon = t.borrow().prev.as_ref()
-                            .and_then(|w| w.upgrade())
-                            .map(|p| p.borrow().is_char_of(";:", &sofa))
-                            .unwrap_or(false);
-                        prev_is_semi_colon
-                    }
-                };
+            let ok = can_be_start_of_sentence(&t, &sofa) || {
+                let is_newline = t.borrow().is_newline_before(&sofa);
+                is_newline && {
+                    let prev_is_semi_colon = t
+                        .borrow()
+                        .prev
+                        .as_ref()
+                        .and_then(|w| w.upgrade())
+                        .map(|p| p.borrow().is_char_of(";:", &sofa))
+                        .unwrap_or(false);
+                    prev_is_semi_colon
+                }
+            };
             if !ok {
                 cur = t.borrow().next.clone();
                 continue;
             }
             match try_attach(&t, &sofa) {
-                None => { cur = t.borrow().next.clone(); }
+                None => {
+                    cur = t.borrow().next.clone();
+                }
                 Some((referent, begin, end)) => {
                     let r_rc = Rc::new(RefCell::new(referent));
                     let r_rc = kit.add_entity(r_rc);
-                    let tok = Rc::new(RefCell::new(
-                        Token::new_referent(begin, end.clone(), r_rc)
-                    ));
+                    let tok = Rc::new(RefCell::new(Token::new_referent(begin, end.clone(), r_rc)));
                     kit.embed_token(tok.clone());
                     cur = tok.borrow().next.clone();
                 }
@@ -106,7 +118,7 @@ fn try_attach(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Referent, TokenR
     let (l0, l1, coef_hint) = collect_left_side(&t_start, sofa)?;
 
     // Step 4: after left side, current token should be copula / dash
-    let connector = l1.borrow().next.clone()?;
+    let connector = next_after_left_side(&l1, sofa)?;
 
     // Step 5: detect connector and find right-side start
     let (kind, r0) = detect_connector(&connector, coef_hint, sofa)?;
@@ -160,8 +172,8 @@ fn ignore_list_prefix(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<TokenRef>
             let tb = cur.borrow();
             let kt = match &tb.kind {
                 TokenKind::Number(_) => 0u8,
-                TokenKind::Text(_)   => 1u8,
-                _                    => 2u8,
+                TokenKind::Text(_) => 1u8,
+                _ => 2u8,
             };
             let il = tb.chars.is_letter();
             let ln = tb.length_char();
@@ -172,7 +184,10 @@ fn ignore_list_prefix(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<TokenRef>
         match kind_tag {
             0 => {
                 // Number token — could be list prefix "1", "2"
-                let next = match next_opt { Some(n) => n, None => return Some(cur) };
+                let next = match next_opt {
+                    Some(n) => n,
+                    None => return Some(cur),
+                };
                 if next.borrow().is_char_of(".)", sofa) {
                     let after = next.borrow().next.clone()?;
                     cur = after;
@@ -199,7 +214,13 @@ fn ignore_list_prefix(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<TokenRef>
                         if let Some(inner) = next_opt {
                             let next2 = inner.borrow().next.clone();
                             if let Some(close) = next2 {
-                                if close.borrow().is_char(')', sofa) {
+                                let inner_is_list_mark = {
+                                    let ib = inner.borrow();
+                                    ib.length_char() == 1
+                                        && (matches!(ib.kind, TokenKind::Number(_))
+                                            || ib.chars.is_letter())
+                                };
+                                if inner_is_list_mark && close.borrow().is_char(')', sofa) {
                                     if let Some(after) = close.borrow().next.clone() {
                                         cur = after;
                                         continue;
@@ -209,10 +230,16 @@ fn ignore_list_prefix(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<TokenRef>
                         }
                         return Some(cur);
                     }
+                    if bracket_helper::get_open_bracket_kind(&cur, sofa).is_some() {
+                        return Some(cur);
+                    }
                     // Skip misc punctuation
                     match next_opt {
-                        Some(nx) => { cur = nx; continue; }
-                        None     => return Some(cur),
+                        Some(nx) => {
+                            cur = nx;
+                            continue;
+                        }
+                        None => return Some(cur),
                     }
                 }
             }
@@ -256,13 +283,13 @@ fn collect_left_side(
         }
 
         // Collect attributes before borrowing
-        let (is_letter, is_hiphen, is_colon, is_char_open, is_comma, next_opt) = {
+        let (is_letter, is_hiphen, is_colon, is_bracket_open, is_comma, next_opt) = {
             let tb = cur.borrow();
             (
                 tb.chars.is_letter(),
                 tb.is_hiphen(sofa),
                 tb.is_char(':', sofa),
-                tb.is_char('(', sofa),
+                bracket_helper::get_open_bracket_kind(&cur, sofa).is_some(),
                 tb.is_comma(sofa),
                 tb.next.clone(),
             )
@@ -272,26 +299,32 @@ fn collect_left_side(
             if is_hiphen || is_colon {
                 break;
             }
-            if is_char_open {
+            if is_bracket_open {
                 if l1.is_some() {
                     // Skip bracket group after l1
-                    let after_paren = skip_bracket_group(&cur, sofa);
+                    let after_paren = bracket_helper::skip_bracket_group(&cur, sofa);
                     match after_paren {
-                        Some(after) => { cur = after; continue; }
-                        None        => break,
+                        Some(after) => {
+                            cur = after;
+                            continue;
+                        }
+                        None => break,
                     }
                 } else if l0.is_none() {
                     // No l0 yet — try quoted term
-                    if let Some(inner_start) = next_opt {
+                    if let Some((inner_start, inner_end)) = bracket_helper::inner_bounds(&cur, sofa) {
                         let npt = npt_try_parse(&inner_start, NounPhraseParseAttr::No, 0, sofa);
                         if npt.is_some() {
-                            let close = find_matching_close_paren(&inner_start, sofa);
                             l0 = Some(inner_start.clone());
-                            l1 = Some(close.clone());
+                            l1 = Some(inner_end);
+                            let close = bracket_helper::find_matching_bracket(&cur, sofa)?;
                             let after = close.borrow().next.clone();
                             match after {
-                                Some(a) => { cur = a; continue; }
-                                None    => break,
+                                Some(a) => {
+                                    cur = a;
+                                    continue;
+                                }
+                                None => break,
                             }
                         }
                     }
@@ -303,8 +336,11 @@ fn collect_left_side(
             // Comma — try to skip to continue left side
             if is_comma && l0.is_some() {
                 match next_opt {
-                    Some(nx) => { cur = nx; continue; }
-                    None     => break,
+                    Some(nx) => {
+                        cur = nx;
+                        continue;
+                    }
+                    None => break,
                 }
             }
             // Other non-letter
@@ -312,8 +348,11 @@ fn collect_left_side(
                 break;
             }
             match next_opt {
-                Some(nx) => { cur = nx; continue; }
-                None     => break,
+                Some(nx) => {
+                    cur = nx;
+                    continue;
+                }
+                None => break,
             }
         }
 
@@ -334,10 +373,15 @@ fn collect_left_side(
         };
 
         if mc_is_pronoun && !cur.borrow().is_value("ИНОЙ", None) {
-            if l0.is_some() { break; }
+            if l0.is_some() {
+                break;
+            }
             match next_opt {
-                Some(nx) => { cur = nx; continue; }
-                None     => break,
+                Some(nx) => {
+                    cur = nx;
+                    continue;
+                }
+                None => break,
             }
         }
 
@@ -345,19 +389,29 @@ fn collect_left_side(
             if is_copula_verb(&term_str) {
                 break;
             }
-            if l0.is_some() { break; }
+            if l0.is_some() {
+                break;
+            }
             let next = cur.borrow().next.clone();
             match next {
-                Some(nx) => { cur = nx; continue; }
-                None     => break,
+                Some(nx) => {
+                    cur = nx;
+                    continue;
+                }
+                None => break,
             }
         }
 
         if mc_is_conj {
-            if l0.is_some() { break; }
+            if l0.is_some() {
+                break;
+            }
             match next_opt {
-                Some(nx) => { cur = nx; continue; }
-                None     => break,
+                Some(nx) => {
+                    cur = nx;
+                    continue;
+                }
+                None => break,
             }
         }
 
@@ -375,7 +429,9 @@ fn collect_left_side(
                 break;
             }
             // Pronouns inside NP → stop
-            if npt_has_pronoun(np) { break; }
+            if npt_has_pronoun(np) {
+                break;
+            }
 
             // Forbidden first word
             if l0.is_none() && is_forbidden_first_word(&np.begin_token) {
@@ -388,32 +444,47 @@ fn collect_left_side(
             l1 = Some(np.end_token.clone());
             let end_tok_next = np.end_token.borrow().next.clone();
             match end_tok_next {
-                Some(nx) => { cur = nx; continue; }
-                None     => break,
+                Some(nx) => {
+                    cur = nx;
+                    continue;
+                }
+                None => break,
             }
         } else {
             // No NounPhrase
-            if l0.is_some() { break; }
+            if l0.is_some() {
+                break;
+            }
 
             // Check if this might be a multi-capital proper-noun term
             let (not_lower, len, is_undef) = {
                 let tb = cur.borrow();
                 let mc = tb.get_morph_class_in_dictionary();
-                (!tb.chars.is_all_lower(), tb.length_char(), mc.is_undefined())
+                (
+                    !tb.chars.is_all_lower(),
+                    tb.length_char(),
+                    mc.is_undefined(),
+                )
             };
             if not_lower && len > 2 && is_undef {
                 l0 = Some(cur.clone());
                 l1 = Some(cur.clone());
                 match next_opt {
-                    Some(nx) => { cur = nx; continue; }
-                    None     => break,
+                    Some(nx) => {
+                        cur = nx;
+                        continue;
+                    }
+                    None => break,
                 }
             }
 
             // Skip short/common words when l0 not set
             match next_opt {
-                Some(nx) => { cur = nx; continue; }
-                None     => break,
+                Some(nx) => {
+                    cur = nx;
+                    continue;
+                }
+                None => break,
             }
         }
     }
@@ -421,6 +492,22 @@ fn collect_left_side(
     match (l0, l1) {
         (Some(l0), Some(l1)) => Some((l0, l1, coef_hint)),
         _ => None,
+    }
+}
+
+fn next_after_left_side(l1: &TokenRef, sofa: &SourceOfAnalysis) -> Option<TokenRef> {
+    let mut cur = l1.borrow().next.clone()?;
+    loop {
+        if bracket_helper::is_any_close_bracket(&cur, sofa) {
+            let next = cur.borrow().next.clone()?;
+            cur = next;
+            continue;
+        }
+        if bracket_helper::get_open_bracket_kind(&cur, sofa).is_some() {
+            cur = bracket_helper::skip_bracket_group(&cur, sofa)?;
+            continue;
+        }
+        return Some(cur);
     }
 }
 
@@ -433,7 +520,6 @@ fn detect_connector(
     _coef_hint: Option<DefinitionKind>,
     sofa: &SourceOfAnalysis,
 ) -> Option<(DefinitionKind, TokenRef)> {
-
     // Collect key properties from connector
     let (is_hiphen, ws_before, ws_after, is_colon, term_str, next_opt) = {
         let tb = connector.borrow();
@@ -442,7 +528,10 @@ fn detect_connector(
             tb.is_whitespace_before(sofa),
             tb.is_whitespace_after(sofa),
             tb.is_char(':', sofa),
-            match &tb.kind { TokenKind::Text(t) => t.term.clone(), _ => String::new() },
+            match &tb.kind {
+                TokenKind::Text(t) => t.term.clone(),
+                _ => String::new(),
+            },
             tb.next.clone(),
         )
     };
@@ -452,7 +541,7 @@ fn detect_connector(
         let next = next_opt?;
         // Check if right side starts with "ЭТО" or "НЕ"
         let next_is_eto = next.borrow().is_value("ЭТО", None);
-        let next_is_ne  = next.borrow().is_value("НЕ", None);
+        let next_is_ne = next.borrow().is_value("НЕ", None);
         if next_is_eto {
             let after = next.borrow().next.clone()?;
             let npt = npt_try_parse(&after, NounPhraseParseAttr::No, 0, sofa);
@@ -507,7 +596,10 @@ fn detect_connector(
     }
 
     // "ЯВЛЯЕТСЯ" / "ЕСТЬ" / "ПРИЗНАЁТСЯ"
-    if matches!(term_str.as_str(), "ЯВЛЯЕТСЯ" | "ЯВЛЯТЬСЯ" | "ЕСТЬ" | "ПРИЗНАЁТСЯ" | "ПРИЗНАВАТЬСЯ") {
+    if matches!(
+        term_str.as_str(),
+        "ЯВЛЯЕТСЯ" | "ЯВЛЯТЬСЯ" | "ЕСТЬ" | "ПРИЗНАЁТСЯ" | "ПРИЗНАВАТЬСЯ"
+    ) {
         return parse_cop_right(next_opt, false, sofa);
     }
 
@@ -578,11 +670,22 @@ fn detect_connector(
             let (mc_is_pronoun, mc_is_prep, mc_is_conj, is_comma, nx) = {
                 let rb = r0.borrow();
                 let mc = rb.get_morph_class_in_dictionary();
-                (mc.is_pronoun(), mc.is_preposition(), mc.is_conjunction(),
-                 rb.is_comma(sofa), rb.next.clone())
+                (
+                    mc.is_pronoun(),
+                    mc.is_preposition(),
+                    mc.is_conjunction(),
+                    rb.is_comma(sofa),
+                    rb.next.clone(),
+                )
             };
             if mc_is_pronoun || mc_is_prep || mc_is_conj || is_comma {
-                match nx { Some(n) => { r0 = n; continue; } None => return None }
+                match nx {
+                    Some(n) => {
+                        r0 = n;
+                        continue;
+                    }
+                    None => return None,
+                }
             }
             break;
         }
@@ -612,8 +715,13 @@ fn parse_cop_right(
         let (mc_is_prep, mc_is_conj, is_comma, is_ne, nx) = {
             let rb = r0.borrow();
             let mc = rb.get_morph_class_in_dictionary();
-            (mc.is_preposition(), mc.is_conjunction(),
-             rb.is_comma(sofa), rb.is_value("НЕ", None), rb.next.clone())
+            (
+                mc.is_preposition(),
+                mc.is_conjunction(),
+                rb.is_comma(sofa),
+                rb.is_value("НЕ", None),
+                rb.next.clone(),
+            )
         };
         if is_ne {
             let nx2 = nx?;
@@ -624,7 +732,13 @@ fn parse_cop_right(
             return None;
         }
         if mc_is_prep || mc_is_conj || is_comma {
-            match nx { Some(n) => { r0 = n; continue; } None => return None }
+            match nx {
+                Some(n) => {
+                    r0 = n;
+                    continue;
+                }
+                None => return None,
+            }
         }
         break;
     }
@@ -632,13 +746,17 @@ fn parse_cop_right(
     if npt.is_some() {
         return Some((DefinitionKind::Assertation, r0));
     }
-    let is_adj  = r0.borrow().get_morph_class_in_dictionary().is_adjective();
-    if is_adj { return Some((DefinitionKind::Assertation, r0)); }
+    let is_adj = r0.borrow().get_morph_class_in_dictionary().is_adjective();
+    if is_adj {
+        return Some((DefinitionKind::Assertation, r0));
+    }
     // "один из" pattern
     let is_odin = r0.borrow().is_value("ОДИН", None);
     if is_odin {
         let next_of_r0 = r0.borrow().next.clone();
-        let has_iz = next_of_r0.map(|nx| nx.borrow().is_value("ИЗ", None)).unwrap_or(false);
+        let has_iz = next_of_r0
+            .map(|nx| nx.borrow().is_value("ИЗ", None))
+            .unwrap_or(false);
         if has_iz {
             return Some((DefinitionKind::Assertation, r0));
         }
@@ -650,15 +768,12 @@ fn parse_cop_right(
 
 /// Scan right-side tokens until end of sentence.
 /// Returns (first, last) tokens, or None if right side is empty.
-fn collect_right_side(
-    r0: &TokenRef,
-    sofa: &SourceOfAnalysis,
-) -> Option<(TokenRef, TokenRef)> {
+fn collect_right_side(r0: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(TokenRef, TokenRef)> {
     // Skip leading non-letter punctuation
     let mut r0 = r0.clone();
     {
         let is_letter = r0.borrow().chars.is_letter();
-        let has_next  = r0.borrow().next.is_some();
+        let has_next = r0.borrow().next.is_some();
         if !is_letter && has_next {
             let next = r0.borrow().next.clone().unwrap();
             r0 = next;
@@ -707,46 +822,6 @@ fn collect_right_side(
     }
 }
 
-// ── bracket helpers ───────────────────────────────────────────────────────────
-
-/// Skip a bracket group starting at open_tok "(…)".
-/// Returns the token AFTER the closing ")" or None.
-fn skip_bracket_group(open_tok: &TokenRef, sofa: &SourceOfAnalysis) -> Option<TokenRef> {
-    let mut depth = 1i32;
-    let mut scan = open_tok.borrow().next.clone();
-    loop {
-        let tt = scan?;
-        if tt.borrow().is_char('(', sofa) { depth += 1; }
-        if tt.borrow().is_char(')', sofa) {
-            depth -= 1;
-            if depth == 0 {
-                return tt.borrow().next.clone();
-            }
-        }
-        scan = tt.borrow().next.clone();
-    }
-}
-
-/// Find the closing ")" matching an opening "(".
-/// `inner_start` is the first token INSIDE the open paren.
-/// Returns the ")" token itself.
-fn find_matching_close_paren(inner_start: &TokenRef, sofa: &SourceOfAnalysis) -> TokenRef {
-    let mut depth = 1i32;
-    let mut cur = inner_start.clone();
-    loop {
-        if cur.borrow().is_char('(', sofa) { depth += 1; }
-        if cur.borrow().is_char(')', sofa) {
-            depth -= 1;
-            if depth == 0 { return cur; }
-        }
-        let next = cur.borrow().next.clone();
-        match next {
-            Some(nx) => cur = nx,
-            None     => return cur, // best we can do
-        }
-    }
-}
-
 // ── NounPhrase helpers ────────────────────────────────────────────────────────
 
 use crate::core::noun_phrase::NounPhraseToken;
@@ -755,14 +830,19 @@ fn npt_has_pronoun(np: &NounPhraseToken) -> bool {
     let mut scan = np.begin_token.clone();
     let end_c = np.end_token.borrow().end_char;
     loop {
-        if scan.borrow().begin_char > end_c { break; }
+        if scan.borrow().begin_char > end_c {
+            break;
+        }
         if scan.borrow().get_morph_class_in_dictionary().is_pronoun() {
             if !scan.borrow().is_value("ИНОЙ", None) {
                 return true;
             }
         }
         let next = scan.borrow().next.clone();
-        match next { Some(nx) => scan = nx, None => break }
+        match next {
+            Some(nx) => scan = nx,
+            None => break,
+        }
     }
     false
 }
@@ -770,43 +850,94 @@ fn npt_has_pronoun(np: &NounPhraseToken) -> bool {
 // ── helper predicates ─────────────────────────────────────────────────────────
 
 fn is_copula_verb(term: &str) -> bool {
-    matches!(term,
-        "ЯВЛЯЕТСЯ" | "ЯВЛЯТЬСЯ" | "ЕСТЬ" | "ПРИЗНАЁТСЯ" | "ПРИЗНАВАТЬСЯ" |
-        "ОЗНАЧАТЬ" | "НЕСТИ" | "ПРЕДСТАВЛЯТЬ" | "ВЫРАЖАТЬ" |
-        "СЛЕДУЕТ" | "СЛЕДОВАТЬ" | "МОЖНО"
+    matches!(
+        term,
+        "ЯВЛЯЕТСЯ"
+            | "ЯВЛЯТЬСЯ"
+            | "ЕСТЬ"
+            | "ПРИЗНАЁТСЯ"
+            | "ПРИЗНАВАТЬСЯ"
+            | "ОЗНАЧАТЬ"
+            | "НЕСТИ"
+            | "ПРЕДСТАВЛЯТЬ"
+            | "ВЫРАЖАТЬ"
+            | "СЛЕДУЕТ"
+            | "СЛЕДОВАТЬ"
+            | "МОЖНО"
     )
 }
 
 fn is_assertion_verb(term: &str) -> bool {
-    matches!(term,
-        "МОЖЕТ" | "МОЧЬ" | "ВПРАВЕ" | "ЗАПРЕЩЕНО" | "РАЗРЕШЕНО" |
-        "ОТВЕЧАТЬ" | "ПРИЗНАВАТЬ" | "ОСВОБОЖДАТЬ" | "ОСУЩЕСТВЛЯТЬ" |
-        "ПРОИЗВОДИТЬ" | "ПОДЛЕЖАТЬ" | "ПРИНИМАТЬ" | "СЧИТАТЬ" |
-        "ИМЕТЬ" | "ОБЯЗАН" | "ОБЯЗАТЬ" | "ДОЛЖЕН" | "ДОЛЖНЫЙ"
+    matches!(
+        term,
+        "МОЖЕТ"
+            | "МОЧЬ"
+            | "ВПРАВЕ"
+            | "ЗАПРЕЩЕНО"
+            | "РАЗРЕШЕНО"
+            | "ОТВЕЧАТЬ"
+            | "ПРИЗНАВАТЬ"
+            | "ОСВОБОЖДАТЬ"
+            | "ОСУЩЕСТВЛЯТЬ"
+            | "ПРОИЗВОДИТЬ"
+            | "ПОДЛЕЖАТЬ"
+            | "ПРИНИМАТЬ"
+            | "СЧИТАТЬ"
+            | "ИМЕТЬ"
+            | "ОБЯЗАН"
+            | "ОБЯЗАТЬ"
+            | "ДОЛЖЕН"
+            | "ДОЛЖНЫЙ"
     )
 }
 
 fn is_forbidden_first_word(t: &TokenRef) -> bool {
     let forbidden = [
-        "ЦЕЛЬ", "БОЛЬШИНСТВО", "ЧАСТЬ", "ЗАДАЧА", "ИСКЛЮЧЕНИЕ",
-        "ПРИМЕР", "ЭТАП", "ШАГ", "СЛЕДУЮЩИЙ", "ПОДОБНЫЙ",
-        "АНАЛОГИЧНЫЙ", "ПРЕДЫДУЩИЙ", "ПОХОЖИЙ", "СХОЖИЙ",
-        "НАЙДЕННЫЙ", "НАИБОЛЕЕ", "НАИМЕНЕЕ", "ВАЖНЫЙ",
-        "РАСПРОСТРАНЁННЫЙ", "РАСПРОСТРАНЕННЫЙ",
+        "ЦЕЛЬ",
+        "БОЛЬШИНСТВО",
+        "ЧАСТЬ",
+        "ЗАДАЧА",
+        "ИСКЛЮЧЕНИЕ",
+        "ПРИМЕР",
+        "ЭТАП",
+        "ШАГ",
+        "СЛЕДУЮЩИЙ",
+        "ПОДОБНЫЙ",
+        "АНАЛОГИЧНЫЙ",
+        "ПРЕДЫДУЩИЙ",
+        "ПОХОЖИЙ",
+        "СХОЖИЙ",
+        "НАЙДЕННЫЙ",
+        "НАИБОЛЕЕ",
+        "НАИМЕНЕЕ",
+        "ВАЖНЫЙ",
+        "РАСПРОСТРАНЁННЫЙ",
+        "РАСПРОСТРАНЕННЫЙ",
     ];
     for f in &forbidden {
-        if t.borrow().is_value(f, None) { return true; }
+        if t.borrow().is_value(f, None) {
+            return true;
+        }
     }
     false
 }
 
 fn is_forbidden_last_phrase(t: &TokenRef) -> bool {
     let forbidden = [
-        "СТАТЬЯ", "ГЛАВА", "РАЗДЕЛ", "КОДЕКС", "ЗАКОН",
-        "ФОРМУЛИРОВКА", "НАСТОЯЩИЙ", "ВЫШЕУКАЗАННЫЙ", "ДАННЫЙ",
+        "СТАТЬЯ",
+        "ГЛАВА",
+        "РАЗДЕЛ",
+        "КОДЕКС",
+        "ЗАКОН",
+        "ФОРМУЛИРОВКА",
+        "НАСТОЯЩИЙ",
+        "ВЫШЕУКАЗАННЫЙ",
+        "ДАННЫЙ",
     ];
     for f in &forbidden {
-        if t.borrow().is_value(f, None) { return true; }
+        if t.borrow().is_value(f, None) {
+            return true;
+        }
     }
     false
 }

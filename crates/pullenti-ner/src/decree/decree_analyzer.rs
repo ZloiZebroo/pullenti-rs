@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 /// DecreeAnalyzer — simplified port of DecreeAnalyzer.cs.
 ///
 /// Recognizes patterns like:
@@ -8,28 +9,32 @@
 ///   "ISO 9001:2015"                 → DECREE, kind=Standard, type=ISO, number=9001:2015
 ///   "Уголовный кодекс"              → DECREE, kind=Kodex, type=Уголовный кодекс
 ///   "Конституция Российской Федерации" → DECREE, kind=Ustav
-
 use std::rc::Rc;
-use std::cell::RefCell;
 
-use crate::analyzer::Analyzer;
 use crate::analysis_kit::AnalysisKit;
-use crate::referent::Referent;
-use crate::token::{Token, TokenRef, TokenKind};
-use crate::source_of_analysis::SourceOfAnalysis;
+use crate::analyzer::Analyzer;
 use crate::decree::decree_referent as dr;
 use crate::decree::decree_referent::DecreeKind;
 use crate::decree::decree_table;
+use crate::referent::Referent;
+use crate::source_of_analysis::SourceOfAnalysis;
+use crate::token::{Token, TokenKind, TokenRef};
 
 pub struct DecreeAnalyzer;
 
 impl DecreeAnalyzer {
-    pub fn new() -> Self { DecreeAnalyzer }
+    pub fn new() -> Self {
+        DecreeAnalyzer
+    }
 }
 
 impl Analyzer for DecreeAnalyzer {
-    fn name(&self) -> &'static str { "DECREE" }
-    fn caption(&self) -> &'static str { "Нормативные акты" }
+    fn name(&self) -> &'static str {
+        "DECREE"
+    }
+    fn caption(&self) -> &'static str {
+        "Нормативные акты"
+    }
 
     fn process(&self, kit: &mut AnalysisKit) {
         let sofa = kit.sofa.clone();
@@ -40,13 +45,13 @@ impl Analyzer for DecreeAnalyzer {
                 continue;
             }
             match try_parse(&t, &sofa) {
-                None => { cur = t.borrow().next.clone(); }
+                None => {
+                    cur = t.borrow().next.clone();
+                }
                 Some((referent, end)) => {
                     let r_rc = Rc::new(RefCell::new(referent));
                     let r_rc = kit.add_entity(r_rc);
-                    let tok = Rc::new(RefCell::new(
-                        Token::new_referent(t.clone(), end, r_rc)
-                    ));
+                    let tok = Rc::new(RefCell::new(Token::new_referent(t.clone(), end, r_rc)));
                     kit.embed_token(tok.clone());
                     cur = tok.borrow().next.clone();
                 }
@@ -59,9 +64,15 @@ impl Analyzer for DecreeAnalyzer {
 
 fn try_parse(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Referent, TokenRef)> {
     let tb = t.borrow();
-    let TokenKind::Text(_) = &tb.kind else { return None; };
+    let TokenKind::Text(_) = &tb.kind else {
+        return None;
+    };
     let surface = sofa.substring(tb.begin_char, tb.end_char);
-    let starts_upper = surface.chars().next().map(|c| c.is_uppercase()).unwrap_or(false);
+    let starts_upper = surface
+        .chars()
+        .next()
+        .map(|c| c.is_uppercase())
+        .unwrap_or(false);
     let uppers = collect_upper_forms(&tb);
     drop(tb);
 
@@ -88,10 +99,16 @@ fn try_parse(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(Referent, TokenRe
 
 // ── Pattern A: standard abbreviation (ГОСТ 12345-2020, ISO 9001:2015) ─────────
 
-fn try_standard_pattern(t: &TokenRef, upper: &str, sofa: &SourceOfAnalysis) -> Option<(Referent, TokenRef)> {
+fn try_standard_pattern(
+    t: &TokenRef,
+    upper: &str,
+    sofa: &SourceOfAnalysis,
+) -> Option<(Referent, TokenRef)> {
     // Check for "ГОСТ Р" two-token pattern first
     let entry = decree_table::lookup_type(upper)?;
-    if entry.kind != DecreeKind::Standard { return None; }
+    if entry.kind != DecreeKind::Standard {
+        return None;
+    }
     let mut end = t.clone();
     let canonical_type = entry.canonical;
 
@@ -131,7 +148,9 @@ fn try_standard_pattern(t: &TokenRef, upper: &str, sofa: &SourceOfAnalysis) -> O
 /// Returns (number_string, end_token) or None.
 fn try_standard_number(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(String, TokenRef)> {
     let tb = t.borrow();
-    if tb.whitespaces_before_count(sofa) > 1 { return None; }
+    if tb.whitespaces_before_count(sofa) > 1 {
+        return None;
+    }
 
     match &tb.kind {
         TokenKind::Number(n) => {
@@ -152,7 +171,11 @@ fn try_standard_number(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(String,
                                 TokenKind::Number(n2) => (true, n2.value.clone()),
                                 TokenKind::Text(txt2) => {
                                     let s = txt2.term.clone();
-                                    let ok = s.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false);
+                                    let ok = s
+                                        .chars()
+                                        .next()
+                                        .map(|c| c.is_ascii_digit())
+                                        .unwrap_or(false);
                                     (ok, s)
                                 }
                                 _ => (false, String::new()),
@@ -173,7 +196,12 @@ fn try_standard_number(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(String,
         TokenKind::Text(txt) => {
             let surf = sofa.substring(tb.begin_char, tb.end_char);
             // Must start with digit for standard numbers
-            if surf.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false) {
+            if surf
+                .chars()
+                .next()
+                .map(|c| c.is_ascii_digit())
+                .unwrap_or(false)
+            {
                 let val = surf.to_string();
                 let end = t.clone();
                 drop(tb);
@@ -182,16 +210,25 @@ fn try_standard_number(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(String,
             drop(tb);
             None
         }
-        _ => { drop(tb); None }
+        _ => {
+            drop(tb);
+            None
+        }
     }
 }
 
 // ── Pattern B: type keyword [adjective qualifier] [number] ────────────────────
 
-fn try_type_keyword_pattern(t: &TokenRef, upper: &str, sofa: &SourceOfAnalysis) -> Option<(Referent, TokenRef)> {
+fn try_type_keyword_pattern(
+    t: &TokenRef,
+    upper: &str,
+    sofa: &SourceOfAnalysis,
+) -> Option<(Referent, TokenRef)> {
     let entry = decree_table::lookup_type(upper)?;
     // Skip standard entries here (handled by Pattern A)
-    if entry.kind == DecreeKind::Standard { return None; }
+    if entry.kind == DecreeKind::Standard {
+        return None;
+    }
 
     let canonical_type = entry.canonical;
     let kind = entry.kind.clone();
@@ -248,7 +285,9 @@ fn build_decree_result(
     let mut probe = type_end.borrow().next.clone();
     let mut skip = 0;
     while let Some(pt) = probe.clone() {
-        if skip > 5 { break; }
+        if skip > 5 {
+            break;
+        }
         let pb = pt.borrow();
         if pb.whitespaces_before_count(sofa) > 2 && skip == 0 {
             break; // big gap right after type keyword
@@ -258,7 +297,13 @@ fn build_decree_result(
                 let surf = sofa.substring(pb.begin_char, pb.end_char);
                 let up = txt.term.to_uppercase();
                 // "№" or "N" or "NO" signals a number
-                if up == "№" || surf == "№" || up == "N" || up == "NO" || up == "НОМ" || up == "НОМЕР" {
+                if up == "№"
+                    || surf == "№"
+                    || up == "N"
+                    || up == "NO"
+                    || up == "НОМ"
+                    || up == "НОМЕР"
+                {
                     let after = pb.next.clone();
                     drop(pb);
                     if let Some(num_tok) = after {
@@ -306,14 +351,22 @@ fn try_decree_number(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<(String, T
         TokenKind::Text(txt) => {
             let surf = sofa.substring(tb.begin_char, tb.end_char);
             // Allow mixed like "123-А" starting with digit
-            if surf.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false) {
+            if surf
+                .chars()
+                .next()
+                .map(|c| c.is_ascii_digit())
+                .unwrap_or(false)
+            {
                 (surf.to_string(), t.clone())
             } else {
                 drop(tb);
                 return None;
             }
         }
-        _ => { drop(tb); return None; }
+        _ => {
+            drop(tb);
+            return None;
+        }
     };
     let next = tb.next.clone();
     drop(tb);
@@ -351,8 +404,12 @@ fn collect_upper_forms(tb: &Token) -> Vec<String> {
         v.push(txt.term.to_uppercase());
     }
     for wf in tb.morph.items() {
-        if let Some(nc) = &wf.normal_case { v.push(nc.to_uppercase()); }
-        if let Some(nf) = &wf.normal_full { v.push(nf.to_uppercase()); }
+        if let Some(nc) = &wf.normal_case {
+            v.push(nc.to_uppercase());
+        }
+        if let Some(nf) = &wf.normal_full {
+            v.push(nf.to_uppercase());
+        }
     }
     v.dedup();
     v

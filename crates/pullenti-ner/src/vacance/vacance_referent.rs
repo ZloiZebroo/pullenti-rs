@@ -1,12 +1,11 @@
 /// VacanceItemReferent — a parsed element of a job vacancy posting.
 /// Mirrors `VacanceItemReferent.cs` / `VacanceItemType.cs`.
-
 use crate::referent::{Referent, SlotValue};
 
 pub const OBJ_TYPENAME: &str = "VACANCY";
-pub const ATTR_TYPE:    &str = "TYPE";
-pub const ATTR_VALUE:   &str = "VALUE";
-pub const ATTR_REF:     &str = "REF";
+pub const ATTR_TYPE: &str = "TYPE";
+pub const ATTR_VALUE: &str = "VALUE";
+pub const ATTR_REF: &str = "REF";
 pub const ATTR_EXPIRED: &str = "EXPIRED";
 
 /// Type of a vacancy item.
@@ -41,34 +40,34 @@ pub enum VacanceItemType {
 impl VacanceItemType {
     pub fn as_str(self) -> &'static str {
         match self {
-            VacanceItemType::Undefined     => "undefined",
-            VacanceItemType::Name          => "name",
-            VacanceItemType::Date          => "date",
-            VacanceItemType::Money         => "money",
-            VacanceItemType::Education     => "education",
-            VacanceItemType::Experience    => "experience",
-            VacanceItemType::Language      => "language",
+            VacanceItemType::Undefined => "undefined",
+            VacanceItemType::Name => "name",
+            VacanceItemType::Date => "date",
+            VacanceItemType::Money => "money",
+            VacanceItemType::Education => "education",
+            VacanceItemType::Experience => "experience",
+            VacanceItemType::Language => "language",
             VacanceItemType::DrivingLicense => "drivinglicense",
-            VacanceItemType::License       => "license",
-            VacanceItemType::Moral         => "moral",
-            VacanceItemType::Skill         => "skill",
-            VacanceItemType::Plus          => "plus",
+            VacanceItemType::License => "license",
+            VacanceItemType::Moral => "moral",
+            VacanceItemType::Skill => "skill",
+            VacanceItemType::Plus => "plus",
         }
     }
     pub fn from_str(s: &str) -> Self {
         match s {
-            "name"          => VacanceItemType::Name,
-            "date"          => VacanceItemType::Date,
-            "money"         => VacanceItemType::Money,
-            "education"     => VacanceItemType::Education,
-            "experience"    => VacanceItemType::Experience,
-            "language"      => VacanceItemType::Language,
+            "name" => VacanceItemType::Name,
+            "date" => VacanceItemType::Date,
+            "money" => VacanceItemType::Money,
+            "education" => VacanceItemType::Education,
+            "experience" => VacanceItemType::Experience,
+            "language" => VacanceItemType::Language,
             "drivinglicense" => VacanceItemType::DrivingLicense,
-            "license"       => VacanceItemType::License,
-            "moral"         => VacanceItemType::Moral,
-            "skill"         => VacanceItemType::Skill,
-            "plus"          => VacanceItemType::Plus,
-            _               => VacanceItemType::Undefined,
+            "license" => VacanceItemType::License,
+            "moral" => VacanceItemType::Moral,
+            "skill" => VacanceItemType::Skill,
+            "plus" => VacanceItemType::Plus,
+            _ => VacanceItemType::Undefined,
         }
     }
 }

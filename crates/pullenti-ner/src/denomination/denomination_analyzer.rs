@@ -1,31 +1,40 @@
+use std::cell::RefCell;
 /// DenominationAnalyzer — detects alphanumeric codes/designations like "C#", "A-320", "1С".
 /// Mirrors `DenominationAnalyzer.cs`.
-
 use std::rc::Rc;
-use std::cell::RefCell;
 
-use crate::analyzer::Analyzer;
-use crate::analysis_kit::AnalysisKit;
-use crate::token::{Token, TokenRef, TokenKind, NumberSpellingType};
-use crate::source_of_analysis::SourceOfAnalysis;
 use super::denomination_referent::{
-    OBJ_TYPENAME as _, new_denomination_referent, add_value_from_tokens,
+    add_value_from_tokens, new_denomination_referent, OBJ_TYPENAME as _,
 };
+use crate::analysis_kit::AnalysisKit;
+use crate::analyzer::Analyzer;
+use crate::source_of_analysis::SourceOfAnalysis;
+use crate::token::{NumberSpellingType, Token, TokenKind, TokenRef};
 
 pub struct DenominationAnalyzer;
 
 impl DenominationAnalyzer {
-    pub fn new() -> Self { DenominationAnalyzer }
+    pub fn new() -> Self {
+        DenominationAnalyzer
+    }
 }
 
 impl Default for DenominationAnalyzer {
-    fn default() -> Self { DenominationAnalyzer }
+    fn default() -> Self {
+        DenominationAnalyzer
+    }
 }
 
 impl Analyzer for DenominationAnalyzer {
-    fn name(&self)    -> &'static str { "DENOMINATION" }
-    fn caption(&self) -> &'static str { "Деноминации" }
-    fn is_specific(&self) -> bool { true }
+    fn name(&self) -> &'static str {
+        "DENOMINATION"
+    }
+    fn caption(&self) -> &'static str {
+        "Деноминации"
+    }
+    fn is_specific(&self) -> bool {
+        true
+    }
 
     fn process(&self, kit: &mut AnalysisKit) {
         let sofa = &kit.sofa.clone();
@@ -109,26 +118,42 @@ impl Analyzer for DenominationAnalyzer {
 /// Quick prefilter: short letter token (≤4 chars) immediately followed by digit/separator/special.
 fn can_be_start_of_denom(t: &TokenRef, sofa: &SourceOfAnalysis) -> bool {
     let tb = t.borrow();
-    if tb.length_char() > 4 { return false; }
-    if tb.is_newline_after(sofa) { return false; }
-    let next = match tb.next.as_ref() { Some(n) => n.clone(), None => return false };
+    if tb.length_char() > 4 {
+        return false;
+    }
+    if tb.is_newline_after(sofa) {
+        return false;
+    }
+    let next = match tb.next.as_ref() {
+        Some(n) => n.clone(),
+        None => return false,
+    };
     drop(tb);
     let nb = next.borrow();
-    if nb.is_whitespace_before(sofa) { return false; } // must be adjacent
+    if nb.is_whitespace_before(sofa) {
+        return false;
+    } // must be adjacent
     if matches!(&nb.kind, TokenKind::Number(n) if n.spelling_type == NumberSpellingType::Digit) {
         return true;
     }
     if nb.is_char_of("/\\-", sofa) {
-        let nn = match nb.next.as_ref() { Some(n) => n.clone(), None => return false };
+        let nn = match nb.next.as_ref() {
+            Some(n) => n.clone(),
+            None => return false,
+        };
         return matches!(&nn.borrow().kind, TokenKind::Number(n) if n.spelling_type == NumberSpellingType::Digit);
     }
-    if nb.is_char_of("+*&^#@!_", sofa) { return true; }
+    if nb.is_char_of("+*&^#@!_", sofa) {
+        return true;
+    }
     false
 }
 
 /// Try to parse a denomination starting at `t`.  Returns a wrapped referent Token or None.
 pub fn try_attach(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<TokenRef> {
-    if let Some(rt) = try_attach_spec(t, sofa) { return Some(rt); }
+    if let Some(rt) = try_attach_spec(t, sofa) {
+        return Some(rt);
+    }
 
     // First token must not be all-lowercase unless immediately followed by a digit
     {
@@ -137,7 +162,8 @@ pub fn try_attach(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<TokenRef> {
             let next = tb.next.as_ref()?;
             let nb = next.borrow();
             if !nb.is_whitespace_before(sofa) {
-                if !matches!(&nb.kind, TokenKind::Number(n) if n.spelling_type == NumberSpellingType::Digit) {
+                if !matches!(&nb.kind, TokenKind::Number(n) if n.spelling_type == NumberSpellingType::Digit)
+                {
                     return None;
                 }
                 // must also be at start of sentence (prev is null / whitespace / colon)
@@ -146,7 +172,9 @@ pub fn try_attach(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<TokenRef> {
                     let pb = p.borrow();
                     pb.is_whitespace_after(sofa) || pb.is_char_of(",:", sofa)
                 });
-                if !ok { return None; }
+                if !ok {
+                    return None;
+                }
             } else {
                 return None;
             }
@@ -165,7 +193,9 @@ pub fn try_attach(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<TokenRef> {
         {
             let wb = w.borrow();
             // Stop at whitespace
-            if wb.is_whitespace_before(sofa) { break; }
+            if wb.is_whitespace_before(sofa) {
+                break;
+            }
 
             if wb.is_char_of("/\\_", sofa) || wb.is_hiphen(sofa) {
                 hiph = true;
@@ -183,20 +213,28 @@ pub fn try_attach(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<TokenRef> {
                     w_opt = wb.next.clone();
                     continue;
                 }
-                TokenKind::Number(_) => { break; } // non-digit number
+                TokenKind::Number(_) => {
+                    break;
+                } // non-digit number
                 TokenKind::Text(txt) => {
                     if txt.term.len() > 3 {
-                        ok = false; break;
+                        ok = false;
+                        break;
                     }
                     let first = txt.term.chars().next().unwrap_or('\0');
                     if !first.is_alphabetic() {
-                        if wb.is_char_of(",:", sofa) { break; }
+                        if wb.is_char_of(",:", sofa) {
+                            break;
+                        }
                         // bracket end
-                        if wb.is_char_of(")]}", sofa) { break; }
+                        if wb.is_char_of(")]}", sofa) {
+                            break;
+                        }
                         if wb.is_char_of("+*&^#@!", sofa) {
                             specials += 1;
                         } else {
-                            ok = false; break;
+                            ok = false;
+                            break;
                         }
                     }
                     t1 = w.clone();
@@ -204,32 +242,42 @@ pub fn try_attach(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<TokenRef> {
                     w_opt = wb.next.clone();
                     continue;
                 }
-                _ => { break; }
+                _ => {
+                    break;
+                }
             }
         }
         break; // unreachable unless continue above
     }
 
     // Validation
-    if tmp_len == 0 || !ok || hiph { return None; }
-    if tmp_len > 12 { return None; }
+    if tmp_len == 0 || !ok || hiph {
+        return None;
+    }
+    if tmp_len > 12 {
+        return None;
+    }
     // Check last char isn't '!'
     {
         let last_term = match &t1.borrow().kind {
             TokenKind::Text(txt) => txt.term.chars().last().unwrap_or('\0'),
             _ => '\0',
         };
-        if last_term == '!' { return None; }
+        if last_term == '!' {
+            return None;
+        }
     }
-    if (nums + specials) == 0 { return None; }
-    if !check_attach(t, &t1, sofa) { return None; }
+    if (nums + specials) == 0 {
+        return None;
+    }
+    if !check_attach(t, &t1, sofa) {
+        return None;
+    }
 
     let mut referent = new_denomination_referent();
     add_value_from_tokens(&mut referent, t, &t1, sofa);
     let r_rc = Rc::new(RefCell::new(referent));
-    let tok = Rc::new(RefCell::new(
-        Token::new_referent(t.clone(), t1, r_rc)
-    ));
+    let tok = Rc::new(RefCell::new(Token::new_referent(t.clone(), t1, r_rc)));
     Some(tok)
 }
 
@@ -262,12 +310,22 @@ fn try_attach_spec(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<TokenRef> {
                         if lb.is_char('С', sofa) || lb.is_char('C', sofa) {
                             let _ = prefix_end;
                             let mut r = new_denomination_referent();
-                            r.add_slot("VALUE", crate::referent::SlotValue::Str("1С".into()), false);
-                            r.add_slot("VALUE", crate::referent::SlotValue::Str("1C".into()), false);
+                            r.add_slot(
+                                "VALUE",
+                                crate::referent::SlotValue::Str("1С".into()),
+                                false,
+                            );
+                            r.add_slot(
+                                "VALUE",
+                                crate::referent::SlotValue::Str("1C".into()),
+                                false,
+                            );
                             let r_rc = Rc::new(RefCell::new(r));
-                            let tok = Rc::new(RefCell::new(
-                                Token::new_referent(t.clone(), letter_tok.clone(), r_rc)
-                            ));
+                            let tok = Rc::new(RefCell::new(Token::new_referent(
+                                t.clone(),
+                                letter_tok.clone(),
+                                r_rc,
+                            )));
                             return Some(tok);
                         }
                     }
@@ -284,9 +342,8 @@ fn try_attach_spec(t: &TokenRef, sofa: &SourceOfAnalysis) -> Option<TokenRef> {
                         let mut r = new_denomination_referent();
                         r.add_slot("VALUE", crate::referent::SlotValue::Str(combined), false);
                         let r_rc = Rc::new(RefCell::new(r));
-                        let tok = Rc::new(RefCell::new(
-                            Token::new_referent(t.clone(), t_next, r_rc)
-                        ));
+                        let tok =
+                            Rc::new(RefCell::new(Token::new_referent(t.clone(), t_next, r_rc)));
                         return Some(tok);
                     }
                 }
@@ -304,12 +361,18 @@ fn check_attach(begin: &TokenRef, end: &TokenRef, sofa: &SourceOfAnalysis) -> bo
     while let Some(t) = cur {
         {
             let tb = t.borrow();
-            if tb.begin_char > end_char { break; }
+            if tb.begin_char > end_char {
+                break;
+            }
             if !Rc::ptr_eq(&t, begin) {
                 let spaces = tb.whitespaces_before_count(sofa);
-                if spaces > 1 { return false; }
+                if spaces > 1 {
+                    return false;
+                }
                 if spaces > 0 {
-                    if tb.chars.is_all_lower() { return false; }
+                    if tb.chars.is_all_lower() {
+                        return false;
+                    }
                     let prev = tb.prev.as_ref().and_then(|p| p.upgrade());
                     if prev.map_or(false, |p| p.borrow().chars.is_all_lower()) {
                         return false;
